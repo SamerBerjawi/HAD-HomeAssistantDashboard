@@ -13,7 +13,7 @@ import FullScreenLoadingPage from '@/components/ui/FullScreenLoadingPage';
 import ProShell from './components/ProShell';
 import ProSecurity from './pages/ProSecurity';
 
-const AuthModal = lazy(() => import('@/components/auth/AuthModal'));
+const ProSignIn = lazy(() => import('./components/ProSignIn'));
 const NotificationDrawer = lazy(() => import('@/components/notifications/NotificationDrawer'));
 
 /** Entry for the pro design language: same providers, stores and startup flow as the classic App. */
@@ -89,7 +89,6 @@ export default function ProApp() {
           <ProSecurity />
         ) : (
           <div className="pro-surface p-8 flex flex-col gap-2">
-            <h1 className="text-2xl font-bold tracking-tight capitalize">{activeTab}</h1>
             <p className="text-muted">This page has not been rebuilt in the pro design yet. Security is the pilot.</p>
           </div>
         )}
@@ -97,7 +96,7 @@ export default function ProApp() {
 
       {overlays.hasOpenedAuth && (
         <Suspense fallback={null}>
-          <AuthModal darkMode={darkMode} />
+          <ProSignIn darkMode={darkMode} onDemo={() => useAutoLayoutStore.getState().reloadDemoData()} />
         </Suspense>
       )}
       {overlays.hasOpenedNotifications && (

@@ -85,18 +85,6 @@ export default function ProSecurity() {
 
   return (
     <>
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Security</h1>
-          <p className="text-muted">
-            {data.attentionCount === 0 ? 'Everything is secure' : `${data.attentionCount} item${data.attentionCount === 1 ? '' : 's'} need attention`}
-          </p>
-        </div>
-        <Chip color={data.attentionCount === 0 ? 'success' : 'warning'} variant="soft">
-          {data.attentionCount === 0 ? 'All clear' : 'Attention'}
-        </Chip>
-      </header>
-
       {error && (
         <div role="alert" className="rounded-2xl bg-danger/10 text-danger px-4 py-3 text-sm font-medium">
           {error}
