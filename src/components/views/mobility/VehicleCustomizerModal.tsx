@@ -1,5 +1,5 @@
 import { errorMessageField } from '@/lib/errors';
-import { useDialogA11y } from '../../../hooks/useDialogA11y';
+import DialogShell from '../../ui/DialogShell';
 import React, { useState, useRef, ChangeEvent, DragEvent } from 'react';
 import { X, UploadSimple, Trash, Sparkle, Car, Bicycle, Check, Sliders, BatteryCharging, Lightning, Warning } from '@phosphor-icons/react';
 import { resolveAssetUrl } from '../../../utils/assetUrl';
@@ -53,7 +53,6 @@ export function VehicleCustomizerModal({
   onResetAssets,
   darkMode = true
 }: VehicleCustomizerModalProps) {
-  const dialogRef = useDialogA11y({ open: isOpen, onClose });
   const [activeTab, setActiveTab] = useState<'car' | 'bike'>(initialTarget);
   const [carNameDraft, setCarNameDraft] = useState<string>(currentCarName);
   const [carTargetSocDraft, setCarTargetSocDraft] = useState<number>(currentCarTargetSoc);
@@ -194,14 +193,16 @@ export function VehicleCustomizerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Customize vehicle" tabIndex={-1}
-        className={`w-full max-w-xl rounded-3xl border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-all ${
+    <DialogShell
+      label="Customize vehicle"
+      onClose={onClose}
+      overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
+      className={`w-full max-w-xl rounded-3xl border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-all ${
           darkMode
             ? 'bg-slate-900/95 border-white/15 text-white shadow-black/80'
             : 'bg-white border-slate-200 text-slate-900 shadow-slate-300'
         }`}
-      >
+    >
         <div className="p-5 sm:p-6 border-b border-slate-200/60 dark:border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 flex items-center justify-center">
@@ -592,7 +593,6 @@ export function VehicleCustomizerModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </DialogShell>
   );
 }

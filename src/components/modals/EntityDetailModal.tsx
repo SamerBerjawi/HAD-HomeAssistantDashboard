@@ -1,4 +1,4 @@
-import { useDialogA11y } from '../../hooks/useDialogA11y';
+import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
 import React, { useState, useMemo, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -82,8 +82,6 @@ class ControlErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
 export default function EntityDetailModal() {
   const { isOpen, selectedEntityId, closeEntityDetails } = useEntityPopup();
-  // Escape is already handled below; the hook adds focus management and the Tab trap
-  const dialogRef = useDialogA11y({ open: isOpen, onClose: closeEntityDetails, closeOnEscape: false });
   const { config } = useUserConfig();
   const darkMode = config?.theme?.mode !== 'light';
   // Subscribe to the selected entity only, so the modal (kept mounted between opens) doesn't
@@ -111,17 +109,6 @@ export default function EntityDetailModal() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-
-  // Close on escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        closeEntityDetails();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, closeEntityDetails]);
 
   // Fallback entity if states not yet hydrated
   const entity: HAEntity | null = useMemo(() => {
@@ -305,39 +292,25 @@ export default function EntityDetailModal() {
   }, [selectedEntityId, config, entity?.attributes?.friendly_name]);
 
   return (
-    <AnimatePresence>
-      {isOpen && entity && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          {/* Translucent Backdrop: Crystal / Apple HIG 4px blur filter & gentle scrim */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            onClick={closeEntityDetails}
-            className={`fixed inset-0 backdrop-blur-sm transition-opacity cursor-pointer ${
-              darkMode ? 'bg-black/50' : 'bg-slate-950/20'
+    <>
+      <ModalOverlay
+        isOpen={isOpen && !!entity}
+        onOpenChange={(open) => { if (!open) closeEntityDetails(); }}
+        isDismissable
+        className={`fixed inset-0 z-50 flex justify-end overflow-hidden backdrop-blur-sm ${
+          darkMode ? 'bg-black/50' : 'bg-slate-950/20'
+        }`}
+      >
+        <Modal className="h-full max-w-full">
+          <Dialog
+            aria-label={`${entityTitle || 'Entity'} details`}
+            className={`w-screen max-w-full sm:max-w-xl md:max-w-2xl h-full flex flex-col justify-between overflow-hidden backdrop-blur-2xl relative outline-none ${
+              darkMode
+                ? 'bg-black/35 text-slate-100 border-l border-white/10 shadow-2xl shadow-black/50'
+                : 'bg-white/95 text-slate-900 border-l border-slate-200/80 shadow-2xl'
             }`}
-          />
-
-          {/* Sidebar Drawer Container: Luminous frosted glass in light mode, deep dark glass in dark mode */}
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10 pointer-events-none z-10">
-            <motion.div
-              ref={dialogRef}
-              role="dialog"
-              aria-modal="true"
-              aria-label={`${entityTitle || 'Entity'} details`}
-              tabIndex={-1}
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 320, mass: 0.8 }}
-              className={`pointer-events-auto w-screen max-w-full sm:max-w-xl md:max-w-2xl h-screen flex flex-col justify-between overflow-hidden backdrop-blur-2xl transition-all relative ${
-                darkMode
-                  ? 'bg-black/35 text-slate-100 border-l border-white/10 shadow-2xl shadow-black/50'
-                  : 'bg-white/95 text-slate-900 border-l border-slate-200/80 shadow-2xl'
-              }`}
-            >
+          >
+            {entity && (<>
               {/* Status Bar Safe-Area Clearance (PWA / Mobile) — Leaves the status bar completely empty */}
               <div
                 className="w-full shrink-0"
@@ -639,10 +612,10 @@ export default function EntityDetailModal() {
                 </button>
               </div>
             </div>
-          </motion.div>
-        </div>
-      </div>
-    )}
+            </>)}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
 
       {/* Entity Customizer Modal with Phosphor Icon Finder */}
       <EntityCustomizerModal
@@ -655,6 +628,6 @@ export default function EntityDetailModal() {
         areaName={metadata?.areaName ?? undefined}
         floorName={metadata?.floorName ?? undefined}
       />
-    </AnimatePresence>
+    </>
   );
 }
