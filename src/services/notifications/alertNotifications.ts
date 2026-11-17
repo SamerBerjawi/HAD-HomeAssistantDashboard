@@ -45,7 +45,7 @@ export function collectHaAlertNotifications(ctx: NotificationContext): void {
       message,
       domain: alertDomain,
       source: attrs.friendly_name || 'System Alert',
-      createdAt: attrs.last_triggered || ent.last_updated || new Date().toISOString(),
+      createdAt: attrs.last_triggered || ent.last_updated,
       dismissable: true,
       actions: [
         {

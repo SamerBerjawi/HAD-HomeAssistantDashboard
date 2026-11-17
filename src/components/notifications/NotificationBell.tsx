@@ -21,7 +21,7 @@ export default function NotificationBell({
   className = '',
   variant = 'icon-button'
 }: NotificationBellProps) {
-  const { total: totalCount, updates: updatesCount, hasCritical, hasWarning } = useHANotificationSummary();
+  const { total: totalCount, unread: unreadCount, updates: updatesCount, hasCritical, hasWarning } = useHANotificationSummary();
   const hasUpdates = updatesCount > 0;
 
   // Highest severity color determination
@@ -61,7 +61,7 @@ export default function NotificationBell({
           ) : (
             <Bell size={16} weight={totalCount > 0 ? 'duotone' : 'regular'} className={totalCount > 0 ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400'} />
           )}
-          {totalCount > 0 && (
+          {unreadCount > 0 && (
             <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${badgeColorClass}`} />
           )}
         </div>
@@ -80,7 +80,7 @@ export default function NotificationBell({
     <button
       type="button"
       onClick={onClick}
-      aria-label={`Notifications and Alerts: ${totalCount} items`}
+      aria-label={`Notifications: ${unreadCount} unread of ${totalCount}`}
       className={`relative w-10 h-10 rounded-2xl flex items-center justify-center border transition-all duration-200 cursor-pointer group shadow-sm hover:scale-105 active:scale-95 ${
         totalCount > 0
           ? hasCritical
@@ -96,7 +96,7 @@ export default function NotificationBell({
             ? 'bg-black/60 hover:bg-black/80 border-white/10 hover:border-white/20 text-slate-400 hover:text-white'
             : 'bg-white/80 hover:bg-white border-slate-200 text-slate-600 hover:text-slate-900'
       } ${className}`}
-      title={totalCount > 0 ? `${totalCount} Notifications, Updates & Alerts` : 'Notifications (All Clear)'}
+      title={totalCount > 0 ? `${unreadCount} unread of ${totalCount} notifications` : 'Notifications (All Clear)'}
     >
       <Bell
         size={20}
@@ -104,13 +104,13 @@ export default function NotificationBell({
         className={`transition-transform duration-300 ${totalCount > 0 ? 'group-hover:rotate-12' : ''}`}
       />
 
-      {totalCount > 0 && (
+      {unreadCount > 0 && (
         <span
           className={`absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 rounded-full text-[11px] font-black flex items-center justify-center ring-2 ${
             darkMode ? 'ring-black' : 'ring-white'
           } ${badgeColorClass}`}
         >
-          {totalCount > 99 ? '99+' : totalCount}
+          {unreadCount > 99 ? '99+' : unreadCount}
         </span>
       )}
     </button>

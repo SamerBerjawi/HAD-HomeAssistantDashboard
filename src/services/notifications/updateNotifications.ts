@@ -122,7 +122,7 @@ export function collectUpdateNotifications(ctx: NotificationContext): void {
         updatePercentage: typeof attrs.update_percentage === 'number' ? attrs.update_percentage : undefined,
         skippedVersion: attrs.skipped_version || null,
         autoUpdate: Boolean(attrs.auto_update),
-        createdAt: attrs.release_date || (liveState as HAState).last_updated || new Date().toISOString(),
+        createdAt: attrs.release_date || (liveState as HAState).last_updated,
         dismissable: isSkipped,
         onDismiss: isSkipped ? () => {
           dismissNotification(ent.entity_id);
@@ -235,7 +235,7 @@ export function collectUpdateNotifications(ctx: NotificationContext): void {
         releaseUrl,
         domain,
         source: 'HACS',
-        createdAt: hacsSensor.last_updated || new Date().toISOString(),
+        createdAt: hacsSensor.last_updated,
         dismissable: false,
         actions: [
           ...(repo.name && repo.name.includes('/') ? [
@@ -275,7 +275,7 @@ export function collectUpdateNotifications(ctx: NotificationContext): void {
         releaseUrl: typeof releaseNotes === 'string' && releaseNotes.startsWith('http') ? releaseNotes : 'https://www.home-assistant.io/latest-blogs/',
         domain: 'homeassistant',
         source: 'Home Assistant Core',
-        createdAt: updaterSensor.last_updated || new Date().toISOString(),
+        createdAt: updaterSensor.last_updated,
         dismissable: false,
         actions: [
           ...(releaseNotes ? [
