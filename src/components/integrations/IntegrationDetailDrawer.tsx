@@ -7,7 +7,7 @@
  * update changelogs, and official documentation links.
  */
 
-import { Button, Drawer } from '@heroui/react';
+import { useDialogA11y } from '../../hooks/useDialogA11y';
 import React, { useState, useMemo } from 'react';
 import { 
   X, 
@@ -51,6 +51,7 @@ export default function IntegrationDetailDrawer({
   onClose,
   darkMode = true
 }: IntegrationDetailDrawerProps) {
+  const dialogRef = useDialogA11y({ open: isOpen, onClose });
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
   const [deviceSearch, setDeviceSearch] = useState('');
   const [entitySearch, setEntitySearch] = useState('');
@@ -141,10 +142,17 @@ export default function IntegrationDetailDrawer({
   };
 
   return (
-    <Drawer.Backdrop isOpen={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <Drawer.Content placement="right">
-      <Drawer.Dialog aria-label="Integration details" className="w-full max-w-lg overflow-hidden p-0">
-      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface text-foreground">
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop */}
+      <div 
+        onClick={onClose} 
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-fadeIn" 
+      />
+
+      {/* Drawer Panel */}
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Integration details" tabIndex={-1} className={`relative w-full max-w-xl h-full flex flex-col z-10 shadow-2xl overflow-hidden transition-transform animate-slideInRight ${
+        darkMode ? 'bg-slate-900/95 text-white border-l border-white/10' : 'bg-slate-50/95 text-slate-900 border-l border-slate-200'
+      }`}>
         {/* Status Bar Safe-Area Clearance (PWA / Mobile) */}
         <div
           className="w-full shrink-0"
@@ -168,9 +176,15 @@ export default function IntegrationDetailDrawer({
             </div>
           </div>
 
-          <Button isIconOnly size="sm" variant="ghost" aria-label="Close integration drawer" onPress={onClose}>
-            <X size={16} weight="bold" />
-          </Button>
+          <button
+            onClick={onClose}
+            aria-label="Close integration drawer"
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+              darkMode ? 'hover:bg-white/10 text-slate-400 hover:text-white' : 'hover:bg-slate-200/60 text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <X size={20} weight="bold" />
+          </button>
         </div>
 
         {/* Status / Category Quick Bar */}
@@ -485,8 +499,6 @@ export default function IntegrationDetailDrawer({
 
         </div>
       </div>
-      </Drawer.Dialog>
-      </Drawer.Content>
-    </Drawer.Backdrop>
+    </div>
   );
 }

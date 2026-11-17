@@ -7,7 +7,7 @@
  * and visibility preferences. Synced to remote config and live auto-layout store.
  */
 
-import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
+import { useDialogA11y } from '../../hooks/useDialogA11y';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -65,6 +65,7 @@ export default function EntityCustomizerModal({
   floorName,
   addToast
 }: EntityCustomizerModalProps) {
+  const dialogRef = useDialogA11y({ open: isOpen, onClose });
   const { config, updateConfig, flushPendingSave } = useUserConfig();
   const { resolvedEntities, entityCustomizations, setEntityHidden } = useAutoLayoutStore(useShallow((s) => ({ resolvedEntities: s.resolvedEntities, entityCustomizations: s.entityCustomizations, setEntityHidden: s.setEntityHidden })));
 
@@ -220,20 +221,29 @@ export default function EntityCustomizerModal({
   };
 
   return (
-    <ModalOverlay
-      isOpen
-      isDismissable
-      onOpenChange={(open) => { if (!open) onClose(); }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden modal-safe-viewport bg-slate-950/20 dark:bg-black/70 backdrop-blur-sm"
-    >
-      <Modal className="w-full flex justify-center">
-        <Dialog
-          aria-label="Customize entity"
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden modal-safe-viewport">
+        {/* Backdrop Scrim: Crystal / Apple HIG gentle scrim in light, OLED scrim in dark */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          onClick={onClose}
+          className="fixed inset-0 bg-slate-950/20 dark:bg-black/70 backdrop-blur-sm"
+        />
+
+        {/* Modal Card: Luminous frosted glass in light mode, deep dark glass in dark mode */}
+        <motion.div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Customize entity" tabIndex={-1}
+          initial={{ opacity: 0, scale: 0.96, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 12 }}
+          transition={{ type: 'spring', damping: 26, stiffness: 350 }}
           className={`relative w-full ${
             isPickingIcon
               ? 'max-w-2xl h-[620px] max-h-[90vh] flex flex-col p-0'
               : 'max-w-lg p-5 sm:p-6 space-y-5'
-          } bg-white/35 dark:bg-black/40 border border-white/60 dark:border-white/10 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-2xl text-slate-900 dark:text-slate-100 isolate z-10 overflow-hidden transition-all duration-300 outline-none`}
+          } bg-white/35 dark:bg-black/40 border border-white/60 dark:border-white/10 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-2xl text-slate-900 dark:text-slate-100 isolate z-10 overflow-hidden transition-all duration-300`}
         >
           {isPickingIcon ? (
             <IconFinderModal
@@ -384,8 +394,8 @@ export default function EntityCustomizerModal({
               </div>
             </>
           )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+        </motion.div>
+      </div>
+    </AnimatePresence>
   );
 }

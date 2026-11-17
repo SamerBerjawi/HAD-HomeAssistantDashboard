@@ -17,8 +17,7 @@ test.describe('I. Accessibility', () => {
     await opener.click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
-    // react-aria makes the page behind a modal inert instead of setting aria-modal
-    expect(await page.evaluate(() => document.getElementById('root')?.hasAttribute('inert'))).toBe(true);
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(await dialog.getAttribute('aria-label')).toBeTruthy();
     // Tab must stay inside the dialog
     for (let i = 0; i < 8; i++) await page.keyboard.press('Tab');

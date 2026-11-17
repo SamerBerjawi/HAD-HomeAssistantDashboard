@@ -7,9 +7,9 @@
  * Optimized for Desktop, Mobile Web, and installed PWA standalone environments
  */
 
-import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
+import { useDialogA11y } from '../../hooks/useDialogA11y';
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Key, 
   SignIn, 
@@ -87,6 +87,8 @@ export default function AuthModal({ darkMode = true }: AuthModalProps) {
   // Modal is strictly un-dismissible if user has neither authenticated nor entered demo mode
   const canClose = authState.isAuthenticated || authState.isDemo;
 
+  const dialogRef = useDialogA11y({ open: isAuthModalOpen, onClose: closeAuthModal, closeOnEscape: canClose });
+
   if (!isAuthModalOpen) return null;
 
   // Pre-flight validation helpers
@@ -132,21 +134,23 @@ export default function AuthModal({ darkMode = true }: AuthModalProps) {
   };
 
   return (
-    <ModalOverlay
-      isOpen
-      isDismissable={canClose}
-      isKeyboardDismissDisabled={!canClose}
-      onOpenChange={(open) => { if (!open && canClose) closeAuthModal(); }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto overflow-x-hidden backdrop-blur-2xl bg-slate-950/80 modal-safe-viewport"
-    >
-      {/* Ambient Glows */}
-      <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-sky-500/20 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-[450px] h-[450px] rounded-full bg-cyan-500/15 blur-[140px] pointer-events-none" />
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto overflow-x-hidden backdrop-blur-2xl bg-slate-950/80 transition-all duration-300 modal-safe-viewport">
+        {/* Ambient Glows */}
+        <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-sky-500/20 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-[450px] h-[450px] rounded-full bg-cyan-500/15 blur-[140px] pointer-events-none" />
 
-      <Modal className="relative w-full max-w-xl">
-        <Dialog
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 10 }}
+          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
           aria-label="Sign in to Home Assistant"
-          className="relative w-full rounded-3xl border border-white/15 bg-slate-900/90 dark:bg-slate-900/95 text-white shadow-2xl shadow-cyan-950/40 p-6 sm:p-8 backdrop-blur-xl overflow-hidden outline-none"
+          tabIndex={-1}
+          className="relative w-full max-w-xl rounded-3xl border border-white/15 bg-slate-900/90 dark:bg-slate-900/95 text-white shadow-2xl shadow-cyan-950/40 p-6 sm:p-8 backdrop-blur-xl overflow-hidden"
         >
           {/* Close button if allowed */}
           {canClose && (
@@ -372,8 +376,8 @@ export default function AuthModal({ darkMode = true }: AuthModalProps) {
               Demo mode simulates real Home Assistant entity telemetry using browser storage only.
             </p>
           </div>
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+        </motion.div>
+      </div>
+    </AnimatePresence>
   );
 }

@@ -5,7 +5,6 @@ import App from './App.tsx';
 // Self-hosted variable fonts (same origin, precached) instead of a render-blocking Google Fonts request
 import '@fontsource-variable/plus-jakarta-sans/wght.css';
 import '@fontsource-variable/jetbrains-mono/wght.css';
-import './styles/globals.css';
 import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { ConfigProvider } from './contexts/ConfigContext';

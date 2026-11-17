@@ -8,7 +8,6 @@
  */
 
 import React, { useRef, useEffect } from 'react';
-import { Tab, TabList, Tabs } from 'react-aria-components';
 
 export interface SectionTabItem {
   id: string;
@@ -52,7 +51,7 @@ export const AdaptiveSectionTabs: React.FC<AdaptiveSectionTabsProps> = ({
   className = ''
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const activeTabRef = useRef<HTMLDivElement>(null);
+  const activeTabRef = useRef<HTMLButtonElement>(null);
 
   // Auto-scroll active tab into view when activeTab changes
   useEffect(() => {
@@ -72,7 +71,6 @@ export const AdaptiveSectionTabs: React.FC<AdaptiveSectionTabsProps> = ({
   }, [activeTab]);
 
   return (
-    <Tabs selectedKey={activeTab} onSelectionChange={(key) => onChange(String(key))} className="w-full max-w-full">
     <div
       ref={scrollContainerRef}
       className={`w-full max-w-full overflow-x-auto touch-scroll-x no-scrollbar pt-1.5 pb-4 px-2 -my-1 flex items-center ${
@@ -80,8 +78,8 @@ export const AdaptiveSectionTabs: React.FC<AdaptiveSectionTabsProps> = ({
       }`}
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
-      <TabList
-        aria-label="Sections"
+      <div
+        role="tablist"
         className={`p-1 rounded-2xl inline-flex items-center gap-1 backdrop-blur-xl border transition-all select-none shrink-0 ${
           darkMode
             ? 'bg-black/30 border-white/10 shadow-[0_4px_16px_-2px_rgba(0,0,0,0.5),0_2px_6px_-1px_rgba(0,0,0,0.3)]'
@@ -106,14 +104,17 @@ export const AdaptiveSectionTabs: React.FC<AdaptiveSectionTabsProps> = ({
           const showBadgeOnMobile = isActive;
 
           return (
-            <Tab
+            <button
               key={tab.id}
-              id={tab.id}
               ref={isActive ? activeTabRef : undefined}
+              role="tab"
+              aria-selected={isActive}
+              type="button"
+              title={tab.label}
               aria-label={tab.label}
-              {...{ title: tab.label }}
+              onClick={() => onChange(tab.id)}
               style={customTabStyle}
-              className={`outline-none focus-visible:ring-2 focus-visible:ring-sky-400 flex items-center transition-all duration-200 cursor-pointer shrink-0 select-none ${
+              className={`flex items-center transition-all duration-200 cursor-pointer shrink-0 select-none ${
                 isActive
                   ? 'gap-1.5 sm:gap-2 px-3.5 py-1.5 rounded-xl text-xs'
                   : Icon
@@ -180,12 +181,11 @@ export const AdaptiveSectionTabs: React.FC<AdaptiveSectionTabsProps> = ({
                   {tab.badge}
                 </span>
               )}
-            </Tab>
+            </button>
           );
         })}
-      </TabList>
+      </div>
     </div>
-    </Tabs>
   );
 };
 

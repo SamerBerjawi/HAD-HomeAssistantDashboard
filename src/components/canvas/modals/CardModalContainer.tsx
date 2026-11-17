@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
-import React from 'react';
+import { useDialogA11y } from '../../../hooks/useDialogA11y';
+import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { X } from '@phosphor-icons/react';
 
 interface CardModalContainerProps {
@@ -28,18 +29,41 @@ export default function CardModalContainer({
   maxWidth = 'max-w-xl',
   footerActions
 }: CardModalContainerProps) {
+  const dialogRef = useDialogA11y({ open: isOpen, onClose });
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   return (
-    <ModalOverlay
-      isOpen={isOpen}
-      isDismissable
-      onOpenChange={(open) => { if (!open) onClose(); }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto modal-safe-viewport bg-black/60 backdrop-blur-sm"
-    >
-      <Modal className={`relative w-full ${maxWidth} my-auto`}>
-        <Dialog
-          aria-label={typeof title === 'string' ? title : 'Card details'}
-          className="relative w-full rounded-3xl overflow-hidden bg-slate-900/80 backdrop-blur-md backdrop-saturate-150 border border-white/15 shadow-2xl text-white outline-none"
-        >
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto modal-safe-viewport">
+          {/* Scrim / Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+          />
+
+          {/* Dialog Card */}
+          <motion.div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Card details" tabIndex={-1}
+            initial={{ opacity: 0, scale: 0.92, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: 20 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            onClick={(e) => e.stopPropagation()}
+            className={`relative w-full ${maxWidth} rounded-3xl overflow-hidden bg-slate-900/80 backdrop-blur-md backdrop-saturate-150 border border-white/15 shadow-2xl text-white z-10 my-auto`}
+          >
             {/* Top Refractive Highlight */}
             <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
 
@@ -88,8 +112,9 @@ export default function CardModalContainer({
                 </button>
               )}
             </div>
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }

@@ -23,7 +23,6 @@ import {
   Bell
 } from '@phosphor-icons/react';
 import { AnimatedThemeToggler } from './ui/animated-theme-toggler';
-import { Button, Drawer } from '@heroui/react';
 import { useAutoLayoutStore } from '../store/useAutoLayoutStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useHANotificationSummary } from '../hooks/useHANotifications';
@@ -164,12 +163,11 @@ export default function Sidebar({
       >
         {/* Header Branding & Collapse Toggle */}
         <div className={`flex items-center mb-6 px-1 ${isCollapsed ? 'justify-center w-full' : 'justify-between w-full'}`}>
-          <button
-            type="button"
+          <div 
             onClick={() => setActiveTab('overview')}
-            className="flex items-center gap-3 cursor-pointer group text-left"
+            className="flex items-center gap-3 cursor-pointer group"
             title="HAD - Home Assistant Dashboard"
-          >
+           role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}>
             <img loading="lazy" decoding="async" 
               src="/app-icon.png" 
               alt="HAD" 
@@ -181,19 +179,21 @@ export default function Sidebar({
                 <p className={`text-[11px] font-semibold tracking-wider uppercase mt-0.5 ${darkMode ? 'text-sky-400' : 'text-sky-600'}`}>Home Assistant</p>
               </div>
             )}
-          </button>
+          </div>
 
           {/* Collapse Toggle Button */}
-          <Button
-            isIconOnly
-            size="sm"
-            variant="ghost"
-            aria-label="Collapse Sidebar"
-            onPress={() => setIsCollapsed(true)}
-            className={isCollapsed ? 'hidden' : ''}
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+              darkMode ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-900/5'
+            } ${
+              isCollapsed ? 'hidden' : 'block'
+            }`}
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
             <CaretLeft size={16} weight="bold" />
-          </Button>
+          </button>
         </div>
         
         {/* Navigation Items List */}
@@ -353,31 +353,69 @@ export default function Sidebar({
 
           {/* Expand Button at bottom if collapsed */}
           {isCollapsed && (
-            <Button
-              isIconOnly
-              size="sm"
-              variant="ghost"
-              aria-label="Expand Sidebar"
-              onPress={() => setIsCollapsed(false)}
-              className="mx-auto"
+            <button
+              type="button"
+              onClick={() => setIsCollapsed(false)}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors cursor-pointer mx-auto ${
+                darkMode ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-900/5'
+              }`}
+              title="Expand Sidebar"
             >
               <CaretRight size={16} weight="bold" />
-            </Button>
+            </button>
           )}
         </div>
       </nav>
 
+      {/* Subtle theme-based gradient backdrop separating the page from More Hub and Navbar */}
+      {showMoreMenu && (
+        <div 
+          id="mobile-more-backdrop"
+          className={`md:hidden absolute inset-0 z-40 transition-all duration-300 ${
+            darkMode 
+              ? 'bg-gradient-to-t from-black/80 via-black/40 to-black/10 backdrop-blur-xs' 
+              : 'bg-gradient-to-t from-slate-950/25 via-slate-900/10 to-transparent backdrop-blur-xs'
+          }`}
+          onClick={() => setShowMoreMenu(false)}
+        />
+      )}
+
       {/* MORE MENU BOTTOM SHEET */}
-      <Drawer.Backdrop isOpen={showMoreMenu} onOpenChange={setShowMoreMenu} className="md:hidden">
-        <Drawer.Content placement="bottom">
-        <Drawer.Dialog aria-label="Navigation Hub">
-        <Drawer.Handle />
-        <Drawer.Header>
-          <Drawer.Heading>Navigation Hub</Drawer.Heading>
-        </Drawer.Header>
-        <Drawer.Body>
+      {showMoreMenu && (
+        <div 
+          id="sidebar-more-menu"
+          className={`md:hidden absolute left-3 right-3 sm:left-6 sm:right-6 max-w-lg mx-auto rounded-3xl p-4 shadow-[4px_6px_16px_rgba(0,0,0,0.25)] z-50 animate-fadeIn backdrop-blur-md ${
+            darkMode 
+              ? 'bg-slate-900/90 border border-white/10 text-white' 
+              : 'bg-white/90 border border-slate-200/80 text-slate-900'
+          }`}
+          style={{
+            bottom: 'calc(4.75rem + env(safe-area-inset-bottom, 0px))',
+            maxHeight: 'calc(100dvh - 6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))'
+          }}
+        >
+          {/* Sheet Header */}
+          <div className={`flex items-center justify-between pb-3 mb-3 border-b ${
+            darkMode ? 'border-white/10' : 'border-slate-200/60'
+          }`}>
+            <div className="flex items-center gap-2">
+              <DotsThreeVertical size={20} weight="duotone" className={darkMode ? 'text-sky-400' : 'text-sky-600'} />
+              <div>
+                <h3 className={`font-extrabold text-sm tracking-tight leading-none ${darkMode ? 'text-white' : 'text-slate-900'}`}>Navigation Hub</h3>
+              </div>
+            </div>
+            <button aria-label="Close" 
+              onClick={() => setShowMoreMenu(false)}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+                darkMode ? 'bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white' : 'bg-slate-100/70 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <X size={16} weight="duotone" />
+            </button>
+          </div>
+
           {/* Secondary Navigation Grid */}
-          <div className="grid grid-cols-2 gap-2.5 mb-3.5">
+          <div className="grid grid-cols-2 gap-2.5 mb-3.5 max-h-64 overflow-y-auto touch-scroll-container">
             {secondaryItems.map(item => {
               const ItemIcon = item.icon;
               const isActive = activeTab === item.id;
@@ -454,10 +492,8 @@ export default function Sidebar({
               }`}
             />
           </div>
-        </Drawer.Body>
-        </Drawer.Dialog>
-        </Drawer.Content>
-      </Drawer.Backdrop>
+        </div>
+      )}
 
       {/* MOBILE BOTTOM NAVIGATION */}
       <nav 

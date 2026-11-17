@@ -9,8 +9,10 @@
  * Can be rendered embedded (inside a parent modal like EntityCustomizerModal) or as a portal.
  */
 
-import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
+import { useDialogA11y } from '../../hooks/useDialogA11y';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   MagnifyingGlass,
   X,
@@ -93,6 +95,7 @@ export default function IconFinderModal({
   accentColor = '#0ea5e9',
   embedded = false
 }: IconFinderModalProps) {
+  const dialogRef = useDialogA11y({ open: isOpen, onClose });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('popular');
   const [selectedWeight, setSelectedWeight] = useState<IconWeight>('duotone');
@@ -401,22 +404,34 @@ export default function IconFinderModal({
     return modalContent;
   }
 
-  // Otherwise, render as a full-viewport modal
-  return (
-    <ModalOverlay
-      isOpen
-      isDismissable
-      onOpenChange={(open) => { if (!open) onClose(); }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden bg-slate-950/40 dark:bg-black/70 backdrop-blur-md"
-    >
-      <Modal className="w-full flex justify-center">
-        <Dialog
-          aria-label="Choose an icon"
-          className="relative w-full max-w-3xl h-[85vh] max-h-[85vh] flex flex-col bg-white/40 dark:bg-black/45 border border-white/60 dark:border-white/10 rounded-3xl shadow-2xl backdrop-blur-2xl text-slate-900 dark:text-slate-100 overflow-hidden isolate z-10 outline-none"
+  // Otherwise, render as a full-viewport modal via Portal
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          onClick={onClose}
+          className="fixed inset-0 bg-slate-950/40 dark:bg-black/70 backdrop-blur-md"
+        />
+
+        {/* Modal Window */}
+        <motion.div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Choose an icon" tabIndex={-1}
+          initial={{ opacity: 0, scale: 0.96, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 12 }}
+          transition={{ type: 'spring', damping: 26, stiffness: 350 }}
+          className="relative w-full max-w-3xl h-[85vh] max-h-[85vh] flex flex-col bg-white/40 dark:bg-black/45 border border-white/60 dark:border-white/10 rounded-3xl shadow-2xl backdrop-blur-2xl text-slate-900 dark:text-slate-100 overflow-hidden isolate z-10"
         >
           {modalContent}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+        </motion.div>
+      </div>
+    </AnimatePresence>,
+    document.body
   );
 }

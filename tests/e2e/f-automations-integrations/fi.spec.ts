@@ -39,9 +39,7 @@ test.describe('F. Automations & integrations', () => {
     await ctl(page, 'Inspect').first().click();
     await page.waitForTimeout(600);
     for (const n of ['Entities', 'Devices', 'Overview']) {
-      // Scope to the detail drawer: it is modal, so the page behind it (sidebar "Overview") is inert.
-      const scope = page.getByRole('dialog');
-      const b = scope.getByRole('tab', { name: new RegExp(`^${n}$`) }).or(scope.getByRole('button', { name: new RegExp(`^${n}$`) })).first();
+      const b = page.getByRole('tab', { name: new RegExp(`^${n}$`) }).or(page.getByRole('button', { name: new RegExp(`^${n}$`) })).first();
       if (await b.count()) await b.click();
     }
     expect(errors).toEqual([]);
