@@ -60,8 +60,8 @@ const styles = sortCx({
     "disabled:cursor-not-allowed disabled:bg-background-primary-disabled disabled:border-border-button-default disabled:text-icon-button-disabled-foreground disabled:opacity-60 disabled:shadow-none",
   ].join(" "),
   size: {
-    medium: "size-9",
-    small: "size-8",
+    medium: "size-9 pointer-coarse:size-11",
+    small: "size-8 pointer-coarse:size-11",
   },
   icon: {
     medium: "size-5 shrink-0",

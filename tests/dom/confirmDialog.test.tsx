@@ -23,7 +23,6 @@ describe('ConfirmDialog (UI-002, UI-012)', () => {
     render(<Harness />);
     fireEvent.click(screen.getByText('opener'));
     const dialog = screen.getByRole('dialog', { name: 'Do it?' });
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.contains(document.activeElement)).toBe(true);
   });
 
@@ -32,9 +31,9 @@ describe('ConfirmDialog (UI-002, UI-012)', () => {
     const opener = screen.getByText('opener');
     opener.focus();
     fireEvent.click(opener);
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(document.activeElement).toBe(opener);
+    await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
   it('keeps Tab inside the dialog', () => {

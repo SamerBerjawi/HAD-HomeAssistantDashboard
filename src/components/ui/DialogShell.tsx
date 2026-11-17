@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDialogA11y } from '../../hooks/useDialogA11y';
+import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
 
 interface DialogShellProps {
   /** Accessible name of the dialog */
@@ -13,9 +13,9 @@ interface DialogShellProps {
 }
 
 /**
- * Overlay + card with dialog semantics for conditionally rendered inline modals (UI-002).
- * Rendering it only while the modal is open is enough: focus moves in on mount and is restored
- * on unmount.
+ * Overlay + card for conditionally rendered inline modals (UI-002), on react-aria's
+ * ModalOverlay: focus trap, focus restore, Escape, backdrop press and scroll lock come from the
+ * library. Render it only while the modal is open. The caller owns the look through the class props.
  */
 export default function DialogShell({
   label,
@@ -24,20 +24,18 @@ export default function DialogShell({
   className,
   children
 }: DialogShellProps) {
-  const ref = useDialogA11y({ open: true, onClose });
   return (
-    <div className={overlayClassName} onClick={onClose}>
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        tabIndex={-1}
-        className={className}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
+    <ModalOverlay
+      isOpen
+      isDismissable
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      className={overlayClassName}
+    >
+      <Modal className="contents">
+        <Dialog aria-label={label} className={`${className ?? ''} outline-none`}>
+          {children}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }
