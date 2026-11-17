@@ -41,6 +41,7 @@ jobs:
           npm run lint
           npm run test:coverage
           npm run build
+          npm run build:pro
           npm run check:bundle
           npm run test:integration
           npm prune --omit=dev
