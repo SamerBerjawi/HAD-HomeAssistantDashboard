@@ -18,7 +18,7 @@ import { ResolvedEntity, HAEntity } from '../../types';
 import { useUserConfig } from '../../contexts/ConfigContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { cameraStreamManager, CameraStreamState } from '../../services/cameraStreamManager';
-import { resolveHAImageUrl } from '../../services/haImageService';
+import HAImage from '../ui/HAImage';
 import { useIsOnScreen } from '../../hooks/useIsOnScreen';
 
 export type CameraEngine = 'auto' | 'webrtc' | 'hls' | 'snapshot';
@@ -66,9 +66,7 @@ function CameraFeed({
   const state = String(camera.state || 'idle').toLowerCase();
   const isUnavailable = state === 'unavailable' || state === 'off';
   // entity_picture is a path on the Home Assistant server (/api/camera_proxy/...?token=...)
-  const entityPicture = camera.attributes?.entity_picture
-    ? resolveHAImageUrl(camera.attributes.entity_picture)
-    : undefined;
+  const entityPicture = camera.attributes?.entity_picture || undefined;
 
   // Check if camera has an RTSP source configured
   const configuredSource =
@@ -236,7 +234,7 @@ function CameraFeed({
 
       {/* 2. Snapshot Poster Fallback (rendered while connecting or if no RTSP stream configured) */}
       {(!isStreaming || isConnecting) && entityPicture && !isUnavailable && (
-        <img loading="lazy"
+        <HAImage loading="lazy"
           src={entityPicture}
           alt={cameraName}
           decoding="async"

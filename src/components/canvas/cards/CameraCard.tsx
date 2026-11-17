@@ -9,6 +9,7 @@ import { CardConfig } from '../../../types/canvas';
 import { HAEntity, ResolvedEntity } from '../../../types';
 import CameraNoSignalPlaceholder from '../../ui/CameraNoSignalPlaceholder';
 import CameraFeed from '../../camera/CameraFeed';
+import HAImage from '../../ui/HAImage';
 
 interface CameraCardProps {
   config: CardConfig;
@@ -43,7 +44,7 @@ export default function CameraCard({
         </div>
       ) : snapshotUrl ? (
         <>
-          <img loading="lazy" decoding="async"
+          <HAImage loading="lazy" decoding="async"
             src={snapshotUrl}
             alt={title}
             className="absolute inset-0 w-full h-full object-cover brightness-[0.75] group-hover:scale-105 transition-transform duration-500"

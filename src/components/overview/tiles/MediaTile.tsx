@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Play, Pause, CaretRight, MusicNotes, SkipBack, SkipForward, SpeakerHigh } from '@phosphor-icons/react';
-import { getHAImageUrl } from '../../../lib/utils';
+import { useHAImage } from '../../../services/haImageService';
 import type { TileProps } from './types';
 
 export default function MediaTile({ s, is2x }: TileProps) {
@@ -21,7 +21,7 @@ export default function MediaTile({ s, is2x }: TileProps) {
     tileBaseClass
   } = s;
 
-  const mediaArt = getHAImageUrl(activeMedia?.attributes?.entity_picture || activeMedia?.attributes?.media_image, serverUrl);
+  const { imageUrl: mediaArt } = useHAImage(activeMedia?.attributes?.entity_picture || activeMedia?.attributes?.media_image, serverUrl);
   const volumePct = typeof activeMedia?.attributes?.volume_level === 'number'
     ? Math.round(activeMedia.attributes.volume_level * 100)
     : undefined;

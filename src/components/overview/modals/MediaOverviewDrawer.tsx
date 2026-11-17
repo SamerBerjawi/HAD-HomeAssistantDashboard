@@ -22,7 +22,7 @@ import {
 } from '@phosphor-icons/react';
 import { ResolvedEntity } from '../../../types';
 import DetailsRightDrawer from '../DetailsRightDrawer';
-import { getHAImageUrl } from '../../../lib/utils';
+import HAImage from '../../ui/HAImage';
 import { useAutoLayoutStore } from '../../../store/useAutoLayoutStore';
 import { detectMediaPlayerType, MediaPlayerService, ClassifiedMediaPlayer } from '../../../services/mediaPlayerClassification';
 import AppleRemoteControl from '../../media/AppleRemoteControl';
@@ -584,7 +584,7 @@ export default function MediaOverviewDrawer({
                               const isSel = player.entity_id === (currentMedia?.entity_id || selectedId);
                               const isPlayingThis = player.state === 'playing';
                               const roomName = player.area?.name || 'Home';
-                              const playerArt = getHAImageUrl(player.attributes?.media_image || player.attributes?.entity_picture, serverUrl);
+                              const playerArt = player.attributes?.media_image || player.attributes?.entity_picture;
                               const playerClass = detectMediaPlayerType(player, devices, Object.values(resolvedEntities));
 
                               return (
@@ -600,7 +600,7 @@ export default function MediaOverviewDrawer({
                                   <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-10 h-10 rounded-xl overflow-hidden bg-purple-100 dark:bg-purple-950/60 flex items-center justify-center shrink-0">
                                       {playerArt ? (
-                                        <img loading="lazy" decoding="async" src={playerArt} alt={player.name} className="w-full h-full object-cover" />
+                                        <HAImage loading="lazy" decoding="async" src={playerArt} alt={player.name} className="w-full h-full object-cover" />
                                       ) : playerClass.isApple ? (
                                         <Television size={20} weight="duotone" className="text-sky-500 dark:text-sky-300" />
                                       ) : player.attributes?.device_class === 'tv' ? (
