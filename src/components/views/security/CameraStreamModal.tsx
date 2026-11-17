@@ -6,9 +6,9 @@
  * Streamlined camera modal with clean responsive light/dark styling.
  */
 
-import { useDialogA11y } from '../../../hooks/useDialogA11y';
-import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
+import { IconButton } from '@/components/base/buttons/icon-button';
 import { X, VideoCamera, CornersOut, CornersIn } from '@phosphor-icons/react';
 import { ResolvedEntity } from '../../../types';
 import CameraFeed from '../../camera/CameraFeed';
@@ -26,7 +26,7 @@ export default function CameraStreamModal({
   camera,
   darkMode = true
 }: CameraStreamModalProps) {
-  const dialogRef = useDialogA11y({ open: isOpen, onClose });
+  const dialogRef = useRef<HTMLElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -50,83 +50,68 @@ export default function CameraStreamModal({
 
   const cameraName = camera.name || camera.attributes?.friendly_name || 'Camera Feed';
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-slate-900/40 dark:bg-black/75 backdrop-blur-md animate-in fade-in duration-150 modal-safe-viewport"
-      onClick={onClose}
+  return (
+    <ModalOverlay
+      isOpen
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      isDismissable
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-slate-900/40 dark:bg-black/75 backdrop-blur-md modal-safe-viewport"
     >
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Camera stream" tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-        className={`relative w-full ${isFullscreen ? 'h-full max-w-none rounded-none' : 'max-w-4xl rounded-3xl'} overflow-hidden shadow-2xl border flex flex-col transition-colors duration-200 ${
-          darkMode 
-            ? 'bg-slate-900 border-white/10 shadow-black/60' 
-            : 'bg-white border-slate-200 shadow-slate-900/20'
-        }`}
-      >
-        {/* Header Bar */}
-        <div className={`px-5 py-3.5 flex items-center justify-between border-b ${
-          darkMode 
-            ? 'border-white/10 bg-slate-950/40' 
-            : 'border-slate-100 bg-white'
-        }`}>
-          <div className="flex items-center gap-2.5">
-            <div className={`p-2 rounded-xl ${
-              darkMode 
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' 
-                : 'bg-slate-100 text-slate-700 border border-slate-200/60'
-            }`}>
-              <VideoCamera size={20} weight="duotone" />
-            </div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
-                {cameraName}
-              </h3>
-              {camera.area_id && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
-                  {camera.area_id}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
-              className={`p-2 rounded-full transition-colors cursor-pointer ${
-                darkMode 
-                  ? 'text-slate-400 hover:text-white bg-white/5 hover:bg-white/10' 
-                  : 'text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
+      <Modal className="contents">
+        <Dialog
+          ref={dialogRef}
+          aria-label={`Camera stream: ${cameraName}`}
+          className={`relative w-full outline-none ${isFullscreen ? 'h-full max-w-none rounded-none' : 'max-w-4xl rounded-3xl'} overflow-hidden shadow-2xl border flex flex-col transition-colors duration-200 ${
+            darkMode
+              ? 'bg-slate-900 border-white/10 shadow-black/60'
+              : 'bg-white border-slate-200 shadow-slate-900/20'
+          }`}
+        >
+          {/* Header Bar */}
+          <div className={`px-5 py-3.5 flex items-center justify-between border-b ${
+            darkMode ? 'border-white/10 bg-slate-950/40' : 'border-slate-100 bg-white'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <div className={`p-2 rounded-xl ${
+                darkMode
+                  ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                  : 'bg-slate-100 text-slate-700 border border-slate-200/60'
               }`}>
-              {isFullscreen ? <CornersIn size={18} weight="bold" /> : <CornersOut size={18} weight="bold" />}
-            </button>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className={`p-2 rounded-full transition-colors cursor-pointer ${
-              darkMode 
-                ? 'text-slate-400 hover:text-white bg-white/5 hover:bg-white/10' 
-                : 'text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
-            }`}
-          >
-            <X size={18} weight="bold" />
-          </button>
-          </div>
-        </div>
+                <VideoCamera size={20} weight="duotone" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
+                  {cameraName}
+                </h3>
+                {camera.area_id && (
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                    {camera.area_id}
+                  </span>
+                )}
+              </div>
+            </div>
 
-        {/* Video Viewport Container */}
-        <div className={`relative w-full bg-black ${isFullscreen ? 'flex-1 min-h-0' : 'aspect-video'} overflow-hidden flex items-center justify-center`}>
-          <CameraFeed
-            camera={camera}
-            mode="live"
-            darkMode={darkMode}
-            showControls={false}
-          />
-        </div>
-      </div>
-    </div>,
-    document.body
+            <div className="flex items-center gap-2">
+              <IconButton
+                icon={isFullscreen ? CornersIn : CornersOut}
+                aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
+                onClick={toggleFullscreen}
+              />
+              <IconButton icon={X} aria-label="Close" onClick={onClose} />
+            </div>
+          </div>
+
+          {/* Video Viewport Container */}
+          <div className={`relative w-full bg-black ${isFullscreen ? 'flex-1 min-h-0' : 'aspect-video'} overflow-hidden flex items-center justify-center`}>
+            <CameraFeed
+              camera={camera}
+              mode="live"
+              darkMode={darkMode}
+              showControls={false}
+            />
+          </div>
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }

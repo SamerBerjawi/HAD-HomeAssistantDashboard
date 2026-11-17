@@ -9,6 +9,10 @@ interface DialogShellProps {
   overlayClassName?: string;
   /** Classes for the dialog card */
   className?: string;
+  /** `alertdialog` for emergencies that need an answer. */
+  role?: 'dialog' | 'alertdialog';
+  /** Backdrop press and Escape close it. Turn off for dialogs that must be acknowledged. */
+  dismissable?: boolean;
   children: React.ReactNode;
 }
 
@@ -22,17 +26,20 @@ export default function DialogShell({
   onClose,
   overlayClassName = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs',
   className,
+  role = 'dialog',
+  dismissable = true,
   children
 }: DialogShellProps) {
   return (
     <ModalOverlay
       isOpen
-      isDismissable
+      isDismissable={dismissable}
+      isKeyboardDismissDisabled={!dismissable}
       onOpenChange={(open) => { if (!open) onClose(); }}
       className={overlayClassName}
     >
       <Modal className="contents">
-        <Dialog aria-label={label} className={`${className ?? ''} outline-none`}>
+        <Dialog role={role} aria-label={label} className={`${className ?? ''} outline-none`}>
           {children}
         </Dialog>
       </Modal>

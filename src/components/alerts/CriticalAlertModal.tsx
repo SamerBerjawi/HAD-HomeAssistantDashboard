@@ -8,7 +8,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Modal, ModalOverlay, Dialog } from 'react-aria-components';
 import {
   Flame,
   Drop,
@@ -100,35 +100,25 @@ export const CriticalAlertModal: React.FC<CriticalAlertModalProps> = ({ onNaviga
   const meta = getHazardMeta(criticalAlert.sensorType);
 
   return (
-    <AnimatePresence>
+    <ModalOverlay
+      isOpen
+      isDismissable={false}
+      isKeyboardDismissDisabled
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6 modal-safe-viewport bg-black/85 backdrop-blur-2xl"
+    >
+      {/* Pulsating Radial Halo */}
       <div
-        role="alertdialog"
-        aria-modal="true"
-        className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6 modal-safe-viewport"
-      >
-        {/* Deep Backdrop with Hazard Pulse */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/85 backdrop-blur-2xl"
-        />
+        className="absolute inset-0 pointer-events-none animate-pulse"
+        style={{
+          background: `radial-gradient(circle at 50% 50%, ${meta.glowColor} 0%, transparent 70%)`
+        }}
+      />
 
-        {/* Pulsating Radial Halo */}
-        <div
-          className="absolute inset-0 pointer-events-none animate-pulse"
-          style={{
-            background: `radial-gradient(circle at 50% 50%, ${meta.glowColor} 0%, transparent 70%)`
-          }}
-        />
-
-        {/* Modal Window */}
-        <motion.div
-          initial={{ scale: 0.85, opacity: 0, y: 30 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className={`relative z-10 w-full max-w-lg rounded-3xl border-2 border-rose-500/80 bg-gradient-to-b ${meta.bgColor} p-6 sm:p-8 text-white shadow-[0_0_80px_rgba(244,63,94,0.35)] flex flex-col items-center text-center gap-5 overflow-hidden`}
+      <Modal className="relative z-10 w-full max-w-lg">
+        <Dialog
+          role="alertdialog"
+          aria-label={meta.title}
+          className={`outline-none w-full rounded-3xl border-2 border-rose-500/80 bg-gradient-to-b ${meta.bgColor} p-6 sm:p-8 text-white shadow-[0_0_80px_rgba(244,63,94,0.35)] flex flex-col items-center text-center gap-5 overflow-hidden`}
         >
           {/* Animated Pulsing Icon Rings */}
           <div className="relative flex items-center justify-center">
@@ -166,6 +156,7 @@ export const CriticalAlertModal: React.FC<CriticalAlertModalProps> = ({ onNaviga
             {/* Primary: Acknowledge & Silence */}
             <button
               type="button"
+              autoFocus
               onClick={acknowledgeCriticalAlert}
               className="w-full flex-1 py-3.5 px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 active:scale-95 text-white font-bold text-sm sm:text-base shadow-lg shadow-rose-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
@@ -188,9 +179,9 @@ export const CriticalAlertModal: React.FC<CriticalAlertModalProps> = ({ onNaviga
               </button>
             )}
           </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 };
 
