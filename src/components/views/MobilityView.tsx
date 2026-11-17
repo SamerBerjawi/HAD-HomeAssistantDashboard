@@ -19,6 +19,7 @@ import { useUserConfig } from '../../contexts/ConfigContext';
 import { VehicleHeroCard } from '../mobility/VehicleHeroCard';
 import { ChargingControlCard } from '../mobility/ChargingControlCard';
 import { VehicleTelemetryMap } from '../mobility/VehicleTelemetryMap';
+import SmoothTab from '../kokonutui/smooth-tab';
 import { BikeTab } from './mobility/BikeTab';
 import { VehicleCustomizerModal } from './mobility/VehicleCustomizerModal';
 import { useAutoLayoutStore } from '../../store/useAutoLayoutStore';
@@ -61,51 +62,19 @@ export default function MobilityView({ darkMode = true }: MobilityViewProps) {
         <div className="flex items-center gap-2">
           {/* Top Asset Switcher ("Electric Car" & "Electric Bike") */}
           {hasBikeConfigured ? (
-            <div
-              className={`p-1 rounded-2xl flex items-center gap-1 backdrop-blur-xl border transition-all shadow-[4px_6px_12px_rgba(0,0,0,0.15)] ${
-                darkMode ? 'bg-black/20 border-white/5' : 'bg-white/20 border-slate-200/50'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setActiveAsset('car')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeAsset === 'car'
-                    ? darkMode
-                      ? 'bg-cyan-500 text-slate-950 font-black shadow-md shadow-cyan-500/20'
-                      : 'bg-cyan-600 text-white font-black shadow-md'
-                    : darkMode
-                    ? 'text-slate-400 hover:text-white'
-                    : 'text-slate-700 hover:text-slate-950'
-                }`}
-              >
-                <Car size={16} weight={activeAsset === 'car' ? 'fill' : 'bold'} />
-                <span>Electric Car</span>
-                <span className="text-[11px] font-mono opacity-85">
-                  {carMetrics.soc != null ? `${Math.round(carMetrics.soc)}%` : '—'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveAsset('bike')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeAsset === 'bike'
-                    ? darkMode
-                      ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
-                      : 'bg-amber-600 text-white font-black shadow-md'
-                    : darkMode
-                    ? 'text-slate-400 hover:text-white'
-                    : 'text-slate-700 hover:text-slate-950'
-                }`}
-              >
-                <Bicycle size={16} weight={activeAsset === 'bike' ? 'fill' : 'bold'} />
-                <span>Electric Bike</span>
-                <span className="text-[11px] font-mono opacity-85">
-                  {bikeMetrics.batteryPercent != null ? `${Math.round(bikeMetrics.batteryPercent)}%` : '—'}
-                </span>
-              </button>
-            </div>
+            <SmoothTab
+              panels={false}
+              label="Vehicle"
+              value={activeAsset}
+              onChange={(id) => setActiveAsset(id as 'car' | 'bike')}
+              className="w-auto max-w-full"
+              activeColor={activeAsset === 'bike' ? 'bg-amber-500' : 'bg-cyan-500'}
+              activeTextColor="text-slate-950"
+              items={[
+                { id: 'car', title: `Electric Car ${carMetrics.soc != null ? `${Math.round(carMetrics.soc)}%` : '—'}` },
+                { id: 'bike', title: `Electric Bike ${bikeMetrics.batteryPercent != null ? `${Math.round(bikeMetrics.batteryPercent)}%` : '—'}` },
+              ]}
+            />
           ) : (
             <div className="flex items-center gap-2">
               <div
