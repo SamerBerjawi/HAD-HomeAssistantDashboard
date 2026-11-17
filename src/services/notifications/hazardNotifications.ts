@@ -37,7 +37,7 @@ export function collectHazardNotifications(ctx: NotificationContext): void {
       sensorType: 'leak',
       domain: leakDomain,
       source: leak.area?.name || 'Water Sensor',
-      createdAt: leak.attributes.last_triggered || new Date().toISOString(),
+      createdAt: leak.attributes.last_triggered,
       dismissable: false
     });
   }
@@ -60,7 +60,7 @@ export function collectHazardNotifications(ctx: NotificationContext): void {
       sensorType: 'smoke',
       domain: smokeDomain,
       source: smoke.area?.name || 'Smoke Detector',
-      createdAt: smoke.attributes.last_triggered || new Date().toISOString(),
+      createdAt: smoke.attributes.last_triggered,
       dismissable: false
     });
   }
@@ -167,7 +167,7 @@ export function collectHazardNotifications(ctx: NotificationContext): void {
       sensorType: 'battery',
       domain: batDomain,
       source: bat.area?.name || 'Battery Sensor',
-      createdAt: new Date().toISOString(),
+      createdAt: undefined, // filled with a stable first-seen time by extractHANotifications
       dismissable: true,
       onDismiss: () => {
         dismissNotification(notifId);
@@ -211,7 +211,7 @@ export function collectHazardNotifications(ctx: NotificationContext): void {
       areaName: prob.area?.name,
       domain: probDomain,
       source: prob.area?.name || 'Diagnostic',
-      createdAt: prob.attributes.last_triggered || new Date().toISOString(),
+      createdAt: prob.attributes.last_triggered,
       dismissable: true,
       onDismiss: () => {
         dismissNotification(notifId);

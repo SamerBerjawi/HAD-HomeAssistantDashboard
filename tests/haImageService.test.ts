@@ -68,4 +68,19 @@ describe('haImageService.loadHAImageBlob', () => {
 
     expect(result).toBe('https://ha.example.com/api/camera_proxy/camera.front?token=abc123');
   });
+
+  it('makes no request to HA when there is no token', async () => {
+    vi.stubGlobal('window', {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await loadHAImageBlob(
+      '/api/camera_proxy/camera.front?token=stale',
+      'https://ha.example.com',
+      ''
+    );
+
+    expect(result).toBe('');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

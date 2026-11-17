@@ -118,6 +118,9 @@ export async function loadHAImageBlob(
   const activeToken = token || getActiveHAToken();
   const haBase = getHAHttpBaseUrl(serverUrl);
 
+  // Without a token any request to HA is unauthenticated and logs a "Login attempt failed" alert
+  if (!activeToken) return '';
+
   // Check cache
   const cacheKey = `${targetUrl}_${activeToken || ''}`;
   if (blobUrlCache.has(cacheKey)) {
@@ -194,6 +197,7 @@ export function useHAImage(
     return false;
   };
 
+  const activeTokenForDeps = getActiveHAToken();
   const [imageUrl, setImageUrl] = useState<string>(() => {
     if (!rawUrl) return '';
     if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) return rawUrl;
@@ -237,7 +241,7 @@ export function useHAImage(
     return () => {
       isMounted = false;
     };
-  }, [rawUrl, serverUrl]);
+  }, [rawUrl, serverUrl, activeTokenForDeps]);
 
   return { imageUrl, isLoading };
 }

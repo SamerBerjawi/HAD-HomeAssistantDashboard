@@ -63,25 +63,30 @@ export default function DetailsRightDrawer({
       {isOpen && (
         <div className="fixed inset-0 z-9999 overflow-hidden">
           {/* Backdrop Scrim */}
+          {/* Plain tint, no backdrop blur: a full-screen blur whose opacity animates is re-rendered
+              by the GPU every frame, and the panel's own blur would sample it again. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
             onClick={onClose}
-            className={`fixed inset-0 backdrop-blur-sm transition-opacity cursor-pointer ${
-              darkMode ? 'bg-black/50' : 'bg-slate-950/20'
+            className={`fixed inset-0 cursor-pointer ${
+              darkMode ? 'bg-black/60' : 'bg-slate-950/30'
             }`}
           />
 
           {/* Slide-over Container: Full width on mobile, right-aligned on tablet/desktop */}
           <div className="fixed inset-y-0 right-0 flex max-w-full w-full sm:w-auto pointer-events-none z-10 pl-0 sm:pl-10">
             <motion.div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Details" tabIndex={-1}
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 320, mass: 0.8 }}
-              className={`pointer-events-auto w-screen max-w-full sm:w-[480px] lg:w-[540px] xl:w-[580px] h-full flex flex-col justify-between overflow-hidden backdrop-blur-2xl transition-all relative ${
+              // A full `transform` (not `x`) with a tween lets Motion hand the slide to the browser's
+              // compositor (WAAPI), so it stays smooth while React mounts the drawer content and HA
+              // events arrive. No CSS `transition` here: it would fight the per-frame updates.
+              initial={{ transform: 'translateX(100%)' }}
+              animate={{ transform: 'translateX(0%)' }}
+              exit={{ transform: 'translateX(100%)' }}
+              transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+              className={`pointer-events-auto w-screen max-w-full sm:w-[480px] lg:w-[540px] xl:w-[580px] h-full flex flex-col justify-between overflow-hidden backdrop-blur-xl will-change-transform relative ${
                 darkMode
                   ? 'bg-black/35 text-slate-100 border-l border-white/10 shadow-2xl shadow-black/50'
                   : 'bg-white/95 text-slate-900 border-l border-slate-200/80 shadow-2xl'

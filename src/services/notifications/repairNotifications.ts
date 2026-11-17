@@ -117,7 +117,7 @@ export function collectRepairNotifications(ctx: NotificationContext): void {
       isFixable: rep.is_fixable !== false,
       domain,
       source,
-      createdAt: rep.created || new Date().toISOString(),
+      createdAt: rep.created,
       dismissable: true,
       actions,
       onDismiss: async () => {
@@ -312,7 +312,7 @@ export function collectRestartNotifications(ctx: NotificationContext): void {
       message: attrs.message || `${friendlyName} indicates a system restart is required to apply configuration changes or update packages.`,
       domain: sensorDomain,
       source: sensorReg?.platform ? sensorReg.platform.toUpperCase() : 'Home Assistant',
-      createdAt: s.last_updated || new Date().toISOString(),
+      createdAt: s.last_updated,
       dismissable: true,
       actions: [
         {

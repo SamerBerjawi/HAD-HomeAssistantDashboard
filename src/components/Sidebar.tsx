@@ -51,8 +51,8 @@ export default function Sidebar({
     haCoreVersion: s.haCoreVersion
   })));
 
-  // Count only: the sidebar re-renders when the badge changes, not on every state event
-  const { total: totalNotifications } = useHANotificationSummary();
+  // Unread count only: the sidebar re-renders when the badge changes, not on every state event
+  const { unread: totalNotifications } = useHANotificationSummary();
 
   const telemetry = useMemo(() => {
     if (!isLiveMode) {

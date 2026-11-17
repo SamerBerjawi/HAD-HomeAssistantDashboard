@@ -26,7 +26,7 @@ export function collectPersistentNotifications(ctx: NotificationContext): void {
 
     const title = notif.title || 'Home Assistant Notification';
     const message = notif.message || 'Notification received from Home Assistant.';
-    const createdAt = notif.created_at || new Date().toISOString();
+    const createdAt = notif.created_at;
     const isRestartNotif = title.toLowerCase().includes('restart') || 
       message.toLowerCase().includes('restart') || 
       title.toLowerCase().includes('reboot') || 

@@ -1,15 +1,21 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Notification drawer: wires the live Home Assistant notification list into <NotificationCenter>.
+ *
+ * Performance: the list comes from a gated, reconciled selector (useHANotifications), so items keep
+ * their identity across unrelated HA state events. Each item's view model is cached by that
+ * identity, so the memoized cards only re-render when their own notification (or read state)
+ * changes.
  */
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   ArrowsClockwise,
   Trash,
   ArrowSquareOut,
-  CheckCircle,
   Warning,
   ShieldWarning,
   Drop,
@@ -22,7 +28,6 @@ import {
   X,
   MagnifyingGlass,
   Check,
-  HouseLine,
   ArrowUUpLeft,
   Broom
 } from '@phosphor-icons/react';
@@ -31,13 +36,30 @@ import { useAutoLayoutStore } from '../../store/useAutoLayoutStore';
 import { useShallow } from 'zustand/react/shallow';
 import { formatTimeAgo } from '../../services/notificationsService';
 import { useHANotifications } from '../../hooks/useHANotifications';
-import { HANotificationItem, NotificationCategory, HANotificationAction } from '../../types/notifications';
+import type { HANotificationItem, HANotificationAction } from '../../types/notifications';
 import { haWebSocketService } from '../../services/haWebSocket';
 import { useAlertStore } from '../../store/useAlertStore';
+import { useNotificationReadStore } from '../../store/useNotificationReadStore';
+import {
+  INBOX_TABS,
+  buildInboxEntries,
+  matchesSearch,
+  readKeyOf,
+  type InboxEntry,
+  type InboxTab
+} from '../../services/notifications/inbox';
+import { normalizeIntegrationDomain } from './IntegrationIcon';
 import NotificationRichContent from './NotificationRichContent';
 import IntegrationIcon from './IntegrationIcon';
 import NotificationChangelog from './NotificationChangelog';
-import { AnimatedList } from '../ui/animated-list';
+import NotificationCenter from './NotificationCenter';
+import type {
+  NotificationCenterAction,
+  NotificationCenterItem,
+  NotificationCenterStatus
+} from './NotificationCenterCard';
+import { cn } from '@/lib/utils';
+import { glass } from '@/lib/glass';
 
 interface NotificationDrawerProps {
   isOpen: boolean;
@@ -45,33 +67,203 @@ interface NotificationDrawerProps {
   darkMode?: boolean;
 }
 
-type TabType = 'all' | 'updates' | 'restarts' | 'repairs' | 'notifications' | 'alerts';
+// ---------------------------------------------------------------------------------------------
+// Item -> card view model
+// ---------------------------------------------------------------------------------------------
 
-export default function NotificationDrawer({
-  isOpen,
-  onClose,
-  darkMode = true
-}: NotificationDrawerProps) {
-  const {
-    callHAService,
-    dismissNotification,
-    clearAllNotifications,
-    updateEntityState,
-    installUpdate,
-    serverUrl
-  } = useAutoLayoutStore(useShallow(s => ({
-    callHAService: s.callHAService,
-    dismissNotification: s.dismissNotification,
-    clearAllNotifications: s.clearAllNotifications,
-    updateEntityState: s.updateEntityState,
-    installUpdate: s.installUpdate,
-    serverUrl: s.serverUrl
-  })));
+function statusOf(item: HANotificationItem): NotificationCenterStatus {
+  switch (item.severity) {
+    case 'critical':
+    case 'error':
+      return 'error';
+    case 'warning':
+      return 'warning';
+    case 'update':
+    case 'info':
+      return item.category === 'persistent_notification' ? 'neutral' : 'information';
+    default:
+      return 'neutral';
+  }
+}
 
-  const [activeTab, setActiveTab] = useState<TabType>('all');
+function categoryGlyph(item: HANotificationItem): React.ReactNode {
+  const props = { size: 18, weight: 'duotone' as const };
+  switch (item.category) {
+    case 'update':
+      return <DownloadSimple {...props} />;
+    case 'restart':
+      return <ArrowsClockwise size={18} weight="bold" />;
+    case 'hazard':
+      return item.sensorType === 'leak' ? <Drop {...props} /> : <Flame {...props} />;
+    case 'battery':
+      return <BatteryLow {...props} />;
+    case 'security':
+      return <ShieldWarning {...props} />;
+    case 'appliance':
+      return <Sparkle {...props} />;
+    case 'repair':
+    case 'alert':
+      return <Warning {...props} />;
+    default:
+      return <Info {...props} />;
+  }
+}
+
+function isPrimaryAction(a: HANotificationAction): boolean {
+  return a.variant === 'primary' || a.id === 'install' || a.id.startsWith('restart_') || a.id.startsWith('ack_') || a.id === 'unskip';
+}
+
+function actionIcon(a: HANotificationAction): React.ReactNode {
+  if (a.id.startsWith('restart_')) return <ArrowsClockwise size={11} weight="bold" />;
+  if (a.id === 'install') return <DownloadSimple size={11} weight="bold" />;
+  if (a.id === 'skip') return <SkipForward size={11} weight="bold" />;
+  if (a.id === 'unskip') return <ArrowUUpLeft size={11} weight="bold" />;
+  if (a.id.startsWith('ack_')) return <Check size={11} weight="bold" />;
+  if (a.id === 'learn_more') return <ArrowSquareOut size={11} weight="bold" />;
+  return undefined;
+}
+
+function toCardActions(item: HANotificationItem): NotificationCenterAction[] | undefined {
+  // Release notes are shown by the expandable changelog instead
+  const actions = (item.actions || []).filter((a) => a.id !== 'release_notes');
+  if (actions.length === 0) return undefined;
+  const primary = actions.filter(isPrimaryAction);
+  const rest = actions.filter((a) => !isPrimaryAction(a));
+  return [...primary, ...rest].map((a) => ({
+    id: a.id,
+    label: a.label,
+    variant: isPrimaryAction(a) ? 'primary' : a.variant === 'danger' ? 'danger' : 'secondary',
+    icon: actionIcon(a)
+  }));
+}
+
+function ItemDetails({ item, darkMode }: { item: HANotificationItem; darkMode: boolean }) {
+  return (
+    <div className="space-y-2">
+      {item.category === 'update' && (
+        <div className="flex items-center gap-1.5 flex-wrap font-semibold">
+          <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-900/[0.04] dark:bg-white/5 border border-slate-900/[0.06] dark:border-white/5 font-mono text-[11px] text-slate-700 dark:text-slate-300">
+            <span>{item.installedVersion || 'Current'}</span>
+            <span className="text-slate-400" aria-hidden="true">→</span>
+            <span className="sr-only">to</span>
+            <span className="font-bold text-sky-700 dark:text-sky-400">{item.latestVersion || 'New'}</span>
+          </div>
+          {item.skippedVersion && (
+            <span className="text-[11px] font-bold px-1.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/25">
+              Skipped
+            </span>
+          )}
+        </div>
+      )}
+
+      {item.message ? (
+        <NotificationRichContent content={item.message} imageUrl={item.image} darkMode={darkMode} compact />
+      ) : null}
+
+      <NotificationChangelog item={item} darkMode={darkMode} />
+
+      {item.inProgress && (
+        <div className="space-y-1 pt-1">
+          <div className="flex items-center justify-between text-[11px] font-bold text-sky-600 dark:text-sky-400">
+            <span className="flex items-center gap-1">
+              <ArrowsClockwise size={11} className="animate-spin" />
+              Installing update...
+            </span>
+            <span>{item.updatePercentage ? `${item.updatePercentage}%` : 'In progress'}</span>
+          </div>
+          <div className="w-full h-1 rounded-full bg-sky-500/20 overflow-hidden">
+            {/* scaleX instead of width: progress changes don't trigger layout */}
+            <div
+              className="h-full w-full origin-left bg-sky-500 rounded-full transition-transform duration-300"
+              style={{ transform: `scaleX(${(item.updatePercentage ?? 70) / 100})` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildCard(
+  entry: InboxEntry,
+  timestamp: string,
+  darkMode: boolean,
+  serverUrl: string | undefined
+): NotificationCenterItem {
+  const { item } = entry;
+  const hasBrand = Boolean(item.image || normalizeIntegrationDomain(item.domain, undefined, item.title));
+  const metaParts = [item.source, item.areaName && item.areaName !== item.source ? item.areaName : undefined].filter(Boolean);
+  return {
+    id: item.id,
+    category: entry.category,
+    group: entry.group,
+    title: item.title,
+    timestamp,
+    meta: metaParts.length ? metaParts.join(' · ') : undefined,
+    unread: entry.unread,
+    status: statusOf(item),
+    statusIcon: categoryGlyph(item),
+    icon: hasBrand ? (
+      <IntegrationIcon
+        domain={item.domain}
+        entityPicture={item.image}
+        title={item.title}
+        category={item.category}
+        serverUrl={serverUrl}
+        size="md"
+      />
+    ) : undefined,
+    actions: toCardActions(item),
+    actionsDisabled: item.inProgress,
+    dismissible: Boolean(item.dismissable && item.onDismiss),
+    details: <ItemDetails item={item} darkMode={darkMode} />
+  };
+}
+
+interface CachedCard {
+  unread: boolean;
+  group: string;
+  timestamp: string;
+  card: NotificationCenterItem;
+}
+
+/** Re-renders the drawer once a minute while open so "5m ago" stays current. */
+function useMinuteTick(enabled: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, [enabled]);
+  return now;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Drawer
+// ---------------------------------------------------------------------------------------------
+
+export default function NotificationDrawer({ isOpen, onClose, darkMode = true }: NotificationDrawerProps) {
+  const { callHAService, dismissNotification, clearAllNotifications, updateEntityState, installUpdate, serverUrl } =
+    useAutoLayoutStore(
+      useShallow((s) => ({
+        callHAService: s.callHAService,
+        dismissNotification: s.dismissNotification,
+        clearAllNotifications: s.clearAllNotifications,
+        updateEntityState: s.updateEntityState,
+        installUpdate: s.installUpdate,
+        serverUrl: s.serverUrl
+      }))
+    );
+  const readKeys = useNotificationReadStore((s) => s.readKeys);
+  const markRead = useNotificationReadStore((s) => s.markRead);
+
+  const [activeTab, setActiveTab] = useState<InboxTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [actionLoadingIds, setActionLoadingIds] = useState<Record<string, boolean>>({});
+  const deferredQuery = useDeferredValue(searchQuery);
+  const [pendingActions, setPendingActions] = useState<Record<string, string>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isUpdatingAll, setIsUpdatingAll] = useState(false);
 
   // The drawer stays mounted after its first open; only track the live list while it's open,
   // and keep showing the last list during the closing animation.
@@ -79,113 +271,133 @@ export default function NotificationDrawer({
   const lastNotificationsRef = useRef(liveNotifications);
   if (isOpen) lastNotificationsRef.current = liveNotifications;
   const allNotifications = isOpen ? liveNotifications : lastNotificationsRef.current;
+  const now = useMinuteTick(isOpen);
 
-  // Counts by category
-  const counts = useMemo(() => {
-    return {
-      all: allNotifications.length,
-      updates: allNotifications.filter(n => n.category === 'update').length,
-      restarts: allNotifications.filter(n => n.category === 'restart').length,
-      repairs: allNotifications.filter(n => n.category === 'repair').length,
-      notifications: allNotifications.filter(n => n.category === 'persistent_notification').length,
-      alerts: allNotifications.filter(n => n.category === 'alert' || n.category === 'security' || n.category === 'appliance' || n.category === 'hazard' || n.category === 'battery').length
-    };
-  }, [allNotifications]);
+  // Latest list for callbacks, so they can stay referentially stable for the memoized cards
+  const itemsRef = useRef(allNotifications);
+  itemsRef.current = allNotifications;
 
-  // Filtered display list
-  const filteredNotifications = useMemo(() => {
-    return allNotifications.filter(item => {
-      // Tab filter
-      if (activeTab === 'updates' && item.category !== 'update') return false;
-      if (activeTab === 'restarts' && item.category !== 'restart') return false;
-      if (activeTab === 'repairs' && item.category !== 'repair') return false;
-      if (activeTab === 'notifications' && item.category !== 'persistent_notification') return false;
-      if (activeTab === 'alerts' && (item.category === 'update' || item.category === 'restart' || item.category === 'repair' || item.category === 'persistent_notification')) return false;
+  const entries = useMemo(() => {
+    const searched = deferredQuery.trim() ? allNotifications.filter((n) => matchesSearch(n, deferredQuery)) : allNotifications;
+    return buildInboxEntries(searched, readKeys, now);
+  }, [allNotifications, deferredQuery, readKeys, now]);
 
-      // Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesTitle = item.title.toLowerCase().includes(q);
-        const matchesMessage = item.message.toLowerCase().includes(q);
-        const matchesEntity = item.entity_id?.toLowerCase().includes(q);
-        const matchesArea = item.areaName?.toLowerCase().includes(q);
-        return matchesTitle || matchesMessage || matchesEntity || matchesArea;
-      }
-
-      return true;
+  // View models cached by item identity; rebuilt only when that item, its read state, its group
+  // or its relative time changes. Theme or server changes reset the cache.
+  const cacheRef = useRef<{ key: string; map: WeakMap<HANotificationItem, CachedCard> }>({ key: '', map: new WeakMap() });
+  const cards = useMemo(() => {
+    const cacheKey = `${darkMode}|${serverUrl ?? ''}`;
+    if (cacheRef.current.key !== cacheKey) cacheRef.current = { key: cacheKey, map: new WeakMap() };
+    const cache = cacheRef.current.map;
+    return entries.map((entry) => {
+      const timestamp = formatTimeAgo(entry.item.createdAt);
+      const hit = cache.get(entry.item);
+      if (hit && hit.unread === entry.unread && hit.group === entry.group && hit.timestamp === timestamp) return hit.card;
+      const card = buildCard(entry, timestamp, darkMode, serverUrl);
+      cache.set(entry.item, { unread: entry.unread, group: entry.group, timestamp, card });
+      return card;
     });
-  }, [allNotifications, activeTab, searchQuery]);
+  }, [entries, darkMode, serverUrl]);
 
-  // Skipped updates
-  const skippedUpdates = useMemo(() => {
-    return allNotifications.filter(n => n.category === 'update' && n.skippedVersion);
-  }, [allNotifications]);
+  const handleAction = useCallback(
+    async (notificationId: string, actionId: string) => {
+      const item = itemsRef.current.find((n) => n.id === notificationId);
+      const action = item?.actions?.find((a) => a.id === actionId);
+      if (!item || !action) return;
+      markRead([readKeyOf(item)]);
+      setPendingActions((prev) => ({ ...prev, [notificationId]: actionId }));
+      try {
+        await action.onClick();
+      } finally {
+        setPendingActions((prev) => {
+          const { [notificationId]: _done, ...rest } = prev;
+          return rest;
+        });
+      }
+    },
+    [markRead]
+  );
 
-  // Clean only skipped updates
+  const handleDismiss = useCallback(
+    (notificationId: string) => {
+      const item = itemsRef.current.find((n) => n.id === notificationId);
+      if (!item?.onDismiss) return;
+      markRead([readKeyOf(item)]);
+      void item.onDismiss();
+    },
+    [markRead]
+  );
+
+  const handleMarkAllRead = useCallback(
+    (ids: string[]) => {
+      const wanted = new Set(ids);
+      markRead(itemsRef.current.filter((n) => wanted.has(n.id)).map(readKeyOf));
+    },
+    [markRead]
+  );
+
+  // ---- Bulk actions (unchanged behaviour from the previous drawer) ----
+
+  const skippedUpdates = useMemo(
+    () => allNotifications.filter((n) => n.category === 'update' && n.skippedVersion),
+    [allNotifications]
+  );
+  const pendingUpdateCount = useMemo(
+    () => allNotifications.reduce((acc, n) => acc + (n.category === 'update' ? 1 : 0), 0),
+    [allNotifications]
+  );
+
   const handleDismissSkippedUpdates = () => {
     const idsToDismiss: string[] = [];
     for (const n of skippedUpdates) {
-      idsToDismiss.push(n.id);
-      idsToDismiss.push(`skipped_${n.id}`);
-      if (n.skippedVersion) {
-        idsToDismiss.push(`skipped_${n.id}_${n.skippedVersion}`);
-      }
+      idsToDismiss.push(n.id, `skipped_${n.id}`);
+      if (n.skippedVersion) idsToDismiss.push(`skipped_${n.id}_${n.skippedVersion}`);
     }
     clearAllNotifications(idsToDismiss);
   };
 
-  // Batch Dismiss All
   const handleDismissAll = async () => {
-    // Dismiss all dismissable items (including skipped updates and alerts)
-    const dismissableIds = allNotifications
-      .filter(n => n.dismissable)
-      .map(n => n.id);
-
-    // Call dismiss services for persistent notifications, issues & alerts
-    for (const notif of allNotifications) {
+    const list = itemsRef.current;
+    const dismissableIds = list.filter((n) => n.dismissable).map((n) => n.id);
+    for (const notif of list) {
       if (notif.category === 'persistent_notification' && notif.entity_id) {
-        const cleanHaId = (notif as typeof notif & { notificationId?: string }).notificationId || (notif.id.startsWith('pn_') ? notif.id.replace('pn_', '') : notif.id.startsWith('ha_notif_') ? notif.id.replace('ha_notif_', '') : notif.id);
-        await callHAService('persistent_notification', 'dismiss', { notification_id: cleanHaId }).catch(() => { });
+        const cleanHaId =
+          (notif as typeof notif & { notificationId?: string }).notificationId ||
+          (notif.id.startsWith('pn_') ? notif.id.replace('pn_', '') : notif.id.startsWith('ha_notif_') ? notif.id.replace('ha_notif_', '') : notif.id);
+        await callHAService('persistent_notification', 'dismiss', { notification_id: cleanHaId }).catch(() => {});
         if (updateEntityState) updateEntityState(notif.entity_id, 'dismissed');
       } else if (notif.category === 'repair' && notif.issueId) {
         const issueDomain = notif.domain || notif.entity_id?.replace(/^repair\./, '').split('_')[0] || 'homeassistant';
-        await haWebSocketService.ignoreRepairIssue(issueDomain, notif.issueId).catch(() => { });
+        await haWebSocketService.ignoreRepairIssue(issueDomain, notif.issueId).catch(() => {});
         if (updateEntityState && notif.entity_id) updateEntityState(notif.entity_id, 'ignored');
       } else if (notif.category === 'alert' && notif.entity_id) {
-        await callHAService('alert', 'acknowledge', { entity_id: notif.entity_id }).catch(() => { });
+        await callHAService('alert', 'acknowledge', { entity_id: notif.entity_id }).catch(() => {});
       }
     }
-
     useAutoLayoutStore.setState({ nativeRepairs: [], nativeNotifications: [] });
-    await useAlertStore.getState().clearAllAlerts().catch(() => { });
+    await useAlertStore.getState().clearAllAlerts().catch(() => {});
     clearAllNotifications(dismissableIds);
   };
 
-  // Batch Install All Updates
-  const [isUpdatingAll, setIsUpdatingAll] = useState(false);
   const handleUpdateAll = async () => {
     setIsUpdatingAll(true);
-    const updateItems = allNotifications.filter(n => n.category === 'update');
+    const updateItems = itemsRef.current.filter((n) => n.category === 'update');
     try {
       for (const item of updateItems) {
-        if (item.entity_id) {
-          if (installUpdate) {
-            installUpdate(item.entity_id);
-          } else {
-            await callHAService('update', 'install', {}, { entity_id: item.entity_id }).catch(() => { });
-          }
-          if (updateEntityState) {
-            updateEntityState(item.entity_id, 'installing');
-          }
-          dismissNotification(item.id);
+        if (!item.entity_id) continue;
+        if (installUpdate) {
+          installUpdate(item.entity_id);
+        } else {
+          await callHAService('update', 'install', {}, { entity_id: item.entity_id }).catch(() => {});
         }
+        if (updateEntityState) updateEntityState(item.entity_id, 'installing');
+        dismissNotification(item.id);
       }
     } finally {
       setTimeout(() => setIsUpdatingAll(false), 800);
     }
   };
 
-  // Manual Refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -195,452 +407,115 @@ export default function NotificationDrawer({
     }
   };
 
-  // Safe Action Runner with Loading State
-  const runAction = async (actionId: string, fn: () => Promise<void> | void) => {
-    setActionLoadingIds(prev => ({ ...prev, [actionId]: true }));
-    try {
-      await fn();
-    } finally {
-      setActionLoadingIds(prev => ({ ...prev, [actionId]: false }));
-    }
-  };
+  const total = allNotifications.length;
+  const chip = cn(
+    glass.field,
+    'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 text-slate-700 dark:text-slate-200'
+  );
 
-  // Category Icon & Color Resolver
-  const getCategoryVisuals = (item: HANotificationItem) => {
-    switch (item.category) {
-      case 'update':
-        return {
-          icon: <DownloadSimple size={16} weight="duotone" className="text-sky-500" />,
-          badgeBg: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30',
-          label: 'Update'
-        };
-      case 'repair':
-        return {
-          icon: <Warning size={16} weight="duotone" className="text-amber-500" />,
-          badgeBg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-          label: 'Repair'
-        };
-      case 'hazard':
-        if (item.sensorType === 'leak') {
-          return {
-            icon: <Drop size={16} weight="duotone" className="text-rose-500 animate-pulse" />,
-            badgeBg: 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/40',
-            label: 'Leak'
-          };
-        }
-        return {
-          icon: <Flame size={16} weight="duotone" className="text-rose-500 animate-pulse" />,
-          badgeBg: 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/40',
-          label: 'Hazard'
-        };
-      case 'restart':
-        return {
-          icon: <ArrowsClockwise size={16} weight="bold" className="text-amber-500 dark:text-amber-400" />,
-          badgeBg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-          label: 'Restart'
-        };
-      case 'battery':
-        return {
-          icon: <BatteryLow size={16} weight="duotone" className="text-amber-500" />,
-          badgeBg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-          label: 'Battery'
-        };
-      case 'alert':
-        return {
-          icon: <Warning size={16} weight="duotone" className="text-amber-500" />,
-          badgeBg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-          label: 'Alert'
-        };
-      case 'security':
-        return {
-          icon: <ShieldWarning size={16} weight="duotone" className="text-indigo-500" />,
-          badgeBg: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30',
-          label: 'Security'
-        };
-      case 'appliance':
-        return {
-          icon: <Sparkle size={16} weight="duotone" className="text-emerald-500" />,
-          badgeBg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
-          label: 'Appliance'
-        };
-      case 'persistent_notification':
-      default:
-        return {
-          icon: <Info size={16} weight="duotone" className="text-indigo-500" />,
-          badgeBg: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30',
-          label: 'Message'
-        };
-    }
-  };
+  const toolbar = (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {pendingUpdateCount > 0 && (
+          <button
+            type="button"
+            onClick={handleUpdateAll}
+            disabled={isUpdatingAll}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+            title="Install all updates"
+          >
+            <DownloadSimple size={13} weight="bold" />
+            <span>{isUpdatingAll ? 'Updating...' : `Update all (${pendingUpdateCount})`}</span>
+          </button>
+        )}
+        {skippedUpdates.length > 0 && (
+          <button
+            type="button"
+            onClick={handleDismissSkippedUpdates}
+            className={cn(chip, 'hover:text-amber-600 dark:hover:text-amber-300')}
+            title="Clean all skipped updates from notifications"
+          >
+            <Broom size={13} weight="bold" />
+            <span>Clean skipped ({skippedUpdates.length})</span>
+          </button>
+        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className={cn(chip, 'px-2 hover:text-sky-600 dark:hover:text-sky-300')}
+            aria-label="Refresh states and notifications"
+            title="Refresh states and notifications"
+          >
+            <ArrowsClockwise size={14} className={isRefreshing ? 'animate-spin text-sky-500' : ''} />
+          </button>
+          {total > 0 && (
+            <button
+              type="button"
+              onClick={handleDismissAll}
+              className={cn(chip, 'hover:text-rose-600 dark:hover:text-rose-400')}
+              title="Dismiss all notifications"
+            >
+              <Trash size={13} />
+              <span>Clear all</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {(total > 4 || searchQuery.length > 0) && (
+        <div className="relative w-full">
+          <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search notifications..."
+            aria-label="Search notifications"
+            className={cn(
+              glass.field,
+              'w-full pl-8 pr-8 py-1.5 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-sky-500/40'
+            )}
+          />
+          {searchQuery && (
+            <button
+              aria-label="Clear search"
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <DetailsRightDrawer
       isOpen={isOpen}
       onClose={onClose}
       title="Notifications"
-      subtitle={`${counts.all} active item${counts.all === 1 ? '' : 's'}`}
+      subtitle={`${total} active item${total === 1 ? '' : 's'}`}
       icon={<Bell size={20} weight="duotone" className="text-sky-400" />}
       darkMode={darkMode}
     >
-      <div className="space-y-3.5 pb-24 sm:pb-6">
-
-        {/* Streamlined Controls Bar: Dynamic Filter Tabs + Quick Actions */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          {/* Filter Pills with Counts */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 touch-scroll-container">
-            {[
-              { id: 'all', label: 'All', count: counts.all, color: '#0284c7' },
-              { id: 'updates', label: 'Updates', count: counts.updates, color: '#8b5cf6' },
-              { id: 'alerts', label: 'Alerts', count: counts.alerts, color: '#f43f5e' },
-              ...(counts.restarts > 0 ? [{ id: 'restarts', label: 'Restarts', count: counts.restarts, color: '#f59e0b' }] : []),
-              ...(counts.repairs > 0 ? [{ id: 'repairs', label: 'Issues', count: counts.repairs, color: '#ef4444' }] : []),
-              ...(counts.notifications > 0 ? [{ id: 'notifications', label: 'Messages', count: counts.notifications, color: '#06b6d4' }] : [])
-            ].map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as TabType)}
-                  style={isActive ? { backgroundColor: tab.color, boxShadow: `0 3px 12px ${tab.color}40` } : undefined}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${isActive
-                      ? 'text-white shadow-xs'
-                      : darkMode
-                        ? 'bg-white/[0.05] hover:bg-white/[0.09] text-slate-400 hover:text-white'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                    }`}
-                >
-                  <span>{tab.label}</span>
-                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? 'bg-white/20 text-white' : darkMode ? 'bg-white/10 text-slate-300' : 'bg-slate-200 text-slate-700'
-                    }`}>
-                    {tab.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Quick Actions (Clean Skipped, Update All, Refresh, Clear All) */}
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-            {skippedUpdates.length > 0 && (
-              <button
-                type="button"
-                onClick={handleDismissSkippedUpdates}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95 ${darkMode
-                    ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30'
-                    : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
-                  }`}
-                title="Clean all skipped updates from notifications"
-              >
-                <Broom size={13} weight="bold" />
-                <span>Clean Skipped ({skippedUpdates.length})</span>
-              </button>
-            )}
-
-            {counts.updates > 0 && (
-              <button
-                type="button"
-                onClick={handleUpdateAll}
-                disabled={isUpdatingAll}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
-                title="Install all updates"
-              >
-                <DownloadSimple size={13} weight="bold" className={isUpdatingAll ? 'animate-bounce' : ''} />
-                <span>{isUpdatingAll ? 'Updating...' : `Update (${counts.updates})`}</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className={`p-1.5 rounded-xl border transition-all cursor-pointer ${darkMode
-                  ? 'bg-white/[0.05] hover:bg-white/[0.09] text-slate-400 hover:text-white border-transparent'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200/80'
-                }`}
-              title="Refresh States & Notifications"
-            >
-              <ArrowsClockwise size={15} className={isRefreshing ? 'animate-spin text-sky-400' : ''} />
-            </button>
-
-            {counts.all > 0 && (
-              <button
-                type="button"
-                onClick={handleDismissAll}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${darkMode
-                    ? 'bg-white/[0.05] hover:bg-white/[0.09] text-slate-400 hover:text-rose-400 border-transparent'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-rose-600 border-slate-200/80'
-                  }`}
-                title="Dismiss all notifications"
-              >
-                <Trash size={13} />
-                <span>Clear All</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Compact Search Bar (Shown if more than 2 items or search active) */}
-        {(counts.all > 2 || searchQuery.length > 0) && (
-          <div className="relative w-full">
-            <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search notifications..."
-              className={`w-full pl-8.5 pr-8 py-1.5 rounded-xl text-xs transition-all focus:outline-hidden ${darkMode
-                  ? 'bg-white/[0.04] text-white placeholder-slate-500 focus:bg-white/[0.07]'
-                  : 'bg-slate-100 text-slate-900 placeholder-slate-400 focus:bg-slate-200/70'
-                }`}
-            />
-            {searchQuery && (
-              <button aria-label="Close"
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Notifications List (Clean, Borderless Grouped Items) */}
-        <div className="space-y-2.5">
-          {filteredNotifications.length === 0 ? (
-            /* Empty State */
-            <div className={`p-8 rounded-2xl text-center flex flex-col items-center justify-center gap-3 ${darkMode ? 'bg-white/[0.02]' : 'bg-slate-50'
-              }`}>
-              <div className="w-13 h-13 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shadow-xs">
-                <CheckCircle size={30} weight="duotone" />
-              </div>
-              <div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                  All Systems Clear
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto mt-1">
-                  {searchQuery
-                    ? 'No notifications matching your search filter.'
-                    : activeTab === 'updates'
-                      ? 'All software and integrations are fully up to date.'
-                      : activeTab === 'alerts'
-                        ? 'No active hazard, security, or system alerts.'
-                        : activeTab === 'all'
-                          ? 'No active updates, alerts, or notifications. Your home assistant is fully up-to-date and running smoothly.'
-                          : `No items found under ${activeTab}.`}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <AnimatedList delay={50} animateLayout={false} className="w-full gap-2">
-              {filteredNotifications.map((item) => {
-                const visuals = getCategoryVisuals(item);
-                const isProgress = item.inProgress;
-
-                // Split actions into primary (header action) and secondary (footer actions)
-                const primaryAction = item.actions?.find(a =>
-                  a.variant === 'primary' ||
-                  a.id === 'install' ||
-                  a.id.startsWith('restart_') ||
-                  a.id.startsWith('ack_') ||
-                  a.id === 'unskip'
-                );
-                // Exclude release_notes from footer buttons since it is handled by the expandable changelog
-                const secondaryActions = (item.actions || []).filter(a => a !== primaryAction && a.id !== 'release_notes');
-
-                const subtitle = item.source
-                  ? `${formatTimeAgo(item.createdAt)} by ${item.source}`
-                  : item.createdAt
-                    ? formatTimeAgo(item.createdAt)
-                    : null;
-
-                const renderActionButton = (act: HANotificationAction, isPrimaryInHeader: boolean) => {
-                  const isLoading = actionLoadingIds[act.id];
-                  const isUnskip = act.id === 'unskip';
-                  const isRestartAction = act.id.startsWith('restart_');
-                  const isPrimary = act.variant === 'primary' || act.id === 'install' || isRestartAction || act.id.startsWith('ack_');
-                  const isDanger = act.variant === 'danger';
-
-                  return (
-                    <button
-                      key={act.id}
-                      type="button"
-                      disabled={isLoading || isProgress}
-                      onClick={() => runAction(act.id, act.onClick)}
-                      className={`flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${isPrimaryInHeader
-                          ? isRestartAction
-                            ? 'px-2 py-0.5 rounded-md text-[11px] font-black bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xs active:scale-95'
-                            : isUnskip
-                              ? darkMode
-                                ? 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 shadow-xs active:scale-95'
-                                : 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-100 hover:bg-sky-200 text-sky-900 border border-sky-300 shadow-xs active:scale-95'
-                              : isPrimary
-                                ? 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-500 hover:bg-sky-400 text-white shadow-xs active:scale-95'
-                                : darkMode
-                                  ? 'px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10 active:scale-95'
-                                  : 'px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-200 hover:bg-slate-300 text-slate-800 border border-slate-300 active:scale-95'
-                          : isDanger
-                            ? darkMode
-                              ? 'px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 active:scale-95'
-                              : 'px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 active:scale-95'
-                            : darkMode
-                              ? 'px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 active:scale-95'
-                              : 'px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 active:scale-95'
-                        }`}
-                    >
-                      {isLoading ? (
-                        <ArrowsClockwise size={11} className="animate-spin" />
-                      ) : isRestartAction ? (
-                        <ArrowsClockwise size={11} weight="bold" />
-                      ) : act.id === 'install' ? (
-                        <DownloadSimple size={11} weight="bold" />
-                      ) : act.id === 'skip' ? (
-                        <SkipForward size={11} weight="bold" />
-                      ) : isUnskip ? (
-                        <ArrowUUpLeft size={11} weight="bold" />
-                      ) : act.id.startsWith('ack_') ? (
-                        <Check size={11} weight="bold" />
-                      ) : act.id === 'release_notes' || act.id === 'learn_more' ? (
-                        <ArrowSquareOut size={11} weight="bold" />
-                      ) : null}
-                      <span>{act.label}</span>
-                    </button>
-                  );
-                };
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`p-3 rounded-2xl transition-all duration-200 flex flex-col justify-between gap-2 group ${darkMode
-                        ? 'bg-white/[0.03] hover:bg-white/[0.055] text-white border border-white/[0.04]'
-                        : 'bg-white hover:bg-slate-50/90 text-slate-900 border border-slate-200 shadow-xs'
-                      }`}
-                  >
-                    {/* Row 1: Integration Icon (No Padding) + Title & Subtitle + Primary Action + Dismiss */}
-                    <div className="flex items-start justify-between gap-2.5">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {/* Integration Brand Icon with Zero Padding */}
-                        <IntegrationIcon
-                          domain={item.domain}
-                          entityPicture={item.image}
-                          title={item.title}
-                          category={item.category}
-                          serverUrl={serverUrl}
-                          fallbackIcon={visuals.icon}
-                          size="md"
-                        />
-
-                        <div className="min-w-0 flex-1 space-y-0.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h4 className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-white truncate">
-                              {item.title}
-                            </h4>
-
-                            <span className={`text-[11px] font-bold uppercase px-1.5 py-0.2 rounded shrink-0 ${visuals.badgeBg.replace(/border[^\s]*/g, '')}`}>
-                              {visuals.label}
-                            </span>
-
-                            {item.areaName && (
-                              <span className="flex items-center gap-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
-                                <HouseLine size={10} />
-                                {item.areaName}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Subtitle: "23 minutes ago by HACS" (like Home Assistant) */}
-                          {subtitle && (
-                            <div className="text-[11px] font-medium text-slate-400 dark:text-slate-400">
-                              {subtitle}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Right: Primary Action + Dismiss Button */}
-                      <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                        {primaryAction && renderActionButton(primaryAction, true)}
-
-                        {item.dismissable && item.onDismiss && (
-                          <button
-                            type="button"
-                            onClick={() => item.onDismiss && item.onDismiss()}
-                            className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-md hover:bg-slate-200/70 dark:hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-                            title="Dismiss notification"
-                          >
-                            <X size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Row 2: Details / Message / Versions / Expandable Changelog + Secondary Actions */}
-                    <div className="pl-12 sm:pl-13.5 space-y-2 text-[11px]">
-                      {/* Software Update Version Badge */}
-                      {item.category === 'update' && (
-                        <div className="flex items-center gap-1.5 flex-wrap font-semibold">
-                          <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/5 font-mono text-[11px] text-slate-700 dark:text-slate-300">
-                            <span>{item.installedVersion || 'Current'}</span>
-                            <span className="text-slate-400">➔</span>
-                            <span className="font-bold text-sky-700 dark:text-sky-400">{item.latestVersion || 'New'}</span>
-                          </div>
-
-                          {item.skippedVersion && (
-                            <span className="text-[11px] font-bold px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-300/80 dark:border-amber-500/20">
-                              Skipped
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Message / Description Body */}
-                      {item.message ? (
-                        <div className="pt-0.5">
-                          <NotificationRichContent
-                            content={item.message}
-                            imageUrl={item.image}
-                            darkMode={darkMode}
-                            compact={true}
-                          />
-                        </div>
-                      ) : null}
-
-                      {/* Expandable Release Notes & Changelog Section */}
-                      <NotificationChangelog item={item} darkMode={darkMode} />
-
-                      {/* In Progress Visual Bar */}
-                      {isProgress && (
-                        <div className="space-y-1 pt-1">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-sky-500">
-                            <span className="flex items-center gap-1">
-                              <ArrowsClockwise size={11} className="animate-spin" />
-                              Installing update...
-                            </span>
-                            <span>{item.updatePercentage ? `${item.updatePercentage}%` : 'In Progress'}</span>
-                          </div>
-                          <div className="w-full h-1 rounded-full bg-sky-500/20 overflow-hidden">
-                            <div
-                              className="h-full bg-sky-500 rounded-full animate-pulse transition-all duration-300"
-                              style={{ width: item.updatePercentage ? `${item.updatePercentage}%` : '70%' }}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Secondary Actions (Skip, etc.) */}
-                      {secondaryActions.length > 0 && (
-                        <div className="flex items-center gap-1.5 pt-0.5">
-                          {secondaryActions.map(act => renderActionButton(act, false))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </AnimatedList>
-          )}
-        </div>
-
+      <div className="pb-24 sm:pb-6">
+        <NotificationCenter
+          title="Activity"
+          notifications={cards}
+          tabs={INBOX_TABS}
+          tab={activeTab}
+          onTabChange={(t) => setActiveTab(t as InboxTab)}
+          onAction={handleAction}
+          onDismiss={handleDismiss}
+          onMarkAllRead={handleMarkAllRead}
+          pendingActions={pendingActions}
+          toolbar={toolbar}
+          scrollable={false}
+          emptyMessage={searchQuery ? 'No notifications match your search.' : "You're all caught up."}
+        />
       </div>
     </DetailsRightDrawer>
   );
