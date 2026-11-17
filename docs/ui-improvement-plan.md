@@ -2,9 +2,12 @@
 
 Based on [ui-inventory.md](ui-inventory.md). Branch `perf/notification-center`, 2026-11-17.
 
-## Goal and the reading I took
+## Goal and decisions from your answers
 
-You asked to "use more native UI components". I read that as: **replace hand-rolled controls with accessible, platform-native-feeling components**, meaning real HTML elements (`<dialog>`, `<input type="range">`, popover) where they are enough, and `react-aria-components` where they are not. Keep the frosted-glass look. If you meant something else (for example OS-native chrome in a wrapper app), tell me and Phase 1 changes.
+- **"Native" means** a real component library, copied in so we own the source: **BoardUI** supplies the base primitives (Button, IconButton, Select, Segmented Control, Tabs, Slider, Drawer, Modal, Input and so on). It is plain React + Tailwind 4 on react-aria, MIT free tier (74 components; Pro is paid and not needed). Docs: boardui.com/getting-started.
+- **KokonutUI** (animated accents) and **Bklit** (charts) stay as shadcn registries already in `components.json`. **HeroUI** is not adopted: it duplicates BoardUI and would give two token systems.
+- **A visual refresh is in scope.** Phase 0 baselines get re-approved deliberately per surface, not kept pixel-identical.
+- **Mobile phone is the priority device.** Touch targets, mobile nav and sheets/drawers come first in Phases 1, 3 and 5.
 
 ## What the inventory says is wrong
 
@@ -24,11 +27,11 @@ Strengths to keep: the `glass.*` surface roles, `PAGE_THEMES`, `--chart-*` token
 
 ## Decisions I am making (redirect any of them)
 
-1. **Foundation = `react-aria-components`**, already used by 11 files and the whole `base/` folder. Remove the unused `@base-ui/react` dependency instead of adopting two libraries.
+1. **Foundation = BoardUI**, copied into `src/components/base/` (react-aria underneath, so the existing base/ files keep working). Remove the unused `@base-ui/react` dependency.
 2. **One icon set: Phosphor.** Replace the 5 `@untitledui/icons` files.
 3. **Theme via the Tailwind `dark:` variant plus one theme context.** Delete the `darkMode` prop.
 4. **Migrate by surface, not by file**, behind guards that stop new raw buttons.
-5. **Look stays.** This is a structure and behavior refactor, not a visual redesign, until Phase 5.
+5. **Visual refresh allowed**, one surface at a time, with baselines re-approved in review.
 
 ---
 
@@ -129,8 +132,6 @@ Total about 8 to 10 weeks for one person, less with parallel work. Phases 1+2 ca
 - **Auth and camera code is security-sensitive** per `CLAUDE.md`: UI migrations there touch `AuthModal`, camera stream and PIN keypad, so run `npm run build && npm run test:integration` on those PRs.
 - **Unmeasured:** this plan is from static analysis. No performance or real-device touch testing yet.
 
-## Open questions for you
+## Open questions (answered)
 
-1. Is "native" what I assumed (accessible primitives, real HTML elements), or do you want a different component library?
-2. Is a visual refresh in scope, or keep today's glass look?
-3. Is mobile or wall-tablet the priority device? It changes how much of Phase 5 comes first.
+1. "Native": a copied-in component library, BoardUI as base. 2. Visual refresh: in scope. 3. Priority device: mobile phone.
