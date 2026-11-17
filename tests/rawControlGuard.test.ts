@@ -8,7 +8,7 @@ import path from 'node:path';
 // Each count may only go down. When you replace raw controls with the shared primitives,
 // lower the matching BASELINE value. Never raise one: use the primitive instead.
 const BASELINE = {
-  button: 587,
+  button: 586,
   input: 47,
   select: 2,
   roleButton: 37,
