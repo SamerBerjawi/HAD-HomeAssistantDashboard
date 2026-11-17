@@ -15,7 +15,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "node scripts/run-integration-tests.cjs"
+    "test:integration": "node scripts/run-integration-tests.cjs",
+    "test:e2e": "playwright test --project=desktop --project=mobile",
+    "test:visual": "playwright test --project=visual-desktop-light --project=visual-desktop-dark --project=visual-mobile-light --project=visual-mobile-dark",
+    "test:visual:update": "playwright test --project=visual-desktop-light --project=visual-desktop-dark --project=visual-mobile-light --project=visual-mobile-dark --update-snapshots"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
