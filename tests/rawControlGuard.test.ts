@@ -10,7 +10,7 @@ import path from 'node:path';
 const BASELINE = {
   button: 576,
   input: 47,
-  select: 2,
+  select: 0,
   roleButton: 37,
 };
 

@@ -23,9 +23,7 @@ import {
   Bell
 } from '@phosphor-icons/react';
 import { AnimatedThemeToggler } from './ui/animated-theme-toggler';
-import { IconButton } from '@/components/base/buttons/icon-button';
-import { Button } from '@/components/base/buttons/button';
-import { Drawer, DrawerBody, DrawerHeader } from '@/components/base/drawer/drawer';
+import { Button, Drawer } from '@heroui/react';
 import { useAutoLayoutStore } from '../store/useAutoLayoutStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useHANotificationSummary } from '../hooks/useHANotifications';
@@ -186,14 +184,16 @@ export default function Sidebar({
           </button>
 
           {/* Collapse Toggle Button */}
-          <IconButton
-            size="small"
-            icon={CaretLeft}
+          <Button
+            isIconOnly
+            size="sm"
+            variant="ghost"
             aria-label="Collapse Sidebar"
-            title="Collapse Sidebar"
-            onClick={() => setIsCollapsed(true)}
+            onPress={() => setIsCollapsed(true)}
             className={isCollapsed ? 'hidden' : ''}
-          />
+          >
+            <CaretLeft size={16} weight="bold" />
+          </Button>
         </div>
         
         {/* Navigation Items List */}
@@ -353,28 +353,29 @@ export default function Sidebar({
 
           {/* Expand Button at bottom if collapsed */}
           {isCollapsed && (
-            <IconButton
-              size="small"
-              icon={CaretRight}
+            <Button
+              isIconOnly
+              size="sm"
+              variant="ghost"
               aria-label="Expand Sidebar"
-              title="Expand Sidebar"
-              onClick={() => setIsCollapsed(false)}
+              onPress={() => setIsCollapsed(false)}
               className="mx-auto"
-            />
+            >
+              <CaretRight size={16} weight="bold" />
+            </Button>
           )}
         </div>
       </nav>
 
       {/* MORE MENU BOTTOM SHEET */}
-      <Drawer
-        placement="bottom"
-        aria-label="Navigation Hub"
-        isOpen={showMoreMenu}
-        onOpenChange={setShowMoreMenu}
-        overlayClassName="md:hidden"
-      >
-        <DrawerHeader title="Navigation Hub" />
-        <DrawerBody>
+      <Drawer.Backdrop isOpen={showMoreMenu} onOpenChange={setShowMoreMenu} className="md:hidden">
+        <Drawer.Content placement="bottom">
+        <Drawer.Dialog aria-label="Navigation Hub">
+        <Drawer.Handle />
+        <Drawer.Header>
+          <Drawer.Heading>Navigation Hub</Drawer.Heading>
+        </Drawer.Header>
+        <Drawer.Body>
           {/* Secondary Navigation Grid */}
           <div className="grid grid-cols-2 gap-2.5 mb-3.5">
             {secondaryItems.map(item => {
@@ -453,8 +454,10 @@ export default function Sidebar({
               }`}
             />
           </div>
-        </DrawerBody>
-      </Drawer>
+        </Drawer.Body>
+        </Drawer.Dialog>
+        </Drawer.Content>
+      </Drawer.Backdrop>
 
       {/* MOBILE BOTTOM NAVIGATION */}
       <nav 

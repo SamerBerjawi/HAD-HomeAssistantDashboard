@@ -19,6 +19,7 @@ import {
   CalendarBlank,
   Sparkle
 } from '@phosphor-icons/react';
+import { Label, ListBox, Select } from '@heroui/react';
 import { useAuth } from '../../contexts/AuthContext';
 import { deriveAuthStatus } from '../../services/authStatus';
 import { useUserConfig } from '../../contexts/ConfigContext';
@@ -191,18 +192,33 @@ export default function UserProfileSection({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 px-0.5">
-              Access Role
-            </label>
-            <select
+            <Select
+              fullWidth
               value={profileData.role}
-              onChange={(e) => setProfileData({ ...profileData, role: e.target.value as UserProfileData['role'] })}
-              className={cn(glass.field, 'w-full h-10 px-3 rounded-xl text-slate-900 dark:text-white text-xs font-semibold focus:outline-hidden focus:border-sky-500 shadow-xs')}
+              onChange={(key) => setProfileData({ ...profileData, role: String(key) as UserProfileData['role'] })}
             >
-              <option value="Administrator">Administrator (Full Control)</option>
-              <option value="Resident">Resident (Standard Controls)</option>
-              <option value="Kiosk Operator">Kiosk Operator (Wall Display)</option>
-            </select>
+              <Label>Access Role</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                <ListBox.Item id="Administrator" textValue="Administrator (Full Control)">
+                  Administrator (Full Control)
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+                <ListBox.Item id="Resident" textValue="Resident (Standard Controls)">
+                  Resident (Standard Controls)
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+                <ListBox.Item id="Kiosk Operator" textValue="Kiosk Operator (Wall Display)">
+                  Kiosk Operator (Wall Display)
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </div>
 
           <div className="space-y-1">

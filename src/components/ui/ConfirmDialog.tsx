@@ -2,13 +2,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * One confirmation dialog for the app (UI-012), built on the BoardUI Modal
+ * One confirmation dialog for the app (UI-012), built on the HeroUI Modal
  * (react-aria: focus trap, focus restore, Escape and aria wiring).
  */
 
 import React, { useState } from 'react';
-import { Modal, ModalBody, ModalFooter, ModalHeader } from '@/components/base/modal/modal';
-import { Button } from '@/components/base/buttons/button';
+import { Button, Modal } from '@heroui/react';
+import { WarningCircle } from '@phosphor-icons/react';
 
 export type ConfirmTone = 'cyan' | 'emerald' | 'amber' | 'rose' | 'indigo' | 'slate';
 
@@ -65,46 +65,48 @@ export default function ConfirmDialog({
     }
   };
 
+  const danger = tone === 'rose';
+
   return (
-    <Modal
+    <Modal.Backdrop
       isOpen={open}
       onOpenChange={(next) => { if (!next && !disabled) onClose(); }}
       isDismissable={!disabled}
       isKeyboardDismissDisabled={disabled}
-      size="sm"
-      aria-label={title}
     >
-      <ModalHeader
-        title={title}
-        description={description}
-        tone={tone === 'rose' ? 'danger' : 'default'}
-        showCloseButton={false}
-      >
-        {subtitle && (
-          <p className="mt-1 max-w-full truncate font-mono text-caption-1-semibold text-text-tertiary">{subtitle}</p>
-        )}
-      </ModalHeader>
-      {(icon || children) && (
-        <ModalBody>
-          {icon && <div className="mb-3 flex items-center">{icon}</div>}
-          {children}
-        </ModalBody>
-      )}
-      <ModalFooter>
-        <Button variant="secondary" autoFocus disabled={disabled} onClick={onClose}>
-          {cancelLabel}
-        </Button>
-        <Button
-          variant={tone === 'rose' ? 'danger' : 'primary'}
-          disabled={disabled}
-          onClick={handleConfirm}
-        >
-          <span className="inline-flex items-center gap-1.5">
-            {!disabled && confirmIcon}
-            {disabled ? 'Working…' : confirmLabel}
-          </span>
-        </Button>
-      </ModalFooter>
-    </Modal>
+      <Modal.Container size="xs">
+        <Modal.Dialog aria-label={title}>
+          <Modal.Header>
+            {danger && (
+              <Modal.Icon className="bg-danger-soft text-danger">
+                <WarningCircle size={20} weight="fill" />
+              </Modal.Icon>
+            )}
+            <Modal.Heading>{title}</Modal.Heading>
+            {subtitle && (
+              <p className="max-w-full truncate font-mono text-xs font-semibold text-muted">{subtitle}</p>
+            )}
+            {description && <div className="text-sm text-muted">{description}</div>}
+          </Modal.Header>
+          {(icon || children) && (
+            <Modal.Body>
+              {icon && <div className="mb-3 flex items-center">{icon}</div>}
+              {children}
+            </Modal.Body>
+          )}
+          <Modal.Footer>
+            <Button variant="secondary" autoFocus isDisabled={disabled} onPress={onClose}>
+              {cancelLabel}
+            </Button>
+            <Button variant={danger ? 'danger' : 'primary'} isDisabled={disabled} onPress={handleConfirm}>
+              <span className="inline-flex items-center gap-1.5">
+                {!disabled && confirmIcon}
+                {disabled ? 'Working…' : confirmLabel}
+              </span>
+            </Button>
+          </Modal.Footer>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   );
 }

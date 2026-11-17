@@ -26,6 +26,7 @@ import { useUserConfig } from '../../contexts/ConfigContext';
 import { CameraSourceConfig } from '../../types/userConfig';
 import { getAuthHeaders } from '../../services/configStorageService';
 import { fetchWithTimeout } from '../../lib/fetchWithTimeout';
+import { Label, ListBox, Select } from '@heroui/react';
 import CameraFeed from '../camera/CameraFeed';
 
 interface CameraSettingsSectionProps {
@@ -279,25 +280,31 @@ export default function CameraSettingsSection({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* HA Entity Dropdown */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-slate-400">
-              Home Assistant Camera Entity
-            </label>
-            <select
-              value={selectedEntityId}
-              onChange={(e) => handleSelectEntity(e.target.value)}
-              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium border transition-colors outline-none ${
-                darkMode
-                  ? 'bg-slate-950 border-white/10 text-white focus:border-cyan-500/50'
-                  : 'bg-white border-slate-200 text-slate-900 focus:border-cyan-500'
-              }`}
+            <Select
+              fullWidth
+              placeholder="-- Choose an entity (or configure custom ID) --"
+              value={selectedEntityId || null}
+              onChange={(key) => handleSelectEntity(key == null ? '' : String(key))}
             >
-              <option value="">-- Choose an entity (or configure custom ID) --</option>
-              {haCameraEntities.map(e => (
-                <option key={e.entity_id} value={e.entity_id}>
-                  {e.attributes?.friendly_name || e.entity_id} ({e.entity_id})
-                </option>
-              ))}
-            </select>
+              <Label>Home Assistant Camera Entity</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {haCameraEntities.map(e => {
+                    const text = `${e.attributes?.friendly_name || e.entity_id} (${e.entity_id})`;
+                    return (
+                      <ListBox.Item key={e.entity_id} id={e.entity_id} textValue={text}>
+                        {text}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    );
+                  })}
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </div>
 
           {/* Display Name */}

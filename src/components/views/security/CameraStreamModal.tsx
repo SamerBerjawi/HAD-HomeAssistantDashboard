@@ -8,7 +8,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
-import { IconButton } from '@/components/base/buttons/icon-button';
+import { Button } from '@heroui/react';
 import { X, VideoCamera, CornersOut, CornersIn } from '@phosphor-icons/react';
 import { ResolvedEntity } from '../../../types';
 import CameraFeed from '../../camera/CameraFeed';
@@ -92,12 +92,18 @@ export default function CameraStreamModal({
             </div>
 
             <div className="flex items-center gap-2">
-              <IconButton
-                icon={isFullscreen ? CornersIn : CornersOut}
+              <Button
+                isIconOnly
+                size="sm"
+                variant="ghost"
                 aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
-                onClick={toggleFullscreen}
-              />
-              <IconButton icon={X} aria-label="Close" onClick={onClose} />
+                onPress={toggleFullscreen}
+              >
+                {isFullscreen ? <CornersIn size={18} /> : <CornersOut size={18} />}
+              </Button>
+              <Button isIconOnly size="sm" variant="ghost" aria-label="Close" onPress={onClose}>
+                <X size={18} />
+              </Button>
             </div>
           </div>
 

@@ -19,11 +19,11 @@ function Harness({ onConfirm = vi.fn() }: { onConfirm?: () => void | Promise<voi
 }
 
 describe('ConfirmDialog (UI-002, UI-012)', () => {
-  it('is a labelled modal dialog and moves focus inside', () => {
+  it('is a labelled modal dialog and moves focus inside', async () => {
     render(<Harness />);
     fireEvent.click(screen.getByText('opener'));
     const dialog = screen.getByRole('dialog', { name: 'Do it?' });
-    expect(dialog.contains(document.activeElement)).toBe(true);
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
   });
 
   it('closes on Escape and returns focus to the opener', async () => {
@@ -31,6 +31,8 @@ describe('ConfirmDialog (UI-002, UI-012)', () => {
     const opener = screen.getByText('opener');
     opener.focus();
     fireEvent.click(opener);
+    const dialog = screen.getByRole('dialog');
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(opener));

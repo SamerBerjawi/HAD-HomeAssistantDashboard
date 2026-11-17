@@ -7,8 +7,7 @@
  * update changelogs, and official documentation links.
  */
 
-import { Drawer } from '@/components/base/drawer/drawer';
-import { IconButton } from '@/components/base/buttons/icon-button';
+import { Button, Drawer } from '@heroui/react';
 import React, { useState, useMemo } from 'react';
 import { 
   X, 
@@ -142,15 +141,10 @@ export default function IntegrationDetailDrawer({
   };
 
   return (
-    <Drawer
-      isOpen={isOpen}
-      onOpenChange={(open) => { if (!open) onClose(); }}
-      placement="end"
-      size="lg"
-      aria-label="Integration details"
-      className="overflow-hidden"
-    >
-      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background-full text-text-primary">
+    <Drawer.Backdrop isOpen={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Drawer.Content placement="right">
+      <Drawer.Dialog aria-label="Integration details" className="w-full max-w-lg overflow-hidden p-0">
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface text-foreground">
         {/* Status Bar Safe-Area Clearance (PWA / Mobile) */}
         <div
           className="w-full shrink-0"
@@ -174,7 +168,9 @@ export default function IntegrationDetailDrawer({
             </div>
           </div>
 
-          <IconButton icon={X} size="small" aria-label="Close integration drawer" onClick={onClose} />
+          <Button isIconOnly size="sm" variant="ghost" aria-label="Close integration drawer" onPress={onClose}>
+            <X size={16} weight="bold" />
+          </Button>
         </div>
 
         {/* Status / Category Quick Bar */}
@@ -489,6 +485,8 @@ export default function IntegrationDetailDrawer({
 
         </div>
       </div>
-    </Drawer>
+      </Drawer.Dialog>
+      </Drawer.Content>
+    </Drawer.Backdrop>
   );
 }
