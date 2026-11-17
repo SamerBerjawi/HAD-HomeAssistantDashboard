@@ -24,11 +24,12 @@ test.describe('A. Auth & session', () => {
     expect(await noHorizontalOverflow(page)).toBe(true);
   });
 
-  test('W2 URL field is prefilled with default HA URL', async ({ page }) => {
+  test('W2 URL field is prefilled with a default or configured HA URL', async ({ page }) => {
     await page.goto('/');
     const input = page.locator('input[type="url"], input[type="text"]').first();
     await input.waitFor({ timeout: 15_000 });
-    await expect(input).toHaveValue(/homeassistant\.local:8123/);
+    // Prefilled with the default, or with the server-configured HA URL (the QA server sets HASS_URL).
+    await expect(input).toHaveValue(/homeassistant\.local:8123|127\.0\.0\.1:9/);
   });
 
   test('W2 OAuth with malformed URL is rejected with a message (QA-A-001)', async ({ page }) => {
