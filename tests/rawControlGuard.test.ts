@@ -8,10 +8,10 @@ import path from 'node:path';
 // Each count may only go down. When you replace raw controls with the shared primitives,
 // lower the matching BASELINE value. Never raise one: use the primitive instead.
 const BASELINE = {
-  button: 595,
+  button: 593,
   input: 47,
   select: 2,
-  roleButton: 38,
+  roleButton: 37,
 };
 
 const PATTERNS: Record<keyof typeof BASELINE, RegExp> = {
