@@ -32,6 +32,35 @@ services:
       retries: 3
       start_period: 10s
 
+  # Second front end with the modern, professional design language. Same image, same data and
+  # config, different UI (UI=pro). Open it on port ${PRO_PORT:-3001}; the classic UI stays on ${PORT:-3000}.
+  homz-dashboard-pro:
+    image: ghcr.io/samerberjawi/had-homeassistantdashboard:latest
+    # build: .
+    container_name: homz-dashboard-pro
+    restart: unless-stopped
+    ports:
+      - "${PRO_PORT:-3001}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - UI=pro
+      - GO2RTC_URL=http://go2rtc:1984
+      - HASS_URL=${HASS_URL:-}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - go2rtc
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   go2rtc:
     image: alexxit/go2rtc:latest
     container_name: go2rtc

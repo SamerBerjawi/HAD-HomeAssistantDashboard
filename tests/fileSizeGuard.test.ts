@@ -16,7 +16,6 @@ const BASELINE: Record<string, number> = {
   'src/hooks/useNetworkData.ts': 861,
   'src/components/modals/entity-controls/SensorHistoryView.tsx': 850,
   'src/components/overview/EnergySparklineCharts.tsx': 840,
-  'src/components/views/mobility/CarEvTab.tsx': 816,
   'src/components/energy/EnergyDistributionCard.tsx': 809,
 };
 

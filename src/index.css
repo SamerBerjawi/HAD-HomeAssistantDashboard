@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Scan all of src/ even when the Vite root is a subfolder (the pro build uses src/pro) */
+@source "./";
 
 @custom-variant dark (&:is(.dark *));
 

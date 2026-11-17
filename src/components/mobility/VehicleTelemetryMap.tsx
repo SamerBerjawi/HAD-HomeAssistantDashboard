@@ -33,9 +33,12 @@ interface VehicleTelemetryMapProps {
 
 function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
+  const [lat, lon] = center;
   useEffect(() => {
-    map.setView(center, zoom);
-  }, [center, zoom, map]);
+    // No animation: an animated view change keeps running after the map unmounts (tab switch)
+    // and throws "_leaflet_pos" from Leaflet's pan animation.
+    map.setView([lat, lon], zoom, { animate: false });
+  }, [lat, lon, zoom, map]);
   return null;
 }
 
