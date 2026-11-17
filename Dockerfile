@@ -8,6 +8,8 @@ ENV PORT=3000
 # Copy production dependencies and pre-built distribution from the runner
 COPY --chown=node:node node_modules ./node_modules
 COPY --chown=node:node dist ./dist
+# Second front end (pro design language), served when the container runs with UI=pro
+COPY --chown=node:node dist-pro ./dist-pro
 COPY --chown=node:node package.json ./
 
 # Prepare persistent data volume folder with proper non-root permissions

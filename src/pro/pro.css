@@ -1,0 +1,49 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@source "../";
+@custom-variant dark (&:is(.dark *));
+
+/* Pro design language: HeroUI defaults (calm neutral canvas, white surfaces, soft shadow, no
+ * borders) with a single accent per page. Loaded after the shared base styles (index.css),
+ * which already import Tailwind and @heroui/styles. */
+.pro {
+  --pro-l: 0.56;
+  --pro-c: 0.2;
+  --pro-h: 254;
+  --accent: oklch(var(--pro-l) var(--pro-c) var(--pro-h));
+  --accent-foreground: oklch(0.99 0 0);
+  --focus: var(--accent);
+  --pro-accent-soft: color-mix(in oklab, var(--accent) 13%, transparent);
+  --pro-accent-soft-fg: color-mix(in oklab, var(--accent) 82%, black);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Plus Jakarta Sans Variable', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.dark .pro {
+  --pro-l: 0.68;
+  --pro-accent-soft: color-mix(in oklab, var(--accent) 22%, transparent);
+  --pro-accent-soft-fg: color-mix(in oklab, var(--accent) 70%, white);
+}
+
+/* One accent per page */
+.pro[data-page='overview'] { --pro-h: 254; --pro-c: 0.2; }
+.pro[data-page='rooms'] { --pro-h: 192; --pro-c: 0.115; }
+.pro[data-page='energy'] {
+  --pro-h: 52;
+  --pro-c: 0.17;
+  --pro-l: 0.72;
+  --accent-foreground: oklch(0.21 0.006 285.89);
+}
+.pro[data-page='security'] { --pro-h: 300; --pro-c: 0.2; }
+
+.pro-surface {
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.dark .pro-surface {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.pro-soft { background: var(--pro-accent-soft); color: var(--pro-accent-soft-fg); }
+.pro-accent { background: var(--accent); color: var(--accent-foreground); }

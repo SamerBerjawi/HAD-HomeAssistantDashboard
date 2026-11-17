@@ -6,11 +6,16 @@ import path from 'path';
 import fs from 'fs';
 import { errorMessage } from './lib/errors';
 
+// UI=pro serves the second front end (HeroUI design language, src/pro) instead of the classic one.
+export const isProUi = () => (process.env.UI || '').toLowerCase() === 'pro';
+
 export async function registerFrontend(app: express.Express) {
+  const pro = isProUi();
   // Vite middleware for development vs static build in production
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
+      ...(pro ? { configFile: path.join(process.cwd(), 'vite.pro.config.ts') } : {}),
       server: {
         middlewareMode: true,
         watch: {
@@ -21,7 +26,7 @@ export async function registerFrontend(app: express.Express) {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), pro ? 'dist-pro' : 'dist');
     const setStaticCacheHeaders = (res: express.Response, filePath: string) => {
       const fileName = path.basename(filePath);
       if (['sw.js', 'registerSW.js', 'manifest.json', 'favicon.svg', 'index.html'].includes(fileName)) {
