@@ -12,6 +12,7 @@
 
 import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { BellSlash, Checks } from '@phosphor-icons/react';
+import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
 import { cn } from '@/lib/utils';
 import { glass } from '@/lib/glass';
 import { groupEntries } from '../../services/notifications/inbox';
@@ -72,7 +73,6 @@ export function NotificationCenter({
   const allTabId = tabs[0]?.id ?? 'all';
   const [uncontrolledTab, setUncontrolledTab] = useState(defaultTab ?? allTabId);
   const activeTab = controlledTab ?? uncontrolledTab;
-  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const selectTab = useCallback(
     (id: string) => {
@@ -108,19 +108,6 @@ export function NotificationCenter({
   const activeIndex = Math.max(0, tabs.findIndex((t) => t.id === activeTab));
   const unreadCount = unreadIds.length;
 
-  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let next = -1;
-    if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
-    else if (e.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = tabs.length - 1;
-    if (next < 0) return;
-    e.preventDefault();
-    selectTab(tabs[next].id);
-    tabRefs.current[next]?.focus();
-  };
-
-  const panelId = `${baseId}-panel`;
   const headingId = `${baseId}-title`;
 
   return (
@@ -152,8 +139,9 @@ export function NotificationCenter({
         )}
       </div>
 
+      <Tabs selectedKey={activeTab} onSelectionChange={(key) => selectTab(String(key))}>
       {/* Segmented tabs: the indicator slides with a transform, no layout measurement */}
-      <div role="tablist" aria-label={`${title} filters`} className={cn(glass.field, 'relative grid p-1 rounded-xl')} style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+      <TabList aria-label={`${title} filters`} className={cn(glass.field, 'relative grid p-1 rounded-xl')} style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
         <span
           aria-hidden="true"
           className="absolute top-1 bottom-1 left-1 rounded-lg bg-white dark:bg-white/[0.12] shadow-sm transition-transform duration-300 ease-out motion-reduce:transition-none"
@@ -162,24 +150,14 @@ export function NotificationCenter({
             transform: `translateX(${activeIndex * 100}%)`
           }}
         />
-        {tabs.map((t, index) => {
+        {tabs.map((t) => {
           const selected = t.id === activeTab;
           const count = counts[t.id]?.total ?? 0;
           const unread = counts[t.id]?.unread ?? 0;
           return (
-            <button
+            <Tab
               key={t.id}
-              ref={(el) => {
-                tabRefs.current[index] = el;
-              }}
-              id={`${baseId}-tab-${t.id}`}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              aria-controls={panelId}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => selectTab(t.id)}
-              onKeyDown={(e) => handleTabKeyDown(e, index)}
+              id={t.id}
               className={cn(
                 'relative z-10 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer',
                 'focus-visible:outline-2 focus-visible:outline-sky-500 focus-visible:outline-offset-1',
@@ -200,18 +178,17 @@ export function NotificationCenter({
               >
                 {count}
               </span>
-            </button>
+            </Tab>
           );
         })}
-      </div>
+      </TabList>
 
       {toolbar}
 
       {/* Timeline */}
-      <div
-        id={panelId}
-        role="tabpanel"
-        aria-labelledby={`${baseId}-tab-${activeTab}`}
+      <TabPanel
+        id={activeTab}
+        shouldForceMount
         className={cn(scrollable && 'max-h-[516px] overflow-y-auto overscroll-contain -mx-1 px-1')}
       >
         {sections.length === 0 ? (
@@ -247,7 +224,8 @@ export function NotificationCenter({
             ))}
           </div>
         )}
-      </div>
+      </TabPanel>
+      </Tabs>
     </section>
   );
 }
