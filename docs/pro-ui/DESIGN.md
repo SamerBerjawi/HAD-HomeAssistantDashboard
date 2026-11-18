@@ -1,6 +1,6 @@
 # HAD Pro UI: design document
 
-Status: living document. Last updated 2026-11-17.
+Status: living document. Last updated 2026-11-18.
 Owner: Samer (product decisions). Builders: any AI agent (Claude Code, Gemini on Antigravity, ...) or human.
 
 This file is the single source of truth for the **pro** front end. Read it fully before you touch
@@ -453,7 +453,8 @@ Append only. One row per decision. Newest at the bottom.
 
 ## 10. Notes for other agents
 
-- Start by reading this file, then `CLAUDE.md` and `docs/AI_RULES.md`.
+- Start by reading this file, then `docs/pro-ui/HANDOFF.md` (current state, reusable pieces,
+  gotchas, next steps), `CLAUDE.md` and `docs/AI_RULES.md`.
 - Check the Decision log and the status line of the component you are asked to work on. If it
   says PENDING DECISION, your job is step 1 and 2 of the working agreement, not building.
 - Record every decision and every deviation here in the same change as the code.

@@ -13,3 +13,5 @@ Short version:
 - Phone first, light and dark, no glass (only exception: the mobile nav pill, React Bits Glass
   Surface).
 - Product name is always "HAD" (long form "Home Assistant Dashboard"). Never write "HOMZ".
+- Status pills are green / orange / red only (fine / needs a look / problem).
+- Current state, reusable pieces, known gotchas and what to build next: `docs/pro-ui/HANDOFF.md`.
