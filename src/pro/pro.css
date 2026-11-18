@@ -47,3 +47,9 @@
 }
 .pro-soft { background: var(--pro-accent-soft); color: var(--pro-accent-soft-fg); }
 .pro-accent { background: var(--accent); color: var(--accent-foreground); }
+
+/* HeroUI InputOTP: the real <input> is invisible and spans all slots; the active slot already shows
+ * the focus ring, so the global UI-006 ring (index.css) would only draw a stray box around it. */
+.pro .input-otp__input:focus-visible {
+  outline: none !important;
+}

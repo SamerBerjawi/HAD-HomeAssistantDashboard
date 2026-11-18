@@ -234,7 +234,7 @@ Shown below `md` (768 px); replaces the placeholder bottom bar in `src/pro/compo
 | Labels | **Icon only**, each with an `aria-label` (the "every element has an icon" rule is met; text lives in the accessible name). |
 | Bar style | **Floating pill**: rounded, inset from the bottom edge above the safe area, content scrolls behind it. |
 | Glass preset | **React Bits "Frost" preset** (demo LOOK values + `displace: 3`, `backgroundOpacity: 0.28`), set as `FROST` in `ProMobileNav.tsx`. The default look let page text show through sharply and hurt readability. |
-| Active tab | **Accent icon + dot**: the icon turns the page accent colour with a small accent dot under it, no background. `aria-current="page"`. |
+| Active tab | **Accent icon + dot**: the icon turns the page accent colour with a small accent dot under it, no background. `aria-current="page"`. **Revised 2026-11-18 (owner):** all icons are pure black (light) / pure white (dark) for contrast on the glass; the current tab is bolder (stroke 2.4 vs 1.5) and keeps the accent dot. Second revision: icons 26 px on phones and 30 px from 640 px (pill 76 px tall, `max-w-md`); in light mode the glass background is 72 % white instead of 28 % so black icons stay readable over photos. Dark mode unchanged. |
 | More | HeroUI **Drawer** (bottom sheet) that **mirrors the sidebar**: the Life and System groups split by dividers, then Settings, connection status chip, theme toggle and the account card with Sign out. Reuses the sidebar's parts (`SidebarNavRow`, `connectionBadge`, account Dropdown) rather than duplicating them. The More button shows the active state when the current page lives in the sheet. |
 
 Implementation notes:
@@ -307,6 +307,67 @@ and header-on-desktop/More-on-phone; no animation, React Bits Blur Text and Spli
 long titles; static description and no subtitle; Frost glass and white compact bar; fixed and no
 overflow menus.
 
+### 7.5 Security page — status: BUILT (2026-11-18)
+
+The owner did not like the first pass's alarm card and status tiles; this replaces them.
+
+| Decision | Choice |
+|---|---|
+| Layout | **Revised 2026-11-18: alarm hero + attention, then cameras + recent activity, then device groups** (owner: cameras above the devices). Originally: alarm hero, then "Needs attention", then device lists, then cameras. Phone: one column in that order. Desktop: hero and attention side by side (about 2:1), lists and cameras full width below. |
+| Status tiles | **Dropped** (owner: the subtitle sentence already gives the counts; agent's call). Counts move into each device card's header ("Doors & windows · 1 open"). |
+| Alarm hero | **State hero + segmented modes.** Large shield tile tinted in the state colour (disarmed neutral, armed success, arming/pending warning, triggered danger), state as the title ("Armed away"), "by <changed_by> · <time ago>" and the panel name below. Modes Off · Home · Away · Night in one HeroUI `ToggleButtonGroup`, icon + label; only the modes the panel supports (`supported_features`). |
+| PIN entry | **Sheet when needed.** Only when HA needs a code (`code_format`, `code_arm_required`): a mode tap opens a HeroUI `Drawer` (phone) / `Modal` (desktop) with HeroUI `InputOTP` and a number pad. No keypad on the page otherwise. |
+| Openings open when arming | **Confirm dialog.** Arming Away or Night with doors/windows open opens a HeroUI `AlertDialog` listing them, Cancel / Arm anyway. HA decides the rest. |
+| Panic button | **None** (owner). Avoids accidental false alarms; triggering stays in HA. |
+| Alarm panel picker | **Added 2026-11-18** (owner: their live alarm didn't show). Cause: the panel (an Aqara hub) is marked hidden in HA, and the page only listed visible panels. Now every non-disabled panel is listed, visible first, and a HeroUI `Select` replaces the panel name in the hero when there are two or more; the choice is remembered per device (`setSelectedAlarmEntityId`). |
+| Needs attention | Open doors/windows, unlocked locks and active hazards, hazards first. **"Lock all"** button when two or more locks are unlocked. When nothing needs attention it shows a calm "All secure" state, so the desktop slot is never empty. **Revised 2026-11-18 (owner):** below 1024 px that state is a slim one-line row (icon, "All secure", short line); the centred card only on desktop. |
+| Devices grouping | **Toggle both**: by type by default (Locks, Doors & windows, Motion, Hazards), HeroUI `ToggleButtonGroup` switch to by room (floor, then area). Problems sort to the top. |
+| Lock control | **Button with press-and-hold to unlock** (owner). Revised 2026-11-18: the button just says "Unlock" (the hold explains itself; the accessible name says "press and hold"), and lock rows have **no state pill**: the tile (green locked, orange unlocked) and the Lock/Unlock button tell the state. Lock is a plain tap; Unlock fills while held (~1.5 s), releasing early cancels. Built on the HeroUI `Button` with react-aria long-press (HeroUI has no hold button). |
+| Recent activity | **Yes**: a card with the latest security events (alarm changes with who, doors/windows, locks, motion, hazards) from the HA logbook. New data fetching. |
+| Status pills | **Revised 2026-11-18 (owner): every status pill is green, orange or red.** Green = fine (closed, clear, dry, locked, armed, live); orange = needs a look (open, motion, unlocked, disarmed, connecting, snapshot only); red = problem (detected, jammed, triggered, offline). Device tiles stay neutral when all is well, and take the orange/red tone otherwise. Applies to the header sentence too (motion and disarmed are orange there). |
+| Device groups | **Magic UI Bento Grid** (MIT, copy-in to `src/pro/ui/magicui/BentoGrid.tsx`), re-skinned: `.pro-surface` cards, Hugeicons, no hover CTA (touch first), no fixed 22rem rows (`auto-rows-min`, `grid-flow-dense`). One bento card per group (by type: Locks, Doors & windows, Motion, Hazards; by room: one per area). **Size from content** (agent's call): 1 column on phone, 2 from 768 px, 4 from 1280 px; a group with 1–3 devices spans 1 column, 4+ spans 2. Empty groups are hidden. **Revised 2026-11-18 (owner: "optimise space"):** masonry packing. Grid rows are 4 px and each card measures itself (ResizeObserver) and spans the rows it needs, with `grid-flow-dense`; groups are placed largest first (`packOrder`), so small cards fill the space beside or under shorter big ones. The fixed 2-row span for 7+ is gone. In the room view this means rooms are ordered by size, not floor (the floor is still in each card's summary). |
+| Rows inside a group card | Agent's call: list rows, icon tile tinted by state, name, area (by type) or device type (by room) as a second line, HeroUI soft `Chip` for the state, the lock button on the right for locks. Problems first. |
+| Camera player | **Revised 2026-11-18: WebRTC into a native `<video>`** (owner; the classic `CameraFeed` was laggy and drew text over the picture). `ProCameraPlayer` + `useWebRtcCamera`: one RTCPeerConnection per player straight to `/api/cameras/:id/webrtc` (go2rtc), no shared pool, no HLS fallback, no overlays; the HA snapshot sits underneath until the first frame, and a camera icon replaces a snapshot HA can't serve. Only the featured camera streams; thumbnails are snapshots. Status pill: Live green, Motion / Connecting / Snapshot orange, Offline red. Rejected: HA's own HLS (5–10 s behind), MJPEG. |
+| Cameras | **Redesigned now: featured camera + strip, captions below** (owner). One large camera (the one with motion, else the first) with a caption row under the video: icon, name, area, status chip (Live / Motion / Offline), snapshot and full-screen icon buttons. Below it a row of thumbnails, each with its name under the picture; tapping one makes it the featured camera. No text over video. Reuses `CameraFeed` (go2rtc plumbing) only; the classic section and modal are not used. |
+| Camera live view | **Revised 2026-11-18 (second pass): full screen that always works.** Order: the browser's element full screen on the camera frame (prefixed for Safari), the system video player on iPhone when live, otherwise a fixed full-window view with an exit button and Escape. If the native request hasn't taken effect within 400 ms (embedded browsers silently ignore it; the owner's tap did nothing) the full-window view opens. The picture is shown whole (`object-contain`) in full screen. First pass: **native full screen** (owner; the modal was a pop-up, not full screen). The full-screen button and a tap on the picture call `requestFullscreen` on the `<video>` (iPhone: `webkitEnterFullscreen`, the system player), or on the snapshot frame when not live. No camera switching while full screen. `CameraLiveModal` removed. |
+| Camera filter | **Area chips only with 5+ cameras in 2+ areas.** |
+| Recent activity layout | **Timeline, last 8** events from the past 24 h; "Show more" expands to at most 50 (a busy sensor logged 2,500+ changes a day in the owner's home). Icon dot tinted by event type, a sentence ("Front door unlocked by Samer"), time ago. Beside the cameras on desktop. |
+
+Implementation notes:
+- Files: `src/pro/pages/ProSecurity.tsx` (layout), `src/pro/components/security/` (`AlarmHero`,
+  `AlarmCodeSheet`, `AttentionCard`, `DeviceGroups`, `DeviceRow` with `StatusChip` and
+  `LockAction`, `HoldToConfirmButton`, `SecurityCameras`, `RecentActivity`),
+  `ProCameraPlayer`, `src/pro/components/ProSheet.tsx` (Drawer on phones, Modal from 768 px), `src/pro/ui/magicui/BentoGrid.tsx`,
+  `src/pro/hooks/useSecurityActivity.ts`, `src/pro/hooks/useWebRtcCamera.ts`, `src/pro/hooks/useMediaQuery.ts`, pure logic in
+  `src/pro/lib/securityLogic.ts` (tested in `tests/securityLogic.test.ts`).
+- Desktop split (hero + attention, cameras + activity) starts at 1024 px (`lg`), 2:1.
+- Bento cards are CSS containers: the chip beside a lock button shows only when the card is at least
+  384 px wide (`@sm`), and the two-column list inside a card only from 576 px (`@xl`). Agent's call
+  after testing: at 4 bento columns inside the 1024 px content width the rows were too cramped.
+- Alarm modes stack icon over label on phones so all four fit; side by side from 640 px.
+- "Arm anyway" ignores presses in the first 400 ms after the dialog opens, so the tap that opened it
+  cannot confirm it by accident (seen in testing).
+- Alarm changes: demo mode writes the new state locally (no HA to echo it); live mode waits for HA.
+- Activity: HA `logbook/get_events` for the past 24 h over the tracked entities, refetched when one of
+  them changes state; user ids are mapped to people via `person` `user_id`. Demo or a failed call
+  falls back to each entity's `last_changed` (the demo has none, so it shows the empty state).
+- Cameras: same source list as before (`getConfiguredRtspCameras`, so only cameras with a configured
+  stream). The pro page no longer uses the classic `CameraFeed` (its `quietIdle` prop was reverted).
+  In development go2rtc is off (HTTP 503), so the featured camera shows "Snapshot".
+- Sensor-only bento cards split into two columns from a 448 px card (`@md`); cards with lock
+  buttons from 576 px (`@xl`).
+- Store fix (shared with classic): `useAutoLayoutStore` read `haWebSocketService.getVersion()` while
+  being created; with live mode cached and the pro entry's import order (haWebSocket -> alertService
+  -> store cycle) that threw and blanked the app. It is now read defensively.
+- `pro.css` hides the global UI-006 focus ring on the invisible InputOTP input only; the active slot
+  shows the focus ring instead.
+- Verified in the browser with demo data at phone (375 px), 800 px and 1360 px, dark and light:
+  arming with openings open (confirm, code sheet, state and subtitle update), hold to unlock (short
+  press ignored), Lock all, by room grouping, camera featured/strip/filter/full screen/next (cameras
+  injected temporarily, since the demo has no configured streams), activity timeline (change times
+  injected temporarily). Not verified: a real HA instance (logbook rows, codes, `supported_features`,
+  live go2rtc streams, snapshot download from a live frame).
+
 ## 8. Page roadmap
 
 | # | Item | Status |
@@ -315,7 +376,7 @@ overflow menus.
 | 2 | Sidebar | Built: `src/pro/components/ProSidebar.tsx` + `src/pro/ui/untitledui/SidebarSectionDividers.tsx` |
 | 3 | Mobile nav bar | Built: `src/pro/components/ProMobileNav.tsx` + `src/pro/ui/reactbits/GlassSurface.tsx` |
 | 4 | Page headers | Built: `src/pro/components/ProPageHeader.tsx` + `pageHeaderContext.ts` + `src/pro/ui/magicui/BlurFade.tsx` |
-| 5 | Security page (pilot, first pass in `ProSecurity.tsx`) | To be revisited on the new shell |
+| 5 | Security page | Built: `src/pro/pages/ProSecurity.tsx` + `src/pro/components/security/` (7.5) |
 | 6 | Overview, Rooms, Energy | Not started |
 | — | Breadcrumbs in the page header | Planned: decide with the first page that has sub-views (7.4) |
 | 7 | Remaining pages | Not started |
@@ -372,6 +433,23 @@ Append only. One row per decision. Newest at the bottom.
 | 2026-11-17 | Page header: title (revised) | Classic long title on tablet/desktop, short nav name on phones | |
 | 2026-11-17 | Page header: Overview title | Time-of-day greeting with the user's first name | As classic |
 | 2026-11-17 | Page header: subtitle (revised) | Rich sentence with inline HeroUI soft chips, all 13 pages | Replaces the one-line status |
+| 2026-11-18 | Security: layout | Alarm hero, attention, device lists, cameras; hero + attention side by side on desktop | |
+| 2026-11-18 | Security: status tiles | Dropped; counts in card headers | Subtitle already has them |
+| 2026-11-18 | Security: alarm hero | State-tinted shield tile + HeroUI ToggleButtonGroup modes | Replaces first-pass card |
+| 2026-11-18 | Security: PIN | HeroUI Drawer/Modal with InputOTP + number pad, only when HA needs a code | |
+| 2026-11-18 | Security: arming with openings open | HeroUI AlertDialog confirm | |
+| 2026-11-18 | Security: panic button | None | Avoid false alarms |
+| 2026-11-18 | Security: devices | By type, toggle to by room | |
+| 2026-11-18 | Security: locks | Tap to lock, press and hold to unlock | |
+| 2026-11-18 | Security: extras | Lock all, Recent activity | |
+| 2026-11-18 | Security: bento grid | Magic UI Bento Grid for device groups, sized by content | Kokonut and React Bits Magic Bento rejected |
+| 2026-11-18 | Security: cameras | Featured camera + thumbnail strip, captions below, full-screen HeroUI Modal, area chips at 5+ cameras | Redesigned, reuses CameraFeed |
+| 2026-11-18 | Security: activity | Timeline, last 8 of 24 h, Show more | |
+| 2026-11-18 | Security: built | Container-query rows, stacked modes on phones, ghost-click guard, CameraFeed `quietIdle` | Agent's calls during the build, listed in 7.5 |
+| 2026-11-18 | Security: revisions | Cameras above devices; WebRTC native player; native full screen; green/orange/red pills; no lock pill; "Unlock" label; hidden alarm panels listed + picker | Owner feedback after first build |
+| 2026-11-18 | Mobile nav: icons | Pure black (light) / white (dark) icons; current tab stroke 2.4 instead of accent colour | Owner; accent dot kept |
+| 2026-11-18 | Security: second revisions | Slim "All secure" below 1024 px; masonry bento packing; full-screen fallbacks | Owner feedback with screenshots |
+| 2026-11-18 | Mobile nav: size and light glass | Icons 26 px (30 px from 640 px), pill 76 px tall and wider from 640 px; light-mode glass 72 % white | Owner: bigger on tablets, better light contrast |
 
 ## 10. Notes for other agents
 

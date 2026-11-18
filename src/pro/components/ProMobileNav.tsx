@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Drawer, Separator } from '@heroui/react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { Menu01Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import GlassSurface from '../ui/reactbits/GlassSurface';
@@ -44,9 +45,11 @@ function TabButton({ label, icon, current, onPress }: { label: string; icon: Ico
       aria-label={label}
       aria-current={current ? 'page' : undefined}
       onPress={onPress}
-      className={cn('relative size-12 rounded-full', current ? 'text-[var(--accent)]' : 'text-foreground/70')}
+      // Owner 2026-11-18: pure black/white icons for contrast on the glass; the current tab is bolder.
+      className="relative size-12 rounded-full text-black sm:size-14 dark:text-white"
     >
-      <HugeiconsIcon icon={icon} size={24} />
+      {/* 26 px on phones, 30 px from 640 px (tablets); owner 2026-11-18. */}
+      <HugeiconsIcon icon={icon} size={26} strokeWidth={current ? 2.4 : 1.6} className="sm:size-[30px]" />
       {current && <span aria-hidden="true" className="absolute bottom-1 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-[var(--accent)]" />}
     </Button>
   );
@@ -58,6 +61,7 @@ function TabButton({ label, icon, current, onPress }: { label: string; icon: Ico
  */
 export default function ProMobileNav({ page, darkMode, onNavigate, onToggleTheme }: ProMobileNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const isTablet = useMediaQuery('(min-width: 640px)');
   const groups = useVisibleNavGroups();
   const [tabGroup, ...sheetGroups] = groups;
   const inSheet = !TAB_IDS.has(page);
@@ -70,7 +74,16 @@ export default function ProMobileNav({ page, darkMode, onNavigate, onToggleTheme
   return (
     <>
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-[max(12px,env(safe-area-inset-bottom))] md:hidden">
-        <GlassSurface width="100%" height={64} borderRadius={32} {...FROST} colorScheme={darkMode ? 'dark' : 'light'} className="max-w-sm">
+        {/* Light mode: a more opaque white so black icons stay readable over photos (owner 2026-11-18). */}
+        <GlassSurface
+          width="100%"
+          height={isTablet ? 76 : 64}
+          borderRadius={isTablet ? 38 : 32}
+          {...FROST}
+          backgroundOpacity={darkMode ? FROST.backgroundOpacity : 0.72}
+          colorScheme={darkMode ? 'dark' : 'light'}
+          className="max-w-sm sm:max-w-md"
+        >
           <div className="flex w-full items-center justify-around">
             {tabGroup?.items.map((item) => (
               <TabButton key={item.id} label={item.label} icon={item.icon} current={item.id === page} onPress={() => go(item.id)} />

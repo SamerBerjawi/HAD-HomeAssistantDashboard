@@ -39,6 +39,19 @@ const stateBatcher = createStateBatcher<HAState>((batch) => {
   scheduleSnapshotSave(useAutoLayoutStore.getState);
 }, STATE_EVENT_WINDOW_MS);
 
+/**
+ * haWebSocket -> alertService -> this store is an import cycle: when haWebSocket is loaded first
+ * (the pro entry does), the store is created while haWebSocketService is still uninitialised.
+ * The version arrives with the connection anyway, so read it defensively here.
+ */
+function cachedHaVersionSafely(): string | null {
+  try {
+    return haWebSocketService.getVersion() || null;
+  } catch {
+    return null;
+  }
+}
+
 export const useAutoLayoutStore = create<AutoLayoutStoreState>((set, get) => ({
   isLiveMode: getCachedLiveMode(),
   serverUrl: getCachedServerUrl(),
@@ -96,7 +109,7 @@ export const useAutoLayoutStore = create<AutoLayoutStoreState>((set, get) => ({
   searchQuery: '',
   entityCustomizations: {},
   authType: 'demo',
-  haCoreVersion: getCachedLiveMode() ? (haWebSocketService.getVersion() || null) : '2026.8.0',
+  haCoreVersion: getCachedLiveMode() ? cachedHaVersionSafely() : '2026.8.0',
   snapshotStatus: hasConfiguredHACredentialsAtLoad() ? 'pending' : 'none',
   showingCachedSnapshot: false,
 

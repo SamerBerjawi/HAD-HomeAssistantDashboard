@@ -223,7 +223,8 @@ function alarmChip(state: string): SentenceChip {
   if (state === 'triggered') return chip(Alert02Icon, label, 'danger');
   if (state.startsWith('armed')) return chip(Shield01Icon, label, 'success');
   if (state === 'arming' || state === 'pending') return chip(Shield01Icon, label, 'warning');
-  return chip(Shield01Icon, label, 'default');
+  // Disarmed (or any other state): orange, the house is not protected.
+  return chip(Shield01Icon, label, 'warning');
 }
 
 export function securitySentence(i: SecurityInput): SentencePart[] {
@@ -240,7 +241,7 @@ export function securitySentence(i: SecurityInput): SentencePart[] {
     clauses.push(openings.length ? [...joinClauses(openings), ' open'] : ['doors and windows are ', chip(CheckmarkCircle02Icon, 'closed', 'success')]);
   }
   if (i.hazards > 0) clauses.push([chip(FireIcon, plural(i.hazards, 'hazard'), 'danger'), ' detected']);
-  if (i.motion > 0) clauses.push(['motion on ', chip(WalkingIcon, plural(i.motion, 'sensor'), 'default')]);
+  if (i.motion > 0) clauses.push(['motion on ', chip(WalkingIcon, plural(i.motion, 'sensor'), 'warning')]);
   if (clauses.length === 0) return finish(['no security devices found in Home Assistant']);
   return finish(joinClauses(clauses));
 }

@@ -26,7 +26,11 @@ export function useSecurityData() {
   );
 
   return useMemo(() => {
-    const alarms = (domainGroups['alarm_control_panel'] || []).filter(isVisible);
+    // Every alarm panel that isn't disabled, hidden ones included: some integrations create their
+    // panel hidden, and the owner's live panel didn't show (2026-11-18). Visible ones come first.
+    const alarms = [...(domainGroups['alarm_control_panel'] || [])]
+      .filter((a) => !a.disabled_by)
+      .sort((a, b) => Number(a.hidden) - Number(b.hidden) || entityName(a).localeCompare(entityName(b)));
     const locks = (domainGroups['lock'] || []).filter(isVisible);
     const cameras = getConfiguredRtspCameras(config.cameras?.sources, domainGroups['camera'] || []);
     const people = [...(domainGroups['person'] || [])].filter(isVisible);
