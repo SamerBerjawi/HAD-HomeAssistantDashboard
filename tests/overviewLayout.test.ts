@@ -90,11 +90,10 @@ describe('overviewLayout', () => {
     expect(layout.sectionOrder).toHaveLength(10);
     expect(layout.collapsed).toEqual(['climate']);
     expect(layout.hidden).toEqual(['fans']);
-    // fans: 'l' not allowed → default 's'; weather was missing → added after it; re-flowed.
-    expect(layout.items.climate).toEqual([
-      { i: 'fans', x: 0, y: 0, size: 's' },
-      { i: 'weather', x: 1, y: 0, size: 'w' }
-    ]);
+    // fans is hidden, so it has no place; weather was missing → added; re-flowed.
+    expect(layout.items.climate).toEqual([{ i: 'weather', x: 0, y: 0, size: 'w' }]);
+    // A stored size a widget doesn't allow falls back to its default.
+    expect(normalizeDeviceLayout({ items: { climate: [{ i: 'fans', x: 5, y: 0, size: 'l' }] } }, WIDGETS, 'desktop').items.climate?.[0]).toEqual({ i: 'fans', x: 0, y: 0, size: 's' });
     expect(layout.items.energy).toEqual([
       { i: 'energy_now', x: 0, y: 0, size: 'l' },
       { i: 'energy_today', x: 2, y: 0, size: 'w' }

@@ -1,6 +1,6 @@
 # Overview rebuild plan
 
-Status: **Phase 1 foundations built** (2026-11-19). Phase 0 approved by the owner: Flow reorder, one "⋯" edit menu, sections side by side on desktop.
+Status: **Phase 2 layout engine built** (2026-11-19). Phase 0 approved by the owner: Flow reorder, one "⋯" edit menu, sections side by side on desktop.
 Scope: `src/pro/` only. The classic UI (`src/components/*`) and its config keys stay untouched.
 
 ## Owner decisions (2026-11-19)
@@ -190,7 +190,65 @@ Findings and proposals:
 
 Open for the owner: Flow or Free (1), the "⋯" edit menu (3), sections side by side on desktop
 (on in the spike).
+Owner decisions on the review (2026-11-19): Flow, the "⋯" menu, sections side by side on desktop.
 
+## Phase 1 results (2026-11-19)
+
+- **Registry** `src/pro/widgets/registry.ts` (`WIDGETS`, `WIDGET_BY_ID`, `WIDGET_LAYOUT_INFO`,
+  `LEGACY_WIDGET_IDS` for the migration) and the contract `src/pro/widgets/types.ts`.
+- **Per-widget data** `widgets/shared/entities.ts` (`useDomainEntities`): the store keeps a
+  domain array's identity while none of its entities change, so a widget re-renders only for its
+  own domain (tested in `tests/widgetRegistry.test.ts`). `widgets/shared/useServiceCall.ts` gives
+  action hooks a stable `call` and an optimistic `setOptimistic`.
+- **Pilot widget: Lights** `widgets/lights/` (model hook, `controls/useControlActions`, fixture,
+  body for Small / Wide / Tall / Large; the sheet is the current control sheet until Phase 3a).
+- **Draft store** `store/useOverviewLayoutDraft.ts` and `hooks/useOverviewLayout.ts`.
+- **Device type** `hooks/useDeviceType.ts`: from width, or pinned per screen (localStorage).
+- **Sheets in the URL** `hooks/useSheetParam.ts` (one shared store, `sheetHref` for links) and
+  `components/overviewNext/WidgetSheetHost.tsx` (lazy sheet from the registry).
+
+## Phase 2 results (2026-11-19)
+
+Try it: dev server, `/overview?next` (dev builds only). Real widgets from the registry (Lights)
+plus dev placeholders (`widgets/devPlaceholders.tsx`) for the ones not ported yet. Unlike the
+spike, **Save writes this device type's layout** to `preferences.proOverviewLayout`; the dev-only
+"Forget saved layouts" button removes them again.
+
+Built (`src/pro/components/overviewNext/`):
+- `OverviewEngine`: sections in the user's order, side by side in view mode, one section for a
+  tab (`onlySection`, used in Phase 4). Every edit goes to the draft.
+- `SectionGrid`: view mode is a plain CSS grid; edit mode is react-grid-layout with a cell
+  background and a spare drop row, the drag handle, and the snapping corner (fine pointers).
+- `flowCompactor`: **our own Flow**. react-grid-layout's `wrapCompactor` overlaps mixed sizes
+  (a 2×1 landed on a 2×2 in a test), so Flow is `flowCells` in `lib/overviewLayout.ts`: reading
+  order, each card in the first free spot after the previous one (CSS grid without `dense`).
+  The dragged card wins a tie, so dropping on a card's spot takes it.
+- `WidgetCard` + `WidgetCardMenu`: the header opens the sheet; in edit mode a drag handle
+  (pointer only), the "⋯" menu (Size with a check, Move earlier / later, Hide) and the title on
+  its own line; the body is `inert` while arranging. The menu is the keyboard and screen-reader
+  path for everything a drag does, which settles Phase 0 finding 2 without a hand-made control.
+- `OverviewSection` (collapse; up/down in edit mode), `EditToolbar` (Customize → Add widgets,
+  Reset, Cancel, Save; Save is off until something changed), `AddWidgetsSheetNext` (registry by
+  section, hidden ones have Add).
+- Pure edit operations in `lib/overviewLayout.ts` (`flowPlacements`, `moveInFlow`,
+  `resizeInFlow`, `appendToFlow`, `hideWidget`, `showWidget`, `moveSection`,
+  `toggleSectionCollapsed`, `sectionSpan`); hidden widgets never get a place. Tests:
+  `tests/overviewLayout.test.ts`, `tests/overviewLayoutOps.test.ts`.
+- Collapse is a view preference: it saves at once in view mode, joins the draft in edit mode.
+- The spike page and its components are removed.
+
+Checked in the browser (demo, tablet width, then phone in light mode):
+- Drag Thermostat onto Weather's spot → it takes first place; others re-flow.
+- "⋯" → Large re-flows the section; Hide → Add widgets (1) → Add puts it back at the end.
+- Move a section up, Save, reload: order, sizes and sections persist. Cancel discards a draft.
+- Collapse in view mode persists across reload. Phone pin shows the separate phone layout.
+- Phone: no sideways scroll, every title readable in edit mode. The current `/overview` is
+  unaffected. Test layouts were removed afterwards with "Forget saved layouts".
+
+Not verified: a real touch drag (still the open Phase 0 risk), the leave-page prompt for
+unsaved edits, and a full keyboard-only pass through the menu.
+
+## Phases
 
 Each phase ends with `npm run lint && npm test && npm run build:pro` and a browser check on
 phone and desktop, light and dark. Owner review gates are marked **[review]**.
