@@ -11,7 +11,13 @@ export type Tone = 'default' | 'success' | 'warning' | 'danger';
 /** HA AlarmControlPanelEntityFeature bits. */
 export const ALARM_FEATURE = { ARM_HOME: 1, ARM_AWAY: 2, ARM_NIGHT: 4, TRIGGER: 8, ARM_CUSTOM_BYPASS: 16, ARM_VACATION: 32 } as const;
 
-export type AlarmModeId = 'disarmed' | 'armed_home' | 'armed_away' | 'armed_night';
+export type AlarmModeId =
+  | 'disarmed'
+  | 'armed_home'
+  | 'armed_away'
+  | 'armed_night'
+  | 'armed_vacation'
+  | 'armed_custom_bypass';
 
 export interface AlarmMode {
   id: AlarmModeId;
@@ -19,19 +25,23 @@ export interface AlarmMode {
   service: string;
 }
 
-const ALL_MODES: (AlarmMode & { feature: number })[] = [
+const ALL_MODES: (AlarmMode & { feature: number; optional?: boolean })[] = [
   { id: 'disarmed', label: 'Off', service: 'alarm_disarm', feature: 0 },
   { id: 'armed_home', label: 'Home', service: 'alarm_arm_home', feature: ALARM_FEATURE.ARM_HOME },
   { id: 'armed_away', label: 'Away', service: 'alarm_arm_away', feature: ALARM_FEATURE.ARM_AWAY },
-  { id: 'armed_night', label: 'Night', service: 'alarm_arm_night', feature: ALARM_FEATURE.ARM_NIGHT }
+  { id: 'armed_night', label: 'Night', service: 'alarm_arm_night', feature: ALARM_FEATURE.ARM_NIGHT },
+  { id: 'armed_vacation', label: 'Vacation', service: 'alarm_arm_vacation', feature: ALARM_FEATURE.ARM_VACATION, optional: true },
+  { id: 'armed_custom_bypass', label: 'Custom', service: 'alarm_arm_custom_bypass', feature: ALARM_FEATURE.ARM_CUSTOM_BYPASS, optional: true }
 ];
 
-/** Off plus the arm modes the panel supports. Without `supported_features`, all four. */
+/** Off plus the arm modes the panel supports. Without `supported_features`, standard four. */
 export function alarmModes(alarm: Pick<ResolvedEntity, 'attributes'>): AlarmMode[] {
   const features = alarm.attributes?.supported_features;
-  return ALL_MODES.filter((m) => m.feature === 0 || typeof features !== 'number' || (features & m.feature) !== 0).map(
-    ({ id, label, service }) => ({ id, label, service })
-  );
+  return ALL_MODES.filter((m) => {
+    if (m.feature === 0) return true;
+    if (typeof features !== 'number') return !m.optional;
+    return (features & m.feature) !== 0;
+  }).map(({ id, label, service }) => ({ id, label, service }));
 }
 
 export function alarmTone(state: string): Tone {
@@ -70,9 +80,22 @@ export function alarmCodeIsNumeric(alarm: Pick<ResolvedEntity, 'attributes'>): b
   return alarm.attributes?.code_format !== 'text';
 }
 
-/** Arming Away or Night with openings open asks for confirmation first. */
-export function shouldConfirmArming(target: AlarmModeId, openCount: number): boolean {
-  return openCount > 0 && (target === 'armed_away' || target === 'armed_night');
+/** Arming Away, Night, or Vacation with open entries or unlocked locks asks for confirmation first. */
+export function shouldConfirmArming(
+  target: AlarmModeId,
+  openCount: number,
+  unlockedLockCount = 0
+): boolean {
+  return (
+    openCount + unlockedLockCount > 0 &&
+    (target === 'armed_away' || target === 'armed_night' || target === 'armed_vacation')
+  );
+}
+
+export const LOW_BATTERY_THRESHOLD = 20;
+
+export function groupHasDanger(items: readonly DeviceItem[]): boolean {
+  return items.some((i) => i.tone === 'danger' && i.problem);
 }
 
 // ---------------------------------------------------------------- devices

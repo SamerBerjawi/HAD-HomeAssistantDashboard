@@ -153,3 +153,34 @@
     min-height: 44px !important;
   }
 }
+
+/* Overview layout spike (Phase 0): react-grid-layout in pro tokens. */
+.pro .pro-rgl .react-grid-item.react-grid-placeholder {
+  background: var(--accent);
+  opacity: 0.16;
+  border-radius: 1.25rem;
+}
+.pro .pro-rgl .react-grid-item.react-draggable-dragging {
+  opacity: 0.92;
+  filter: drop-shadow(0 12px 24px rgb(0 0 0 / 0.18));
+}
+.pro .pro-rgl .pro-rgl-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 20px;
+  height: 20px;
+  cursor: se-resize;
+  border-right: 3px solid var(--accent);
+  border-bottom: 3px solid var(--accent);
+  border-bottom-right-radius: 10px;
+  opacity: 0.7;
+}
+.pro .pro-rgl .pro-rgl-handle:hover {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pro .pro-rgl .react-grid-item {
+    transition: none;
+  }
+}

@@ -6,6 +6,7 @@ import { useRef, useState } from 'react';
 import { AlertDialog, Badge, Button, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
+  Airplane01Icon,
   Alert02Icon,
   BlindsIcon,
   DoorIcon,
@@ -30,7 +31,9 @@ export const PRO_ALARM_MODE_ICON: Record<AlarmModeId, IconSvgElement> = {
   disarmed: PowerIcon,
   armed_home: Home01Icon,
   armed_away: Logout03Icon,
-  armed_night: Moon02Icon
+  armed_night: Moon02Icon,
+  armed_vacation: Airplane01Icon,
+  armed_custom_bypass: Shield01Icon
 };
 
 export const PRO_ALARM_TONE_TILE: Record<Tone, string> = {

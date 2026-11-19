@@ -10,6 +10,7 @@ import {
   deviceItem,
   groupByRoom,
   groupByType,
+  groupHasDanger,
   packOrder,
   shouldConfirmArming
 } from '@/pro/lib/securityLogic';
@@ -37,6 +38,14 @@ describe('securityLogic: alarm', () => {
       'disarmed',
       'armed_away'
     ]);
+    expect(
+      alarmModes({
+        attributes: {
+          supported_features:
+            ALARM_FEATURE.ARM_HOME | ALARM_FEATURE.ARM_VACATION | ALARM_FEATURE.ARM_CUSTOM_BYPASS
+        }
+      }).map((m) => m.id)
+    ).toEqual(['disarmed', 'armed_home', 'armed_vacation', 'armed_custom_bypass']);
   });
 
   it('tones and code rules', () => {
@@ -50,11 +59,20 @@ describe('securityLogic: alarm', () => {
     expect(alarmNeedsCode({ attributes: { code_format: 'number', code_arm_required: false } }, 'disarmed')).toBe(true);
   });
 
-  it('confirms arming Away/Night with openings open', () => {
+  it('confirms arming Away/Night/Vacation with openings open or locks unlocked', () => {
     expect(shouldConfirmArming('armed_away', 2)).toBe(true);
     expect(shouldConfirmArming('armed_night', 1)).toBe(true);
-    expect(shouldConfirmArming('armed_home', 3)).toBe(false);
-    expect(shouldConfirmArming('armed_away', 0)).toBe(false);
+    expect(shouldConfirmArming('armed_vacation', 0, 1)).toBe(true);
+    expect(shouldConfirmArming('armed_away', 0, 2)).toBe(true);
+    expect(shouldConfirmArming('armed_home', 3, 2)).toBe(false);
+    expect(shouldConfirmArming('armed_away', 0, 0)).toBe(false);
+  });
+
+  it('detects danger problems inside a device group', () => {
+    expect(groupHasDanger([deviceItem(ent('binary_sensor.l', 'on'), 'leak')])).toBe(true);
+    expect(groupHasDanger([deviceItem(ent('lock.front', 'jammed'), 'lock')])).toBe(true);
+    expect(groupHasDanger([deviceItem(ent('binary_sensor.d', 'on'), 'door')])).toBe(false);
+    expect(groupHasDanger([deviceItem(ent('binary_sensor.s', 'unavailable'), 'smoke')])).toBe(false);
   });
 });
 

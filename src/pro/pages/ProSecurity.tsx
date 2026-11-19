@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Alert, CloseButton, Skeleton } from '@heroui/react';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, CloseButton, Skeleton, Toast } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Alert02Icon, Shield01Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
@@ -10,15 +10,29 @@ import { AttentionCard } from '../components/security/AttentionCard';
 import { DeviceGroups } from '../components/security/DeviceGroups';
 import { SecurityCameras } from '../components/security/SecurityCameras';
 import { RecentActivity } from '../components/security/RecentActivity';
-import type { SecurityEntities } from '../lib/securityLogic';
+import { SecurityDeviceSheet } from '../components/security/SecurityDeviceSheet';
+import { deviceItem, type DeviceItem, type SecurityEntities } from '../lib/securityLogic';
+
+const { toast } = Toast;
 
 /**
- * Pro Security page (docs/pro-ui/DESIGN.md 7.5): alarm hero + needs attention, device groups in a
- * bento grid, cameras + recent activity. The header and its sentence come from the shell.
+ * Pro Security page (docs/pro-ui/DESIGN.md 7.5): alarm hero + needs attention, cameras + recent
+ * activity, device groups in a bento grid, and device detail ProSheet.
  */
 export default function ProSecurity() {
   const data = useSecurityData();
   const [error, setError] = useState<string | null>(null);
+  const [selectedDeviceKey, setSelectedDeviceKey] = useState<{
+    entityId: string;
+    kind: DeviceItem['kind'];
+  } | null>(null);
+
+  const handleError = useCallback((message: string | null) => {
+    setError(message);
+    if (message) {
+      toast.danger(message);
+    }
+  }, []);
 
   const entities: SecurityEntities = useMemo(
     () => ({
@@ -29,9 +43,34 @@ export default function ProSecurity() {
       leakSensors: data.leakSensors,
       smokeSensors: data.smokeSensors
     }),
-    [data.locks, data.doorSensors, data.windowSensors, data.motionSensors, data.leakSensors, data.smokeSensors]
+    [
+      data.locks,
+      data.doorSensors,
+      data.windowSensors,
+      data.motionSensors,
+      data.leakSensors,
+      data.smokeSensors
+    ]
   );
   const activity = useSecurityActivity(entities, data.alarms, data.people);
+
+  const selectedItem = useMemo<DeviceItem | null>(() => {
+    if (!selectedDeviceKey) return null;
+    const all = [
+      ...data.locks,
+      ...data.doorSensors,
+      ...data.windowSensors,
+      ...data.motionSensors,
+      ...data.leakSensors,
+      ...data.smokeSensors
+    ];
+    const found = all.find((e) => e.entity_id === selectedDeviceKey.entityId);
+    return found ? deviceItem(found, selectedDeviceKey.kind) : null;
+  }, [selectedDeviceKey, data]);
+
+  const handleSelectDevice = useCallback((item: DeviceItem) => {
+    setSelectedDeviceKey({ entityId: item.entity.entity_id, kind: item.kind });
+  }, []);
 
   if (data.isLoading) {
     return (
@@ -50,7 +89,9 @@ export default function ProSecurity() {
           <HugeiconsIcon icon={Shield01Icon} size={24} />
         </span>
         <h2 className="text-lg font-semibold">No security devices yet</h2>
-        <p className="max-w-md text-muted">Add alarm panels, locks, cameras or door, window, motion and leak sensors in Home Assistant and they appear here.</p>
+        <p className="max-w-md text-muted">
+          Add alarm panels, locks, cameras or door, window, motion and leak sensors in Home Assistant and they appear here.
+        </p>
       </div>
     );
   }
@@ -76,16 +117,26 @@ export default function ProSecurity() {
       <div className="grid gap-4 lg:grid-cols-3">
         {alarm && (
           <div className="min-w-0 lg:col-span-2">
-            <AlarmHero alarm={alarm} alarms={data.alarms} openings={openings} onError={setError} />
+            <AlarmHero
+              alarm={alarm}
+              alarms={data.alarms}
+              openings={openings}
+              unlockedLocks={data.unlockedLocks}
+              onError={handleError}
+            />
           </div>
         )}
         <div className={cn('grid min-w-0', !alarm && 'lg:col-span-3')}>
           <AttentionCard
             hazards={data.activeHazards}
+            jammedLocks={data.jammedLocks}
             openDoors={data.openDoors}
             openWindows={data.openWindows}
             unlockedLocks={data.unlockedLocks}
-            onError={setError}
+            lowBatteryDevices={data.lowBatteryDevices}
+            offlineDevices={data.offlineDevices}
+            onError={handleError}
+            onSelectDevice={handleSelectDevice}
           />
         </div>
       </div>
@@ -93,7 +144,7 @@ export default function ProSecurity() {
       <div className="grid items-start gap-4 lg:grid-cols-3">
         {hasCameras && (
           <div className="min-w-0 lg:col-span-2">
-            <SecurityCameras cameras={data.cameras} onError={setError} />
+            <SecurityCameras cameras={data.cameras} onError={handleError} />
           </div>
         )}
         <div className={cn('min-w-0', !hasCameras && 'lg:col-span-3')}>
@@ -101,8 +152,22 @@ export default function ProSecurity() {
         </div>
       </div>
 
-      {/* Owner 2026-11-18: cameras and activity above the device groups. */}
-      <DeviceGroups entities={entities} onError={setError} />
+      <DeviceGroups
+        entities={entities}
+        deviceBatteryByEntityId={data.deviceBatteryByEntityId}
+        onError={handleError}
+        onSelectDevice={handleSelectDevice}
+      />
+
+      <SecurityDeviceSheet
+        item={selectedItem}
+        batteryPct={
+          selectedItem ? data.deviceBatteryByEntityId[selectedItem.entity.entity_id] : undefined
+        }
+        events={activity.events}
+        onClose={() => setSelectedDeviceKey(null)}
+        onError={handleError}
+      />
     </div>
   );
 }
