@@ -12,9 +12,11 @@ import { useShellOverlays } from '@/hooks/app/useShellOverlays';
 import FullScreenLoadingPage from '@/components/ui/FullScreenLoadingPage';
 import ProShell from './components/ProShell';
 import ProSecurity from './pages/ProSecurity';
+import ProToaster from './components/toasts/ProToaster';
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
-const NotificationDrawer = lazy(() => import('@/components/notifications/NotificationDrawer'));
+const ProNotificationCenter = lazy(() => import('./components/notifications/ProNotificationCenter'));
+const ProEmergencyAlert = lazy(() => import('./components/toasts/ProEmergencyAlert'));
 
 /** Entry for the pro design language: same providers, stores and startup flow as the classic App. */
 export default function ProApp() {
@@ -101,7 +103,13 @@ export default function ProApp() {
       )}
       {overlays.hasOpenedNotifications && (
         <Suspense fallback={null}>
-          <NotificationDrawer isOpen={overlays.isNotificationOpen} onClose={overlays.handleCloseNotifications} darkMode={darkMode} />
+          <ProNotificationCenter isOpen={overlays.isNotificationOpen} onClose={overlays.handleCloseNotifications} page={activeTab} />
+        </Suspense>
+      )}
+      <ProToaster shellToasts={overlays.toasts} onDismissShellToast={overlays.dismissToast} page={activeTab} />
+      {overlays.hasCriticalAlert && (
+        <Suspense fallback={null}>
+          <ProEmergencyAlert onOpenSecurity={() => setActiveTab('security')} />
         </Suspense>
       )}
     </>

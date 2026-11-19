@@ -1,6 +1,6 @@
 # HAD Pro UI: design document
 
-Status: living document. Last updated 2026-11-18.
+Status: living document. Last updated 2026-11-19.
 Owner: Samer (product decisions). Builders: any AI agent (Claude Code, Gemini on Antigravity, ...) or human.
 
 This file is the single source of truth for the **pro** front end. Read it fully before you touch
@@ -368,6 +368,63 @@ Implementation notes:
   injected temporarily). Not verified: a real HA instance (logbook rows, codes, `supported_features`,
   live go2rtc streams, snapshot download from a live frame).
 
+### 7.7 Notification center — status: BUILT (2026-11-19)
+
+Reimagined from the ground up; replaces the classic `NotificationDrawer` in the pro app only
+(classic is untouched). Data, read state and HA actions are the shared ones
+(`useHANotifications`, `useNotificationReadStore`, the item `actions`).
+
+| Part | Decision |
+|---|---|
+| Placement | **HeroUI `Drawer` from the right on tablet/desktop (~420 px), full-height bottom sheet on phones** (owner). Opened by the page-header bell. |
+| Organisation | **Triage + stacks** (owner). Top: **Needs action** (severity critical or error: hazards, triggered alarms, failing repairs). Then **stacks by kind**: Home alerts, Repairs (repairs + restarts), Batteries, Updates; then **Messages** (HA persistent notifications) as plain rows. Stack order is the agent's call (most urgent kind first). A stack of one renders as a normal row. While searching, a flat list of matches replaces the stacks. |
+| Stacks | **Collapsed by default** with a one-line summary ("Core, Zigbee2MQTT and 5 more") and the stack's bulk action (**Update all** on Updates); tap to expand (owner). Built on HeroUI `Disclosure`. |
+| Item | **Compact row**: icon tile (integration brand icon when known, else a Hugeicons category icon), title, one-line summary, time, unread dot. **Tap to expand** details (message, version chip, release notes, install progress, action buttons) with HeroUI `Disclosure` (owner). |
+| Tones | Icon tiles follow the pill rule: **red** critical/error, **orange** warning, neutral otherwise (agent's call, from 7.5 pill colours). |
+| Header | Bell tile + "Notifications" + "N unread", **Mark all read** button, **⋮ HeroUI `Dropdown`** with Refresh, Clean skipped updates, Clear all (HeroUI `AlertDialog` confirm), close button. **HeroUI `SearchField` only with 8+ items** (owner). |
+| Dismiss | **Swipe left on touch** (motion `drag`, HeroUI has no swipe) **and a ✕ on hover/focus on desktop**, with **Undo** for 5 s (owner). Only items HA lets us dismiss. The HA call waits until the undo window closes, since HA dismissals can't be undone. The undo bar sits inside the panel (agent's call: toasts are the next decision). |
+| Read state | **Expanding an item or using one of its actions marks it read**; Mark all read does the rest (owner). Per device, as before. |
+| Empty state | HeroUI `EmptyState`-style composed block: check tile, "You're all caught up" (agent's call). |
+| Toasts | Built next, see 7.8 (owner). |
+
+Implementation notes:
+- Pure logic in `src/pro/lib/notificationLogic.ts` (sections, stacks, summaries, tones), tested in
+  `tests/notificationLogic.test.ts`. UI in `src/pro/components/notifications/`.
+- Bulk actions (Update all, Clean skipped, Clear all, Refresh) live in
+  `src/pro/hooks/useProNotificationActions.ts`, ported from the classic drawer's handlers.
+- Message bodies use a small pro Markdown renderer (paragraphs, lists, bold, code, safe links via
+  `sanitizeSafeUrl`); release notes load on expand with `haWebSocketService.getReleaseNotes`.
+- The in-row "Dismiss" action goes through the same undo path as swipe and ✕.
+- Verified (demo data): lint, unit tests, `build:pro`; desktop right panel, tablet, phone sheet;
+  dark and light; stacks expand, release notes load, expand marks read, Mark all read, swipe
+  dismiss + Undo. Not verified: live HA (real repairs, Update all, Clear all against HA), swipe on
+  a real touch device.
+
+### 7.8 Toasts and emergency alert — status: BUILT (2026-11-19)
+
+The pro app had no toasts and no emergency alert until now (classic renders its own).
+
+| Part | Decision |
+|---|---|
+| Component | **HeroUI `Toast`, stacked** (free core): newest on top, older ones peek behind, fan out on hover/keyboard focus (Alt+T jumps to them), close button. HeroUI's toast has no swipe-to-dismiss; not added (agent's note). (owner) |
+| Placement | **Top centre on phones** (clear of the nav pill), **top-right from 768 px** (under the bell) (owner). |
+| Events | **All four groups** (owner): security changes (lock unlocked/locked, garage/cover opened), doors and windows opened, appliance finished + new HA persistent notifications, errors (HA action failed) + confirmations (Dashboard refreshed). Sources: `useAlertStore.toasts` (alertService) and the shell's `addToast`. |
+| Look | Tone by meaning (green/orange/red rule): **red** critical, **orange** warning, neutral info, green for confirmations; Hugeicons indicator per event (lock, door, window, garage, appliance, message, alert) (agent's call). Durations from the source (classic: 4.5–6 s; 0 = stays). At most 3 visible. |
+| Emergency | **Red full-screen HeroUI `AlertDialog` + a red toast that stays until acknowledged** (owner). Shows sensor, room and time; **Acknowledge** and **Open Security** (the pro Rooms page isn't built yet; agent's call). Plays the existing chime. |
+| Emergency triggers (reviewed, owner asked) | Only **binary sensors that are on** with device class **smoke, gas, carbon_monoxide, moisture or safety**; binary sensors **without** a device class only by a leak/flood/smoke word in the id or name, never rain/weather/soil sensors; plus **alarm panel `triggered`**. Lights, switches and other domains never trigger it. "flood" no longer matches "floodlight". Fixes the camera floodlight raising a water-leak emergency; shared code, so classic is fixed too. |
+
+Implementation notes:
+- Emergency rules: `src/services/notifications/emergency.ts` (`emergencyTypeOf`), tested in
+  `tests/emergency.test.ts`, used by `alertService.evaluateStateChange`. `isLeakSensor` matches
+  "flood" only as a word (not "floodlight").
+- Toast mapping: `src/pro/lib/toastLogic.ts` (tested in `tests/toastLogic.test.ts`); UI in
+  `src/pro/components/toasts/` (`ProToaster`, `ProEmergencyAlert`), mounted in `ProApp`.
+- Desktop offset (top 72 px, under the bell) is an inline style on `Toast.Provider`.
+- Verified (demo data, events injected through `useAlertStore`): lint, unit tests, `build:pro`;
+  stacking and hover fan-out, colours, phone top-centre, desktop under the bell, light toast;
+  emergency dialog, Acknowledge closes dialog and red toast. Not verified: real HA events, the
+  chime, Open Security on a live alarm.
+
 ## 8. Page roadmap
 
 | # | Item | Status |
@@ -379,6 +436,8 @@ Implementation notes:
 | 5 | Security page | Built: `src/pro/pages/ProSecurity.tsx` + `src/pro/components/security/` (7.5) |
 | 6 | Overview, Rooms, Energy | Not started |
 | — | Breadcrumbs in the page header | Planned: decide with the first page that has sub-views (7.4) |
+| — | Notification center | Built: `src/pro/components/notifications/` (7.7) |
+| — | Toasts + emergency alert | Built: `src/pro/components/toasts/` (7.8) |
 | 7 | Remaining pages | Not started |
 
 ## 9. Decision log
@@ -450,6 +509,19 @@ Append only. One row per decision. Newest at the bottom.
 | 2026-11-18 | Mobile nav: icons | Pure black (light) / white (dark) icons; current tab stroke 2.4 instead of accent colour | Owner; accent dot kept |
 | 2026-11-18 | Security: second revisions | Slim "All secure" below 1024 px; masonry bento packing; full-screen fallbacks | Owner feedback with screenshots |
 | 2026-11-18 | Mobile nav: size and light glass | Icons 26 px (30 px from 640 px), pill 76 px tall and wider from 640 px; light-mode glass 72 % white | Owner: bigger on tablets, better light contrast |
+| 2026-11-19 | Notifications: placement | Right-side HeroUI Drawer on tablet/desktop, bottom sheet on phones | Replaces classic drawer in pro |
+| 2026-11-19 | Notifications: organisation | Needs action, then collapsed stacks by kind, then Messages | Stack order: agent's call |
+| 2026-11-19 | Notifications: stacks | Collapsed with summary + bulk action (Update all) | |
+| 2026-11-19 | Notifications: item | Compact row, tap to expand details and actions (HeroUI Disclosure) | |
+| 2026-11-19 | Notifications: header | Mark all read + ⋮ (Refresh, Clean skipped, Clear all); search at 8+ items | |
+| 2026-11-19 | Notifications: dismiss | Swipe left on touch, ✕ on hover, Undo for 5 s | In-panel undo bar: agent's call |
+| 2026-11-19 | Notifications: read state | Read when expanded or acted on | |
+| 2026-11-19 | Toasts | Redesign as the next component | Classic toasts until then |
+| 2026-11-19 | Toasts: component | HeroUI Toast, stacked | No swipe in HeroUI Toast |
+| 2026-11-19 | Toasts: placement | Top centre on phones, top-right from 768 px | |
+| 2026-11-19 | Toasts: events | Security changes, doors/windows, appliances + HA messages, errors + confirmations | All groups |
+| 2026-11-19 | Emergency alert | Red full-screen AlertDialog + persistent red toast | Open Security instead of room: agent's call |
+| 2026-11-19 | Emergency triggers | Binary sensors only (smoke, gas, CO, moisture, safety; name words only without a device class) + alarm triggered | Fixes floodlight → water leak; also fixes classic |
 
 ## 10. Notes for other agents
 

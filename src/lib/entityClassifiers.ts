@@ -93,8 +93,9 @@ export function isLeakSensor(e: { attributes?: Record<string, any>; entity_id: s
     dc === 'water' ||
     id.includes('leak') ||
     name.includes('leak') ||
-    id.includes('flood') ||
-    name.includes('flood') ||
+    // "flood" as a word: a camera floodlight is not a leak sensor
+    /(^|[^a-z])flood(ing)?([^a-z]|$)/.test(id) ||
+    /(^|[^a-z])flood(ing)?([^a-z]|$)/.test(name) ||
     id.includes('water_leak') ||
     id.includes('water_sensor') ||
     id.includes('overflow')
