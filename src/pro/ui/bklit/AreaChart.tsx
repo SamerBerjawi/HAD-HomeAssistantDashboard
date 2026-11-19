@@ -5,7 +5,8 @@
  */
 import { area as d3Area, curveMonotoneX, line as d3Line } from 'd3-shape';
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useMeasuredWidth } from './useBklitChartBox';
 import { cn } from '@/lib/utils';
 
 export interface BklitAreaDatum {
@@ -90,35 +91,15 @@ export function AreaChart({
   accentColor = 'var(--accent)',
   ariaLabel = 'Hourly trend chart'
 }: AreaChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { ref: containerRef, nodeRef: containerNodeRef, width: containerWidth } = useMeasuredWidth<HTMLDivElement>();
   const scrubbedRef = useRef(false);
   const pointerDownXRef = useRef<number | null>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const uniqueId = useId();
   const gradientId = `bklit-area-fill-${uniqueId}`;
   const clipId = `bklit-area-clip-${uniqueId}`;
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let rafId = 0;
-    const measure = () => {
-      const next = Math.round(el.getBoundingClientRect().width);
-      if (next > 0) setContainerWidth(next);
-    };
-    measure();
-    const observer = new ResizeObserver(() => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      rafId = window.requestAnimationFrame(measure);
-    });
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   const width = containerWidth > 0 ? containerWidth : 320;
   const innerWidth = Math.max(40, width - MARGIN.left - MARGIN.right);
@@ -188,7 +169,7 @@ export function AreaChart({
 
   const updateIndexFromClientX = useCallback(
     (clientX: number) => {
-      const el = containerRef.current;
+      const el = containerNodeRef.current;
       if (!el || coords.length === 0) return;
       const rect = el.getBoundingClientRect();
       const relX = clientX - rect.left - MARGIN.left;

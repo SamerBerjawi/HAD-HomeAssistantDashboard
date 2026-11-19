@@ -4,37 +4,38 @@ import { useUserConfig } from '@/contexts/ConfigContext';
 import { useEditMode } from '@/contexts/EditModeContext';
 import { useEnergyData } from '@/hooks/useEnergyData';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
-import { LightingWidgetBody, SwitchesWidgetBody } from '../components/overview/ControlWidgets';
+import type { HAArea, HADevice, HAEntityRegistryEntry, HAFloor, HAState } from '@/types';
 import {
-  EnergyFlowWidgetBody,
-  EnergyGaugesWidgetBody,
-  EnergyUsageChartWidgetBody,
-  EnergyUsageWidgetBody,
-  PowerFlowChartWidgetBody,
-  PowerFlowWidgetBody,
-  SolarProductionChartWidgetBody,
-  SolarProductionWidgetBody
-} from '../components/overview/EnergyWidgets';
-import { FansWidgetBody, VacuumsWidgetBody } from '../components/overview/FansVacuumWidgets';
-import { MediaWidgetBody } from '../components/overview/MediaWidget';
+  MemoAlarm,
+  MemoCameras,
+  MemoEnergyFlow,
+  MemoEnergyGauges,
+  MemoEnergyUsage,
+  MemoEnergyUsageChart,
+  MemoFans,
+  MemoHourly,
+  MemoLighting,
+  MemoMedia,
+  MemoPowerFlow,
+  MemoPowerFlowChart,
+  MemoPresence,
+  MemoSensor,
+  MemoSolar,
+  MemoSolarChart,
+  MemoSwitches,
+  MemoVacuums,
+  MemoWeather
+} from '../components/overview/memoWidgetBodies';
 import { OverviewTabsBar } from '../components/overview/OverviewTabsBar';
 import { OverviewWidgetGrid } from '../components/overview/OverviewWidgetGrid';
-import { FamilyPresenceWidgetBody } from '../components/overview/PresenceWidget';
 import { ProOverviewSheets } from '../components/overview/ProOverviewSheets';
-import {
-  CamerasWidgetBody,
-  SecurityAlarmWidgetBody
-} from '../components/overview/SecurityAlarmCameraWidgets';
-import { SensorDomainWidgetBody } from '../components/overview/SensorOpeningWidgets';
 import { StatusPillsBar } from '../components/overview/StatusPillsBar';
-import { HourlyForecastWidgetBody, WeatherForecastWidgetBody } from '../components/overview/WeatherWidgets';
 import { useProPageHeader } from '../components/pageHeaderContext';
 import { useProOverviewActions } from '../hooks/useProOverviewActions';
 import { useProOverviewLayout } from '../hooks/useProOverviewLayout';
 import { useProOverviewModels } from '../hooks/useProOverviewModels';
-import type { ProControlDomain } from '../lib/overviewControls';
-import { energyViewForWidgetId, type ProOverviewEnergyView } from '../lib/overviewEnergy';
 import type { OverviewStatusPill } from '../lib/overviewPills';
+import { isSensorDomain, sheetForPill, sheetForWidget, type OverviewSheet } from '../lib/overviewSheets';
 import type { ProOverviewSensorDomain } from '../lib/overviewSecurity';
 import type { OverviewTabId } from '../lib/overviewTabs';
 import {
@@ -48,6 +49,13 @@ import {
   type ProWidgetCatalogItem,
   type ProWidgetSize
 } from '../lib/overviewWidgets';
+
+// Stable fallbacks so model memos don't re-run on every render while the store is still empty.
+const EMPTY_AREAS: HAArea[] = [];
+const EMPTY_FLOORS: HAFloor[] = [];
+const EMPTY_STATES: Record<string, HAState> = {};
+const EMPTY_REGISTRY: HAEntityRegistryEntry[] = [];
+const EMPTY_DEVICES: HADevice[] = [];
 
 const INTERACTIVE_WIDGET_IDS = new Set([
   'weather',
@@ -75,7 +83,6 @@ const INTERACTIVE_WIDGET_IDS = new Set([
   'smoke'
 ]);
 
-const SENSOR_WIDGET_IDS = new Set<ProOverviewSensorDomain>(['doors', 'windows', 'motion', 'leak', 'smoke']);
 
 /**
  * Pro Overview page (docs/pro-ui/DESIGN.md 7.6): Active status pills bar, Category filter tabs &
@@ -124,20 +131,22 @@ export default function ProOverview() {
   const energyData = useEnergyData();
 
   const [activeTab, setActiveTab] = useState<OverviewTabId>('all');
-  const [isAddWidgetsOpen, setIsAddWidgetsOpen] = useState(false);
-  const [isWeatherSheetOpen, setIsWeatherSheetOpen] = useState(false);
-  const [isPresenceSheetOpen, setIsPresenceSheetOpen] = useState(false);
+  const [sheet, setSheet] = useState<OverviewSheet | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  const [activeControlSheet, setActiveControlSheet] = useState<ProControlDomain | null>(null);
-  const [isFansSheetOpen, setIsFansSheetOpen] = useState(false);
-  const [isVacuumsSheetOpen, setIsVacuumsSheetOpen] = useState(false);
-  const [isMediaSheetOpen, setIsMediaSheetOpen] = useState(false);
   const [selectedMediaEntityId, setSelectedMediaEntityId] = useState<string | null>(null);
-  const [isAlarmSheetOpen, setIsAlarmSheetOpen] = useState(false);
-  const [isCamerasSheetOpen, setIsCamerasSheetOpen] = useState(false);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
-  const [activeSensorSheet, setActiveSensorSheet] = useState<ProOverviewSensorDomain | null>(null);
-  const [activeEnergySheetView, setActiveEnergySheetView] = useState<ProOverviewEnergyView | null>(null);
+
+  const openSheet = useCallback((next: OverviewSheet | null) => {
+    if (next?.kind === 'presence' && next.personId) setSelectedPersonId(next.personId);
+    if (next?.kind === 'cameras' && next.cameraId) setSelectedCameraId(next.cameraId);
+    setSheet(next);
+  }, []);
+  /** onOpenChange for a sheet that has no payload: opens it, or closes it if it is the open one. */
+  const sheetOpenChange = useCallback(
+    (kind: 'addWidgets' | 'weather' | 'presence' | 'fans' | 'vacuums' | 'media' | 'alarm' | 'cameras') => (open: boolean) =>
+      setSheet((cur) => (open ? { kind } : cur?.kind === kind ? null : cur)),
+    []
+  );
 
   const {
     isDemo,
@@ -160,11 +169,11 @@ export default function ProOverview() {
     domainGroups,
     resolvedEntities,
     resolvedZones,
-    areas: areas || [],
-    floors: floors || [],
-    states: states || {},
-    entityRegistry: entityRegistry || [],
-    devices: devices || [],
+    areas: areas ?? EMPTY_AREAS,
+    floors: floors ?? EMPTY_FLOORS,
+    states: states ?? EMPTY_STATES,
+    entityRegistry: entityRegistry ?? EMPTY_REGISTRY,
+    devices: devices ?? EMPTY_DEVICES,
     cameraSources: config.cameras?.sources,
     selectedAlarmEntityId,
     selectedWeatherEntityId,
@@ -246,13 +255,8 @@ export default function ProOverview() {
     setEditMode,
     updateConfig,
     flushPendingSave,
-    onOpenAddWidgets: () => setIsAddWidgetsOpen(true)
+    onOpenAddWidgets: () => openSheet({ kind: 'addWidgets' })
   });
-
-  const handleOpenPresence = useCallback((entityId?: string) => {
-    if (entityId) setSelectedPersonId(entityId);
-    setIsPresenceSheetOpen(true);
-  }, []);
 
   const actions = useProOverviewActions({
     isDemo,
@@ -265,66 +269,38 @@ export default function ProOverview() {
     updateEntityState
   });
 
-  const handleOpenWidgetDetails = useCallback(
-    (widgetId: string) => {
-      const energyView = energyViewForWidgetId(widgetId);
-      if (energyView) {
-        setActiveEnergySheetView(energyView);
-        return;
-      }
-      if (widgetId === 'weather' || widgetId === 'weather_hourly') {
-        setIsWeatherSheetOpen(true);
-      } else if (widgetId === 'users') {
-        handleOpenPresence();
-      } else if (widgetId === 'lights' || widgetId === 'switches') {
-        setActiveControlSheet(widgetId);
-      } else if (widgetId === 'fans') {
-        setIsFansSheetOpen(true);
-      } else if (widgetId === 'vacuums') {
-        setIsVacuumsSheetOpen(true);
-      } else if (widgetId === 'media') {
-        setIsMediaSheetOpen(true);
-      } else if (widgetId === 'alarm') {
-        setIsAlarmSheetOpen(true);
-      } else if (widgetId === 'cameras') {
-        setIsCamerasSheetOpen(true);
-      } else if (widgetId.startsWith('camera:')) {
-        setSelectedCameraId(widgetId.slice('camera:'.length));
-        setIsCamerasSheetOpen(true);
-      } else if (SENSOR_WIDGET_IDS.has(widgetId as ProOverviewSensorDomain)) {
-        setActiveSensorSheet(widgetId as ProOverviewSensorDomain);
-      }
-    },
-    [handleOpenPresence]
+  const handleOpenPresence = useCallback((personId?: string) => openSheet({ kind: 'presence', personId }), [openSheet]);
+
+  const handleOpenWidgetDetails = useCallback((widgetId: string) => {
+    const next = sheetForWidget(widgetId);
+    if (next) openSheet(next);
+  }, [openSheet]);
+
+  const handleActivatePill = useCallback((pill: OverviewStatusPill) => {
+    const next = sheetForPill(pill);
+    if (next) openSheet(next);
+  }, [openSheet]);
+
+  // Stable handlers for the memoized widget bodies.
+  const { handleToggleControlBatch } = actions;
+  const openers = useMemo(
+    () => ({
+      lights: () => openSheet({ kind: 'control', domain: 'lights' }),
+      switches: () => openSheet({ kind: 'control', domain: 'switches' }),
+      fans: () => openSheet({ kind: 'fans' }),
+      vacuums: () => openSheet({ kind: 'vacuums' }),
+      media: () => openSheet({ kind: 'media' }),
+      doors: () => openSheet({ kind: 'sensor', domain: 'doors' }),
+      sensor: (domain: ProOverviewSensorDomain) => openSheet({ kind: 'sensor', domain }),
+      toggleLights: (forceOn: boolean) => handleToggleControlBatch('lights', forceOn),
+      toggleSwitches: (forceOn: boolean) => handleToggleControlBatch('switches', forceOn)
+    }),
+    [openSheet, handleToggleControlBatch]
   );
 
-  const handleActivatePill = useCallback(
-    (pill: OverviewStatusPill) => {
-      if (pill.kind === 'person' && pill.person?.entityId) {
-        handleOpenPresence(pill.person.entityId);
-      } else if (pill.kind === 'lights') {
-        setActiveControlSheet('lights');
-      } else if (pill.kind === 'switches') {
-        setActiveControlSheet('switches');
-      } else if (pill.kind === 'fans') {
-        setIsFansSheetOpen(true);
-      } else if (pill.kind === 'vacuums') {
-        setIsVacuumsSheetOpen(true);
-      } else if (pill.kind === 'media') {
-        setIsMediaSheetOpen(true);
-      } else if (pill.kind === 'alarm') {
-        setIsAlarmSheetOpen(true);
-      } else if (
-        pill.kind === 'doors' ||
-        pill.kind === 'windows' ||
-        pill.kind === 'motion' ||
-        pill.kind === 'leak' ||
-        pill.kind === 'smoke'
-      ) {
-        setActiveSensorSheet(pill.kind);
-      }
-    },
-    [handleOpenPresence]
+  const singleCameraModels = useMemo(
+    () => new Map(camerasModel.cameras.map((cam) => [cam.entityId, { ...camerasModel, cameras: [cam], featuredCamera: cam, totalCount: 1 }])),
+    [camerasModel]
   );
 
   const getWidgetCardClassName = useCallback(
@@ -341,7 +317,7 @@ export default function ProOverview() {
       if (widget.id === 'alarm' && alarmModel.isTransitioning) {
         return 'bg-[color-mix(in_oklab,var(--surface)_88%,var(--warning)_12%)]! ring-1 ring-warning/30';
       }
-      if (SENSOR_WIDGET_IDS.has(widget.id as ProOverviewSensorDomain)) {
+      if (isSensorDomain(widget.id)) {
         const sensorModel = sensorModels[widget.id as ProOverviewSensorDomain];
         if (sensorModel.isCriticalHazard) {
           return 'overflow-hidden bg-[color-mix(in_oklab,var(--surface)_84%,var(--danger)_16%)]! ring-1 ring-danger/45';
@@ -358,14 +334,14 @@ export default function ProOverview() {
   const renderWidgetBody = useCallback(
     (widget: ProWidgetCatalogItem, size: ProWidgetSize) => {
       if (widget.id === 'weather') {
-        return <WeatherForecastWidgetBody model={weatherModel} size={size} />;
+        return <MemoWeather model={weatherModel} size={size} />;
       }
       if (widget.id === 'weather_hourly') {
-        return <HourlyForecastWidgetBody model={weatherModel} size={size} />;
+        return <MemoHourly model={weatherModel} size={size} />;
       }
       if (widget.id === 'users') {
         return (
-          <FamilyPresenceWidgetBody
+          <MemoPresence
             model={presenceModel}
             size={size}
             serverUrl={serverUrl}
@@ -375,54 +351,54 @@ export default function ProOverview() {
       }
       if (widget.id === 'lights') {
         return (
-          <LightingWidgetBody
+          <MemoLighting
             model={lightsModel}
             size={size}
             onToggleItem={actions.handleToggleControlItem}
-            onToggleBatch={(forceOn) => actions.handleToggleControlBatch('lights', forceOn)}
+            onToggleBatch={openers.toggleLights}
             onChangeBrightness={actions.handleChangeLightBrightness}
-            onOpenSheet={() => setActiveControlSheet('lights')}
+            onOpenSheet={openers.lights}
           />
         );
       }
       if (widget.id === 'switches') {
         return (
-          <SwitchesWidgetBody
+          <MemoSwitches
             model={switchesModel}
             size={size}
             onToggleItem={actions.handleToggleControlItem}
-            onToggleBatch={(forceOn) => actions.handleToggleControlBatch('switches', forceOn)}
-            onOpenSheet={() => setActiveControlSheet('switches')}
+            onToggleBatch={openers.toggleSwitches}
+            onOpenSheet={openers.switches}
           />
         );
       }
       if (widget.id === 'fans') {
         return (
-          <FansWidgetBody
+          <MemoFans
             model={fansModel}
             size={size}
             onToggleFan={actions.handleToggleFan}
             onToggleBatch={actions.handleToggleFanBatch}
             onChangeSpeed={actions.handleChangeFanSpeed}
             onToggleOscillate={actions.handleToggleFanOscillate}
-            onOpenSheet={() => setIsFansSheetOpen(true)}
+            onOpenSheet={openers.fans}
           />
         );
       }
       if (widget.id === 'vacuums') {
         return (
-          <VacuumsWidgetBody
+          <MemoVacuums
             model={vacuumsModel}
             size={size}
             onAction={actions.handleVacuumAction}
             onChangeSuction={actions.handleChangeVacuumSuction}
-            onOpenSheet={() => setIsVacuumsSheetOpen(true)}
+            onOpenSheet={openers.vacuums}
           />
         );
       }
       if (widget.id === 'media') {
         return (
-          <MediaWidgetBody
+          <MemoMedia
             model={mediaModel}
             size={size}
             serverUrl={serverUrl}
@@ -437,25 +413,25 @@ export default function ProOverview() {
             onCycleRepeat={actions.handleMediaCycleRepeat}
             onSelectSource={actions.handleMediaSelectSource}
             onPlayQueueTrack={actions.handlePlayQueueTrack}
-            onOpenSheet={() => setIsMediaSheetOpen(true)}
+            onOpenSheet={openers.media}
           />
         );
       }
       if (widget.id === 'alarm') {
         return (
-          <SecurityAlarmWidgetBody
+          <MemoAlarm
             model={alarmModel}
             size={size}
             onExecuteMode={actions.handleExecuteAlarmMode}
             onSetLockState={actions.handleSetLockState}
             onLockAll={actions.handleLockAll}
-            onOpenOpenings={() => setActiveSensorSheet('doors')}
+            onOpenOpenings={openers.doors}
           />
         );
       }
       if (widget.id === 'cameras') {
         return (
-          <CamerasWidgetBody
+          <MemoCameras
             model={camerasModel}
             size={size}
             serverUrl={serverUrl}
@@ -465,17 +441,9 @@ export default function ProOverview() {
       }
       if (widget.id.startsWith('camera:')) {
         const camId = widget.id.slice('camera:'.length);
-        const camItem = camerasModel.cameras.find((c) => c.entityId === camId);
-        const singleModel = camItem
-          ? {
-              ...camerasModel,
-              cameras: [camItem],
-              featuredCamera: camItem,
-              totalCount: 1
-            }
-          : camerasModel;
+        const singleModel = singleCameraModels.get(camId) ?? camerasModel;
         return (
-          <CamerasWidgetBody
+          <MemoCameras
             model={singleModel}
             size={size}
             serverUrl={serverUrl}
@@ -484,35 +452,35 @@ export default function ProOverview() {
         );
       }
       if (widget.id === 'power_flow') {
-        return <PowerFlowWidgetBody model={energyModel} size={size} />;
+        return <MemoPowerFlow model={energyModel} size={size} />;
       }
       if (widget.id === 'power_flow_chart') {
-        return <PowerFlowChartWidgetBody model={energyModel} size={size} />;
+        return <MemoPowerFlowChart model={energyModel} size={size} />;
       }
       if (widget.id === 'energy_usage') {
-        return <EnergyUsageWidgetBody model={energyModel} size={size} />;
+        return <MemoEnergyUsage model={energyModel} size={size} />;
       }
       if (widget.id === 'energy_usage_chart') {
-        return <EnergyUsageChartWidgetBody model={energyModel} size={size} />;
+        return <MemoEnergyUsageChart model={energyModel} size={size} />;
       }
       if (widget.id === 'solar_production') {
-        return <SolarProductionWidgetBody model={energyModel} size={size} />;
+        return <MemoSolar model={energyModel} size={size} />;
       }
       if (widget.id === 'solar_production_chart') {
-        return <SolarProductionChartWidgetBody model={energyModel} size={size} />;
+        return <MemoSolarChart model={energyModel} size={size} />;
       }
       if (widget.id === 'energy_gauges') {
-        return <EnergyGaugesWidgetBody model={energyModel} size={size} />;
+        return <MemoEnergyGauges model={energyModel} size={size} />;
       }
       if (widget.id === 'energy_flow') {
-        return <EnergyFlowWidgetBody model={energyModel} size={size} />;
+        return <MemoEnergyFlow model={energyModel} size={size} />;
       }
-      if (SENSOR_WIDGET_IDS.has(widget.id as ProOverviewSensorDomain)) {
+      if (isSensorDomain(widget.id)) {
         return (
-          <SensorDomainWidgetBody
+          <MemoSensor
             model={sensorModels[widget.id as ProOverviewSensorDomain]}
             size={size}
-            onOpenSheet={(domain) => setActiveSensorSheet(domain)}
+            onOpenSheet={openers.sensor}
           />
         );
       }
@@ -532,7 +500,9 @@ export default function ProOverview() {
       sensorModels,
       serverUrl,
       handleOpenPresence,
-      actions
+      actions,
+      openers,
+      singleCameraModels
     ]
   );
 
@@ -558,11 +528,10 @@ export default function ProOverview() {
         hiddenWidgetsCount={hiddenTilesSet.size}
         hideBadges={hideBadges}
         groupBySections={groupBySections}
-        onOpenAddWidgets={() => setIsAddWidgetsOpen(true)}
+        onOpenAddWidgets={() => openSheet({ kind: 'addWidgets' })}
         onToggleHideBadges={layout.handleToggleHideBadges}
         onToggleGroupBySections={layout.handleToggleGroupBySections}
         onResetLayout={layout.handleResetLayout}
-        onDoneEditMode={layout.handleDoneEditMode}
       />
 
       <OverviewWidgetGrid
@@ -583,7 +552,7 @@ export default function ProOverview() {
         onMoveWidget={layout.handleMoveWidget}
         onSetSize={layout.handleSetSize}
         onToggleHide={layout.handleToggleHide}
-        onOpenAddWidgets={() => setIsAddWidgetsOpen(true)}
+        onOpenAddWidgets={() => openSheet({ kind: 'addWidgets' })}
         onResetTab={() => setActiveTab('all')}
         onSelectTab={setActiveTab}
         interactiveWidgetIds={INTERACTIVE_WIDGET_IDS}
@@ -613,34 +582,34 @@ export default function ProOverview() {
         energyModel={energyModel}
         energyPeriod={energyData.period}
         onSelectEnergyPeriod={energyData.setPeriod}
-        isAddWidgetsOpen={isAddWidgetsOpen}
-        onAddWidgetsOpenChange={setIsAddWidgetsOpen}
-        isWeatherSheetOpen={isWeatherSheetOpen}
-        onWeatherSheetOpenChange={setIsWeatherSheetOpen}
+        isAddWidgetsOpen={sheet?.kind === 'addWidgets'}
+        onAddWidgetsOpenChange={sheetOpenChange('addWidgets')}
+        isWeatherSheetOpen={sheet?.kind === 'weather'}
+        onWeatherSheetOpenChange={sheetOpenChange('weather')}
         onSelectWeatherStation={setSelectedWeatherEntityId}
-        isPresenceSheetOpen={isPresenceSheetOpen}
-        onPresenceSheetOpenChange={setIsPresenceSheetOpen}
+        isPresenceSheetOpen={sheet?.kind === 'presence'}
+        onPresenceSheetOpenChange={sheetOpenChange('presence')}
         selectedPersonId={selectedPersonId}
         onSelectPersonId={setSelectedPersonId}
-        activeControlSheet={activeControlSheet}
-        onCloseControlSheet={() => setActiveControlSheet(null)}
-        isFansSheetOpen={isFansSheetOpen}
-        onFansSheetOpenChange={setIsFansSheetOpen}
-        isVacuumsSheetOpen={isVacuumsSheetOpen}
-        onVacuumsSheetOpenChange={setIsVacuumsSheetOpen}
-        isMediaSheetOpen={isMediaSheetOpen}
-        onMediaSheetOpenChange={setIsMediaSheetOpen}
+        activeControlSheet={sheet?.kind === 'control' ? sheet.domain : null}
+        onCloseControlSheet={() => setSheet((cur) => (cur?.kind === 'control' ? null : cur))}
+        isFansSheetOpen={sheet?.kind === 'fans'}
+        onFansSheetOpenChange={sheetOpenChange('fans')}
+        isVacuumsSheetOpen={sheet?.kind === 'vacuums'}
+        onVacuumsSheetOpenChange={sheetOpenChange('vacuums')}
+        isMediaSheetOpen={sheet?.kind === 'media'}
+        onMediaSheetOpenChange={sheetOpenChange('media')}
         onSelectMediaEntityId={setSelectedMediaEntityId}
-        isAlarmSheetOpen={isAlarmSheetOpen}
-        onAlarmSheetOpenChange={setIsAlarmSheetOpen}
+        isAlarmSheetOpen={sheet?.kind === 'alarm'}
+        onAlarmSheetOpenChange={sheetOpenChange('alarm')}
         onSelectAlarmEntityId={setSelectedAlarmEntityId}
-        isCamerasSheetOpen={isCamerasSheetOpen}
-        onCamerasSheetOpenChange={setIsCamerasSheetOpen}
+        isCamerasSheetOpen={sheet?.kind === 'cameras'}
+        onCamerasSheetOpenChange={sheetOpenChange('cameras')}
         onSelectCameraId={setSelectedCameraId}
-        activeSensorSheet={activeSensorSheet}
-        onSelectSensorSheet={setActiveSensorSheet}
-        activeEnergySheetView={activeEnergySheetView}
-        onSelectEnergySheetView={setActiveEnergySheetView}
+        activeSensorSheet={sheet?.kind === 'sensor' ? sheet.domain : null}
+        onSelectSensorSheet={(domain) => setSheet((cur) => (domain ? { kind: 'sensor', domain } : cur?.kind === 'sensor' ? null : cur))}
+        activeEnergySheetView={sheet?.kind === 'energy' ? sheet.view : null}
+        onSelectEnergySheetView={(view) => setSheet((cur) => (view ? { kind: 'energy', view } : cur?.kind === 'energy' ? null : cur))}
       />
     </div>
   );

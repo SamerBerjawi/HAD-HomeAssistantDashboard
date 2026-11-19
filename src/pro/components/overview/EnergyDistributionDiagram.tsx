@@ -124,7 +124,7 @@ export function EnergyDistributionDiagram({
           toRef={gridRef}
           pathWidth={1.5}
           pathOpacity={0.22}
-          gradientStartColor="#10b981"
+          gradientStartColor="var(--success)"
           gradientStopColor="var(--accent)"
           active={d.lowCarbonPct > 0}
           duration={3.4}
@@ -138,8 +138,8 @@ export function EnergyDistributionDiagram({
         routing="orthogonal"
         pathWidth={d.hasSolarToHome ? 2.25 : 1.25}
         pathOpacity={0.22}
-        gradientStartColor="#f59e0b"
-        gradientStopColor="#fb923c"
+        gradientStartColor="var(--energy-solar)"
+        gradientStopColor="var(--warning)"
         active={d.hasSolarToHome}
         duration={2.5}
       />
@@ -150,8 +150,8 @@ export function EnergyDistributionDiagram({
         routing="orthogonal"
         pathWidth={d.hasSolarToGrid ? 2 : 1.25}
         pathOpacity={0.2}
-        gradientStartColor="#f59e0b"
-        gradientStopColor="#818cf8"
+        gradientStartColor="var(--energy-solar)"
+        gradientStopColor="var(--energy-export)"
         active={d.hasSolarToGrid}
         duration={2.6}
       />
@@ -162,7 +162,7 @@ export function EnergyDistributionDiagram({
         curvature={0}
         pathWidth={d.hasSolarToBattery ? 2 : 1.25}
         pathOpacity={0.2}
-        gradientStartColor="#f59e0b"
+        gradientStartColor="var(--energy-solar)"
         gradientStopColor="var(--success)"
         active={d.hasSolarToBattery}
         duration={2.7}
@@ -175,7 +175,7 @@ export function EnergyDistributionDiagram({
         pathWidth={d.hasGridToHome ? 2.25 : 1.25}
         pathOpacity={0.22}
         gradientStartColor="var(--accent)"
-        gradientStopColor="#38bdf8"
+        gradientStopColor="var(--energy-grid)"
         active={d.hasGridToHome}
         duration={2.4}
       />
@@ -187,7 +187,7 @@ export function EnergyDistributionDiagram({
         pathWidth={d.hasBatteryToHome ? 2.25 : 1.25}
         pathOpacity={0.22}
         gradientStartColor="var(--success)"
-        gradientStopColor="#34d399"
+        gradientStopColor="var(--success)"
         active={d.hasBatteryToHome}
         duration={2.5}
       />

@@ -254,7 +254,7 @@ export function PowerSourcesAreaChart({
                 <span className="font-mono text-warning">PV {formatPower(activeDatum.solar)}</span>
               ) : null}
               {activeDatum.gridExport > 0.02 ? (
-                <span className="font-mono text-indigo-400">-{formatPower(activeDatum.gridExport)}</span>
+                <span className="font-mono text-[var(--energy-export)]">-{formatPower(activeDatum.gridExport)}</span>
               ) : activeDatum.gridImport > 0.02 ? (
                 <span className="font-mono text-[var(--accent)]">+{formatPower(activeDatum.gridImport)}</span>
               ) : null}
@@ -280,8 +280,8 @@ export function PowerSourcesAreaChart({
                 <stop offset="100%" stopColor="var(--success)" stopOpacity={0.38} />
               </linearGradient>
               <linearGradient id={`ps-gride-${uid}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#818cf8" stopOpacity={0.04} />
-                <stop offset="100%" stopColor="#818cf8" stopOpacity={0.4} />
+                <stop offset="0%" stopColor="var(--energy-export)" stopOpacity={0.04} />
+                <stop offset="100%" stopColor="var(--energy-export)" stopOpacity={0.4} />
               </linearGradient>
               <clipPath id={`ps-clip-${uid}`}>
                 <motion.rect
@@ -349,7 +349,7 @@ export function PowerSourcesAreaChart({
                   <path d={computed.batChgStroke} fill="none" stroke="var(--success)" strokeOpacity={0.75} strokeWidth={1.4} />
                 ) : null}
                 {computed.anyGridExp ? (
-                  <path d={computed.gridExpStroke} fill="none" stroke="#818cf8" strokeWidth={1.4} />
+                  <path d={computed.gridExpStroke} fill="none" stroke="var(--energy-export)" strokeWidth={1.4} />
                 ) : null}
 
                 {showHome && computed.homeStroke ? (

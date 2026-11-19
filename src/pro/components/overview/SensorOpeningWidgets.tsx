@@ -81,7 +81,7 @@ export function SensorDomainWidgetBody({
   if (size === '1x') {
     return (
       <>
-        {model.isCriticalHazard ? <BorderBeam colorFrom="#ef4444" colorTo="#f97316" /> : null}
+        {model.isCriticalHazard ? <BorderBeam colorFrom="var(--danger)" colorTo="var(--warning)" /> : null}
 
         <div className="relative z-[1] flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
@@ -123,7 +123,7 @@ export function SensorDomainWidgetBody({
     const preview = model.items.slice(0, 3);
     return (
       <>
-        {model.isCriticalHazard ? <BorderBeam colorFrom="#ef4444" colorTo="#f97316" /> : null}
+        {model.isCriticalHazard ? <BorderBeam colorFrom="var(--danger)" colorTo="var(--warning)" /> : null}
 
         <div className="relative z-[1] flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -193,7 +193,7 @@ export function SensorDomainWidgetBody({
 
   return (
     <>
-      {model.isCriticalHazard ? <BorderBeam colorFrom="#ef4444" colorTo="#f97316" /> : null}
+      {model.isCriticalHazard ? <BorderBeam colorFrom="var(--danger)" colorTo="var(--warning)" /> : null}
 
       <div className="relative z-[1] flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -212,7 +212,7 @@ export function SensorDomainWidgetBody({
             </Badge>
           </div>
 
-          <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+          <div data-card-click="ignore" onPointerDown={(e) => e.stopPropagation()}>
             <ToggleButtonGroup
               aria-label={`Filter ${model.title}`}
               size="sm"
@@ -288,7 +288,7 @@ export function SensorDomainWidgetBody({
 
         <div
           className="mt-auto flex items-center justify-between pt-0.5"
-          onClick={(e) => e.stopPropagation()}
+          data-card-click="ignore"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <span className="text-xs text-muted">

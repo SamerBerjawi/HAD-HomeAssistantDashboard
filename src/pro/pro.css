@@ -123,9 +123,33 @@
   --chart-1: var(--accent);
   --chart-2: var(--success);
   --chart-3: var(--warning);
-  --chart-4: #818cf8;
+  --chart-4: var(--energy-export);
   --chart-5: var(--success);
+  /* Energy series colours (audit P2, 2026-11-19): one place for light and dark, AA on surfaces. */
+  --energy-solar: var(--warning);
+  --energy-battery: oklch(0.6 0.118 184.7);
+  --energy-grid: oklch(0.588 0.158 241.97);
+  --energy-export: oklch(0.511 0.262 276.97);
+  --energy-gas: oklch(0.558 0.252 302.32);
+  --energy-untracked: oklch(0.554 0.046 257.42);
+}
+.dark .pro,
+.pro.dark {
+  --energy-battery: oklch(0.777 0.152 181.91);
+  --energy-grid: oklch(0.746 0.16 232.66);
+  --energy-export: oklch(0.673 0.182 276.94);
+  --energy-gas: oklch(0.714 0.203 305.5);
+  --energy-untracked: oklch(0.704 0.04 256.79);
 }
 .pro .text-chart-label {
   color: var(--chart-label);
+}
+
+/* Touch targets (DESIGN.md 6, audit P2 2026-11-19): small edit-mode controls grow to 44 px on
+ * touch screens; mouse layouts keep their compact size. */
+@media (pointer: coarse) {
+  .pro .pro-touch-44 {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
 }

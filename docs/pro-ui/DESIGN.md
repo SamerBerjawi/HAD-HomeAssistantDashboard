@@ -391,6 +391,41 @@ Implementation notes:
 | Energy widgets | **Full 8-widget Home Assistant Energy Suite built as calm `.pro-surface` HeroUI composed cards across `1x`, `2x`, and `2x2` using `@bklit` charts (`PowerSourcesAreaChart`, `BidirectionalBarChart`, `SolarForecastBarChart`, `SankeyChart`, and official `@bklit/gauge-chart` `Gauge` under `src/pro/ui/bklit/gauge/`) plus `Magic UI` (`AnimatedBeam`) re-skinned onto HeroUI tokens and Hugeicons (Option 1 + Option A, refined 2026-11-18).** Visualizations sit directly on the widget's `.pro-surface` card with no nested card-inside-card boxes. **`Power flow` (`power_flow` — Energy distribution):** Diamond node flow using borderless HeroUI mini-cards (`bg-default/55`, soft icon tiles, and `Home` supply split bar) wired with Magic UI `AnimatedBeam` (`src/pro/ui/magicui/AnimatedBeam.tsx`) pulses (`Low-carbon` node shown on `2x2`). **`Power flow (12h)` (`power_flow_chart` — Power sources):** `bklit UI` bidirectional zero-baseline stacked area chart (`src/pro/ui/bklit/PowerSourcesAreaChart.tsx`) aggregated in **10-minute intervals** (`step = 2` on 5-minute `powerBuckets`) with airy HeroUI token gradients (`--warning`, `--success`, `--accent`, `#818cf8`), dashed `Consumption` overlay, scrub tooltip, and clickable legend pills. **`Energy usage` (`energy_usage`):** Total `kWh` + net cost `Badge` + flat borderless `Grid energy balance` center-zero pill bar (`import - export = net`). **`Energy usage (hourly)` (`energy_usage_chart` — Electricity):** `bklit UI` bidirectional stacked bar chart (`src/pro/ui/bklit/BidirectionalBarChart.tsx`) with borderless rounded HeroUI tonal bars, scrub tooltip, and series toggles. **`Solar production` (`solar_production`):** Yield `kWh` + live `kW` `Badge` + official `@bklit/gauge-chart` semicircular `Gauge` (`startAngle={-90}`, `endAngle={90}`, solid rounded arc + ruler) (`1x`/`2x`) and forecast curve (`2x2`). **`Solar forecast (chart)` (`solar_production_chart`):** 24 h amber gradient rounded bars overlaid with dashed `Solar forecast` curve (`src/pro/ui/bklit/SolarForecastBarChart.tsx`). **`Grid balance & gauges` (`energy_gauges`):** Flat borderless `Grid energy balance` bar + up to 4 official `@bklit/gauge-chart` semicircular `Gauge` arcs (`src/pro/ui/bklit/GaugeChart.tsx`, using `zones` + `needle` on bipolar net grid). **`Energy flow` (`energy_flow`):** Left-to-right `bklit UI` `SankeyChart` (`src/pro/ui/bklit/SankeyChart.tsx`) tracing `Sources` -> `Home` -> `Floors` -> `Areas` -> `Tracked devices` + `Untracked consumption`. When `useEnergyData()` returns no buckets yet, charts show an honest awaiting-statistics notice rather than synthetic fallback curves. |
 | Energy detail sheet | **`ProSheet` (`Drawer` on phones `<768 px`, `Modal` `size="lg"` from `768 px` up, Option A)** (`src/pro/components/overview/EnergyDetailSheet.tsx`) opening to the tapped widget's focus (`Distribution & power`, `Electricity`, `Solar & forecast`, `Energy flow`, or `Gauges & balance` via wrapped HeroUI `ToggleButtonGroup`), with `Day` / `Week` / `Month` period `ToggleButtonGroup` (`useEnergyData`), 4-card KPI grid, single `.pro-surface` container wrapping the active full-size interactive chart/diagram (10-min `PowerSourcesAreaChart`, `BidirectionalBarChart`, `SolarForecastBarChart`, `SankeyChart`, or `GridBalanceBar` + 4 `@bklit/gauge-chart` semicircular `Gauge` dials), top tracked consumers, and a `"Full Energy Analytics"` HeroUI `Button` to `/energy`. |
 
+Audit fixes (2026-11-19, owner approved P1 + P2):
+- bklit charts measure their width with `useMeasuredWidth` (`src/pro/ui/bklit/useBklitChartBox.ts`),
+  a callback ref that starts measuring when the chart element appears. Charts that first render
+  their "awaiting statistics" placeholder used to stay at the 260 px fallback and draw small in
+  the middle of the card.
+- Demo statistics: `*_energy` sensors of gas/water appliances are generated as kWh, not gas or
+  water volume (`sensor.water_heater_energy` showed 288 kWh). Test: `tests/energyDemoStatistics.test.ts`.
+- Energy colours are tokens in `pro.css` (`--energy-solar`, `--energy-battery`, `--energy-grid`,
+  `--energy-export`, `--energy-gas`, `--energy-untracked`, light and dark values; `--chart-4` =
+  export). No hex or Tailwind palette colours left in the energy widgets, charts, beams or hazard
+  `BorderBeam` (`--danger` → `--warning`). Export text is AA in light mode (was indigo-400, 2.9:1).
+- Gauges (`ArcGauge`) are `role="img"` with "label: value".
+- Edit-mode controls (drag, move, hide, resize corner, section buttons) are 44 px on touch screens
+  (`.pro-touch-44`, `pointer: coarse`); mouse layouts unchanged.
+- Resize corner keys follow sliders: Right/Up grow, Left/Down shrink, Home/End.
+
+Audit fixes P3 + P4 (2026-11-19, owner approved):
+- Grouped view: Family presence gets its own **People** section (agent's call; it was filed under
+  Security). Its open button goes to the Security tab (`sectionTab('people')`), since there is no
+  People tab. `src/pro/lib/overviewSections.ts`.
+- Add widgets sheet categories are the Overview tabs (same labels, icons and order).
+- Edit mode has one Done control, the tab-row toggle; the second one in the action bar is gone.
+- Top consumers hides devices under 0.005 kWh.
+- Masonry row spans come from one hook, `useMasonryRowSpan` (`src/pro/ui/magicui/BentoGrid.tsx`),
+  used by cards, sections and `BentoCard`.
+- Card clicks: `SortableWidgetCard` opens details unless the click started on a control
+  (`CARD_CLICK_IGNORE`: buttons, links, form fields, sliders, switches, or `data-card-click="ignore"`).
+  Widgets no longer stop click propagation; control rows that also stop `pointerdown` (so dragging
+  doesn't start on them) carry `data-card-click="ignore"`. Presence member cards and the charts'
+  scrub guard keep their own handlers.
+- Sheets: ProOverview keeps one `OverviewSheet` value (`src/pro/lib/overviewSheets.ts`) instead of
+  ten booleans, so only one sheet is open at a time. Widget and pill mapping is pure and tested.
+- Re-renders: widget bodies are memoized (`components/overview/memoWidgetBodies.ts`), ProOverview
+  passes stable handlers, and empty store values fall back to shared constants.
+
 ### 7.7 Notification center — status: BUILT (2026-11-19)
 
 Reimagined from the ground up; replaces the classic `NotificationDrawer` in the pro app only
@@ -570,6 +605,8 @@ Append only. One row per decision. Newest at the bottom.
 | 2026-11-19 | Toasts: events | Security changes, doors/windows, appliances + HA messages, errors + confirmations | All groups |
 | 2026-11-19 | Emergency alert | Red full-screen AlertDialog + persistent red toast | Open Security instead of room: agent's call |
 | 2026-11-19 | Emergency triggers | Binary sensors only (smoke, gas, CO, moisture, safety; name words only without a device class) + alarm triggered | Fixes floodlight → water leak; also fixes classic |
+| 2026-11-19 | Overview audit: P1 + P2 fixes | Chart width measuring, demo kWh, energy colour tokens, gauge labels, 44 px touch targets, slider keys | Owner approved P1 + P2; P3/P4 done next |
+| 2026-11-19 | Overview audit: P3 + P4 fixes | People section, tab categories in Add widgets, one Done, card-click guard, one sheet state, memoized widget bodies | Owner approved; People section placement is the agent's call |
 
 ## 10. Notes for other agents
 

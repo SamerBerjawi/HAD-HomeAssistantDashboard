@@ -179,7 +179,7 @@ export function EnergyUsageWidgetBody({
             centerText={`${model.periodAutarkyPct}%`}
             label="Self-sufficiency"
             icon={Sun01Icon}
-            accentColor={model.periodAutarkyPct >= 50 ? '#10b981' : '#f59e0b'}
+            accentColor={model.periodAutarkyPct >= 50 ? 'var(--success)' : 'var(--energy-solar)'}
             compact
           />
           <ArcGauge
@@ -188,7 +188,7 @@ export function EnergyUsageWidgetBody({
             centerText={`${model.selfConsumptionPct}%`}
             label="Self-consumed solar"
             icon={SolarPanel01Icon}
-            accentColor="#10b981"
+            accentColor="var(--success)"
             compact
           />
         </div>
@@ -289,7 +289,7 @@ export function SolarProductionWidgetBody({
           centerText={`${model.selfConsumptionPct}%`}
           label="Self-consumed solar"
           icon={SolarPanel01Icon}
-          accentColor="#10b981"
+          accentColor="var(--success)"
           compact
         />
       ) : (
@@ -300,7 +300,7 @@ export function SolarProductionWidgetBody({
             centerText={`${model.selfConsumptionPct}%`}
             label="Self-consumed solar"
             icon={SolarPanel01Icon}
-            accentColor="#10b981"
+            accentColor="var(--success)"
             compact={size === '2x'}
           />
           <ArcGauge
@@ -309,7 +309,7 @@ export function SolarProductionWidgetBody({
             centerText={`${model.solarForecastPct}%`}
             label={model.solarForecastKwh !== null ? 'Forecast target' : 'Solar utilization'}
             icon={Calendar03Icon}
-            accentColor="#f59e0b"
+            accentColor="var(--energy-solar)"
             compact={size === '2x'}
           />
         </div>
@@ -370,15 +370,15 @@ export function SolarProductionChartWidgetBody({
       {size === '2x2' ? (
         <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-muted">
           <span className="inline-flex items-center gap-1">
-            <HugeiconsIcon icon={SolarPanel01Icon} size={12} className="text-amber-500" />
+            <HugeiconsIcon icon={SolarPanel01Icon} size={12} className="text-[var(--energy-solar)]" />
             Home <strong className="font-mono text-foreground">{model.solarToHomeKwh.toFixed(1)} kWh</strong>
           </span>
           <span className="inline-flex items-center gap-1">
-            <HugeiconsIcon icon={BatteryFullIcon} size={12} className="text-teal-400" />
+            <HugeiconsIcon icon={BatteryFullIcon} size={12} className="text-[var(--energy-battery)]" />
             Battery <strong className="font-mono text-foreground">{model.solarToBatteryKwh.toFixed(1)} kWh</strong>
           </span>
           <span className="inline-flex items-center gap-1">
-            <HugeiconsIcon icon={PlugSocketIcon} size={12} className="text-indigo-400" />
+            <HugeiconsIcon icon={PlugSocketIcon} size={12} className="text-[var(--energy-export)]" />
             Export <strong className="font-mono text-foreground">{model.gridExportKwhText}</strong>
           </span>
         </div>

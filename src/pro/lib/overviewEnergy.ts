@@ -508,7 +508,8 @@ export function buildOverviewEnergyModel(input: OverviewEnergyInput): ProOvervie
     : Math.max(solarKW, ...solarForecastSeries.map((p) => p.solar));
 
   const topConsumers: ProEnergyConsumer[] = [...(input.devices || [])]
-    .filter((d) => cleanNum(d.kwh) >= 0)
+    // Devices that used nothing in the period aren't consumers (audit P3, 2026-11-19).
+    .filter((d) => cleanNum(d.kwh) > 0.005)
     .sort((a, b) => cleanNum(b.kwh) - cleanNum(a.kwh))
     .slice(0, 5)
     .map((d) => {

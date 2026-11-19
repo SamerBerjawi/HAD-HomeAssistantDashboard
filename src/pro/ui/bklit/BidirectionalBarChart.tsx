@@ -205,7 +205,7 @@ export function BidirectionalBarChart({
                 {activeBar.posTotal.toFixed(2)} kWh
               </span>
               {activeBar.negTotal > 0.01 ? (
-                <span className="font-mono text-indigo-400">-{activeBar.negTotal.toFixed(2)} kWh</span>
+                <span className="font-mono text-[var(--energy-export)]">-{activeBar.negTotal.toFixed(2)} kWh</span>
               ) : null}
             </div>
           ) : null}
@@ -321,7 +321,7 @@ export function BidirectionalBarChart({
                               y={computed.zeroY + bar.hBc}
                               width={bar.barW}
                               height={bar.hGe}
-                              fill="#818cf8"
+                              fill="var(--energy-export)"
                             />
                           ) : null}
                         </g>
@@ -401,7 +401,7 @@ export function BidirectionalBarChart({
             onClick={(e) => e.stopPropagation()}
             onPress={() => setShowGridExp((v) => !v)}
           >
-            <HugeiconsIcon icon={ArrowUp01Icon} size={11} className="text-indigo-400" />
+            <HugeiconsIcon icon={ArrowUp01Icon} size={11} className="text-[var(--energy-export)]" />
             <span>Export</span>
           </Button>
         </div>

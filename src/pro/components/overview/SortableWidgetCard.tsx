@@ -1,10 +1,10 @@
 import {
   useCallback,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
   type ReactNode
 } from 'react';
@@ -35,10 +35,13 @@ import {
   type ProWidgetLiveSummary,
   type ProWidgetSize
 } from '../../lib/overviewWidgets';
+import { useMasonryRowSpan } from '../../ui/magicui/BentoGrid';
 import { widgetIcon } from './widgetIcons';
 
-const ROW_PX = 4;
-const GAP_PX = 12;
+
+/** Clicks starting on these never open the card's details. */
+export const CARD_CLICK_IGNORE =
+  'button, a, input, select, textarea, label, [role="slider"], [role="switch"], [role="checkbox"], [role="radio"], [data-slot^="slider"], [data-card-click="ignore"]';
 
 const BADGE_ICON_TONE: Record<PillTone, string> = {
   default: 'pro-soft',
@@ -109,29 +112,7 @@ export function SortableWidgetCard({
     startSize: ProWidgetSize;
   } | null>(null);
 
-  useLayoutEffect(() => {
-    const el = cardRef.current;
-    if (!el) return;
-    let rafId = 0;
-    const fit = () => {
-      const span = Math.max(
-        1,
-        Math.ceil((el.getBoundingClientRect().height + GAP_PX) / (ROW_PX + GAP_PX))
-      );
-      el.style.gridRowEnd = `span ${span}`;
-    };
-    const scheduleFit = () => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      rafId = window.requestAnimationFrame(fit);
-    };
-    fit();
-    const observer = new ResizeObserver(scheduleFit);
-    observer.observe(el);
-    return () => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      observer.disconnect();
-    };
-  }, [size, isEditMode, summary.headline, summary.subtitle, summary.detail]);
+  useMasonryRowSpan(cardRef);
 
   const handleResizePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
@@ -173,17 +154,27 @@ export function SortableWidgetCard({
     }
   };
 
+  // Standard slider keys: Right/Up grow, Left/Down shrink, Home/End jump to the ends.
   const handleResizeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const idx = PREDEFINED_WIDGET_SIZES.indexOf(size);
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      const next = PREDEFINED_WIDGET_SIZES[Math.min(PREDEFINED_WIDGET_SIZES.length - 1, idx + 1)];
-      if (next && next !== size) onSetSize(next);
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      const prev = PREDEFINED_WIDGET_SIZES[Math.max(0, idx - 1)];
-      if (prev && prev !== size) onSetSize(prev);
-    }
+    const last = PREDEFINED_WIDGET_SIZES.length - 1;
+    let target = idx;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') target = Math.min(last, idx + 1);
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') target = Math.max(0, idx - 1);
+    else if (e.key === 'Home') target = 0;
+    else if (e.key === 'End') target = last;
+    else return;
+    e.preventDefault();
+    const next = PREDEFINED_WIDGET_SIZES[target];
+    if (next && next !== size) onSetSize(next);
+  };
+
+  // One rule for opening details from the card (audit P4, 2026-11-19): a click opens it unless
+  // it started on a control inside the card. Widgets no longer stop click propagation themselves.
+  const handleCardClick = (e: MouseEvent<HTMLElement>) => {
+    const target = e.target instanceof Element ? e.target.closest(CARD_CLICK_IGNORE) : null;
+    if (target && target !== e.currentTarget && e.currentTarget.contains(target)) return;
+    onOpenDetails?.();
   };
 
   const style: CSSProperties = {
@@ -207,7 +198,7 @@ export function SortableWidgetCard({
       aria-label={widget.title}
       data-widget-id={widget.id}
       data-widget-size={size}
-      onClick={isInteractive ? onOpenDetails : undefined}
+      onClick={isInteractive ? handleCardClick : undefined}
       className={cn(
         'pro-surface @container isolate relative flex min-w-0 flex-col justify-between gap-3 self-start p-4 transition-opacity',
         size === '2x2' && 'min-h-56 p-5',
@@ -230,7 +221,7 @@ export function SortableWidgetCard({
                 size="sm"
                 variant="tertiary"
                 aria-label={`Drag to reorder ${widget.title}`}
-                className="cursor-grab touch-none active:cursor-grabbing"
+                className="pro-touch-44 cursor-grab touch-none active:cursor-grabbing"
                 {...attributes}
                 {...listeners}
               >
@@ -267,6 +258,7 @@ export function SortableWidgetCard({
                 isIconOnly
                 size="sm"
                 variant="ghost"
+                className="pro-touch-44"
                 isDisabled={!canMoveLeft}
                 aria-label={`Move ${widget.title} earlier`}
                 onPress={onMoveLeft}
@@ -281,6 +273,7 @@ export function SortableWidgetCard({
                 isIconOnly
                 size="sm"
                 variant="ghost"
+                className="pro-touch-44"
                 isDisabled={!canMoveRight}
                 aria-label={`Move ${widget.title} later`}
                 onPress={onMoveRight}
@@ -295,6 +288,7 @@ export function SortableWidgetCard({
                 isIconOnly
                 size="sm"
                 variant="ghost"
+                className="pro-touch-44"
                 aria-label={isHidden ? `Show ${widget.title}` : `Hide ${widget.title}`}
                 onPress={onToggleHide}
               >
@@ -408,7 +402,7 @@ export function SortableWidgetCard({
               onPointerCancel={(e) => finishResize(e, false)}
               onKeyDown={handleResizeKeyDown}
               className={cn(
-                'absolute right-1.5 bottom-1.5 z-20 flex size-8 cursor-nwse-resize items-center justify-center rounded-xl transition-colors select-none touch-none focus-visible:outline-2 focus-visible:outline-[var(--accent)]',
+                'pro-touch-44 absolute right-1.5 bottom-1.5 z-20 flex size-8 cursor-nwse-resize items-center justify-center rounded-xl transition-colors select-none touch-none focus-visible:outline-2 focus-visible:outline-[var(--accent)]',
                 isResizing
                   ? 'pro-accent shadow-sm'
                   : 'bg-default/65 text-muted hover:bg-default hover:text-foreground'

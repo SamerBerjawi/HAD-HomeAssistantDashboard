@@ -48,7 +48,7 @@ export function EnergyGaugesWidgetBody({
             centerText={`${model.periodAutarkyPct}%`}
             label="Self-sufficiency"
             icon={Sun01Icon}
-            accentColor="#f59e0b"
+            accentColor="var(--energy-solar)"
             compact
           />
         </div>
@@ -68,7 +68,7 @@ export function EnergyGaugesWidgetBody({
             centerText={`${model.selfConsumptionPct}%`}
             label="Solar self-use"
             icon={SolarPanel01Icon}
-            accentColor="#10b981"
+            accentColor="var(--success)"
             compact={size === '2x'}
           />
           <ArcGauge
@@ -77,7 +77,7 @@ export function EnergyGaugesWidgetBody({
             centerText={`${model.periodAutarkyPct}%`}
             label="Self-sufficiency"
             icon={Sun01Icon}
-            accentColor={model.periodAutarkyPct >= 50 ? '#10b981' : '#f59e0b'}
+            accentColor={model.periodAutarkyPct >= 50 ? 'var(--success)' : 'var(--energy-solar)'}
             compact={size === '2x'}
           />
           <ArcGauge
@@ -86,7 +86,7 @@ export function EnergyGaugesWidgetBody({
             centerText={`${model.solarForecastKwh !== null ? model.solarForecastPct : model.distribution.lowCarbonPct}%`}
             label={model.solarForecastKwh !== null ? 'Solar forecast goal' : 'Clean solar share'}
             icon={Leaf01Icon}
-            accentColor="#10b981"
+            accentColor="var(--success)"
             compact={size === '2x'}
           />
         </div>

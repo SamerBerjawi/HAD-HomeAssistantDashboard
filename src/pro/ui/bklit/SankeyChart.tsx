@@ -3,7 +3,8 @@
  * adapted for HAD pro Energy Flow (`Sources -> Home -> Floors -> Areas -> Devices + Untracked`)
  * onto HeroUI design tokens, motion transitions, and interactive hover/tap tooltips.
  */
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
+import { useMeasuredWidth } from './useBklitChartBox';
 import { cn } from '@/lib/utils';
 
 export interface ProSankeyNodeInput {
@@ -56,31 +57,11 @@ export function SankeyChart({
   className,
   ariaLabel = 'Energy flow Sankey diagram'
 }: SankeyChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
+  const { ref: containerRef, width: containerWidth } = useMeasuredWidth<HTMLDivElement>();
   const [hoveredLinkId, setHoveredLinkId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const uid = useId();
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let rafId = 0;
-    const measure = () => {
-      const next = Math.round(el.clientWidth || el.getBoundingClientRect().width);
-      if (next > 0) setContainerWidth(next);
-    };
-    measure();
-    const observer = new ResizeObserver(() => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      rafId = window.requestAnimationFrame(measure);
-    });
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   const width = containerWidth > 0 ? containerWidth : 440;
   const isNarrow = compact || width < 420;

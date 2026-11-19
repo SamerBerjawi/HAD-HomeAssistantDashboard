@@ -10,10 +10,17 @@ import {
   type ProWidgetSize
 } from './overviewWidgets';
 
-export type OverviewSectionId = Exclude<OverviewTabId, 'all'>;
+/** Sections follow the tabs, plus People (presence has no tab of its own; audit P3, 2026-11-19). */
+export type OverviewSectionId = Exclude<OverviewTabId, 'all'> | 'people';
+
+/** The tab a section's "open" button filters to (People lives on the Security tab). */
+export function sectionTab(id: OverviewSectionId): Exclude<OverviewTabId, 'all'> {
+  return id === 'people' ? 'security' : id;
+}
 
 export const DEFAULT_OVERVIEW_SECTION_ORDER: readonly OverviewSectionId[] = [
   'climate',
+  'people',
   'lights',
   'switches',
   'energy',
@@ -33,7 +40,8 @@ export const OVERVIEW_SECTION_LABELS: Record<OverviewSectionId, string> = {
   climate: 'Climate',
   openings: 'Doors & windows',
   media: 'Media',
-  vacuums: 'Vacuums'
+  vacuums: 'Vacuums',
+  people: 'People'
 };
 
 export interface OverviewSectionGroup {
@@ -96,9 +104,10 @@ export function withProSectionOrder(
  * never duplicate across two sections on the grouped `All` tab.
  */
 export function primarySectionForWidget(widget: ProWidgetCatalogItem): OverviewSectionId {
+  if (widget.id === 'users') return 'people';
   if (widget.tabs.includes('cameras')) return 'cameras';
   if (widget.tabs.includes('openings')) return 'openings';
-  const first = widget.tabs.find((tab): tab is OverviewSectionId => tab !== 'all');
+  const first = widget.tabs.find((tab): tab is Exclude<OverviewTabId, 'all'> => tab !== 'all');
   return first ?? 'climate';
 }
 

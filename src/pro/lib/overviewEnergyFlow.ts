@@ -24,7 +24,7 @@ export interface EnergySankeySourceInput {
   floors?: HAFloor[];
 }
 
-const DEVICE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#6366f1', '#14b8a6', '#64748b'];
+const DEVICE_COLORS = ['var(--chart-1)', 'var(--success)', 'var(--energy-solar)', 'var(--energy-export)', 'var(--energy-battery)', 'var(--energy-untracked)'];
 
 export function buildEnergySankeyGraph(
   input: EnergySankeySourceInput,
@@ -54,15 +54,15 @@ export function buildEnergySankeyGraph(
       label: 'Battery',
       value: batIn,
       column: 0,
-      color: '#2dd4bf'
+      color: 'var(--energy-battery)'
     });
     links.push({
       id: 'lk_srcbat_home',
       source: 'src_battery',
       target: 'node_home',
       value: batIn,
-      sourceColor: '#2dd4bf',
-      targetColor: '#f59e0b'
+      sourceColor: 'var(--energy-battery)',
+      targetColor: 'var(--energy-solar)'
     });
   }
 
@@ -72,15 +72,15 @@ export function buildEnergySankeyGraph(
       label: 'Grid',
       value: fallbackGrid,
       column: 0,
-      color: '#0284c7'
+      color: 'var(--energy-grid)'
     });
     links.push({
       id: 'lk_srcgrid_home',
       source: 'src_grid',
       target: 'node_home',
       value: fallbackGrid,
-      sourceColor: '#0284c7',
-      targetColor: '#f59e0b'
+      sourceColor: 'var(--energy-grid)',
+      targetColor: 'var(--energy-solar)'
     });
   }
 
@@ -90,7 +90,7 @@ export function buildEnergySankeyGraph(
       label: 'Solar',
       value: solarOut,
       column: 0,
-      color: '#f59e0b'
+      color: 'var(--energy-solar)'
     });
     if (input.solarToHomeKwh > 0.01) {
       links.push({
@@ -98,8 +98,8 @@ export function buildEnergySankeyGraph(
         source: 'src_solar',
         target: 'node_home',
         value: input.solarToHomeKwh,
-        sourceColor: '#f59e0b',
-        targetColor: '#f59e0b'
+        sourceColor: 'var(--energy-solar)',
+        targetColor: 'var(--energy-solar)'
       });
     }
   }
@@ -110,7 +110,7 @@ export function buildEnergySankeyGraph(
     label: 'Home',
     value: homeTotal,
     column: 1,
-    color: '#f59e0b'
+    color: 'var(--energy-solar)'
   });
 
   // Sort & cap tracked devices
@@ -179,15 +179,15 @@ export function buildEnergySankeyGraph(
           label: fMeta.label,
           value: fMeta.value,
           column: floorCol,
-          color: '#f59e0b'
+          color: 'var(--energy-solar)'
         });
         links.push({
           id: `lk_home_${fKey}`,
           source: 'node_home',
           target: fKey,
           value: fMeta.value,
-          sourceColor: '#f59e0b',
-          targetColor: '#f59e0b'
+          sourceColor: 'var(--energy-solar)',
+          targetColor: 'var(--energy-solar)'
         });
       }
     }
@@ -198,7 +198,7 @@ export function buildEnergySankeyGraph(
         label: aMeta.label,
         value: aMeta.value,
         column: areaCol,
-        color: '#f59e0b'
+        color: 'var(--energy-solar)'
       });
       const parentId = hasFloors && aMeta.floorKey ? aMeta.floorKey : 'node_home';
       links.push({
@@ -206,8 +206,8 @@ export function buildEnergySankeyGraph(
         source: parentId,
         target: aKey,
         value: aMeta.value,
-        sourceColor: '#f59e0b',
-        targetColor: '#f59e0b'
+        sourceColor: 'var(--energy-solar)',
+        targetColor: 'var(--energy-solar)'
       });
     }
 
@@ -226,7 +226,7 @@ export function buildEnergySankeyGraph(
         source: aKey,
         target: devNodeId,
         value: dev.kwh,
-        sourceColor: '#f59e0b',
+        sourceColor: 'var(--energy-solar)',
         targetColor: dev.color
       });
     }
@@ -245,7 +245,7 @@ export function buildEnergySankeyGraph(
         source: 'node_home',
         target: devNodeId,
         value: dev.kwh,
-        sourceColor: '#f59e0b',
+        sourceColor: 'var(--energy-solar)',
         targetColor: dev.color
       });
     }
@@ -257,15 +257,15 @@ export function buildEnergySankeyGraph(
       label: 'Other devices',
       value: overflowKwh,
       column: leafCol,
-      color: '#64748b'
+      color: 'var(--energy-untracked)'
     });
     links.push({
       id: 'lk_home_other',
       source: 'node_home',
       target: 'dev_other',
       value: overflowKwh,
-      sourceColor: '#f59e0b',
-      targetColor: '#64748b'
+      sourceColor: 'var(--energy-solar)',
+      targetColor: 'var(--energy-untracked)'
     });
   }
 
@@ -277,15 +277,15 @@ export function buildEnergySankeyGraph(
       label: 'Untracked consumption',
       value: val,
       column: leafCol,
-      color: '#475569'
+      color: 'var(--energy-untracked)'
     });
     links.push({
       id: 'lk_home_untracked',
       source: 'node_home',
       target: 'dev_untracked',
       value: val,
-      sourceColor: '#f59e0b',
-      targetColor: '#475569'
+      sourceColor: 'var(--energy-solar)',
+      targetColor: 'var(--energy-untracked)'
     });
   }
 
@@ -298,15 +298,15 @@ export function buildEnergySankeyGraph(
         label: 'Battery charge',
         value: input.solarToBatteryKwh,
         column: leafCol,
-        color: '#a855f7'
+        color: 'var(--energy-gas)'
       });
       links.push({
         id: 'lk_srcsolar_sinkbat',
         source: 'src_solar',
         target: 'sink_battery',
         value: input.solarToBatteryKwh,
-        sourceColor: '#f59e0b',
-        targetColor: '#a855f7'
+        sourceColor: 'var(--energy-solar)',
+        targetColor: 'var(--energy-gas)'
       });
     }
     if (input.solarToGridKwh > 0.01) {
@@ -315,15 +315,15 @@ export function buildEnergySankeyGraph(
         label: 'Grid export',
         value: input.solarToGridKwh,
         column: leafCol,
-        color: '#6366f1'
+        color: 'var(--energy-export)'
       });
       links.push({
         id: 'lk_srcsolar_sinkgrid',
         source: 'src_solar',
         target: 'sink_grid',
         value: input.solarToGridKwh,
-        sourceColor: '#f59e0b',
-        targetColor: '#6366f1'
+        sourceColor: 'var(--energy-solar)',
+        targetColor: 'var(--energy-export)'
       });
     }
   }

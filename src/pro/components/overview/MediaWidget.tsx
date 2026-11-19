@@ -168,7 +168,7 @@ export function MediaWidgetBody({
 
           <div
             className="flex items-center justify-between gap-1.5"
-            onClick={(e) => e.stopPropagation()}
+            data-card-click="ignore"
             onPointerDown={(e) => e.stopPropagation()}
           >
             <ProMediaTransportControls
@@ -311,7 +311,7 @@ export function MediaWidgetBody({
               <div />
             )}
 
-            <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end">
               <Button
                 size="sm"
                 variant="tertiary"
@@ -368,7 +368,7 @@ export function MediaWidgetBody({
             orientation="horizontal"
             hideScrollBar
             className="flex items-center gap-1.5 pb-0.5"
-            onClick={(e) => e.stopPropagation()}
+            data-card-click="ignore"
             onPointerDown={(e) => e.stopPropagation()}
           >
             {model.players.map((p) => {
@@ -454,7 +454,7 @@ export function MediaWidgetBody({
 
         <div
           className="flex flex-wrap items-center justify-between gap-2"
-          onClick={(e) => e.stopPropagation()}
+          data-card-click="ignore"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <ProMediaTransportControls

@@ -42,7 +42,7 @@ export function ProFanSpeedSlider({
   return (
     <div
       className="flex items-center gap-2"
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <HugeiconsIcon icon={FastWindIcon} size={13} className="shrink-0 text-[var(--accent)]" />
@@ -231,7 +231,7 @@ export function FansWidgetBody({
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
           <ToggleButtonGroup
             aria-label="Filter fans"
             size="sm"
@@ -288,7 +288,7 @@ export function FansWidgetBody({
                   </p>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <div className="flex shrink-0 items-center gap-1.5">
                   {fan.supportsOscillation ? (
                     <Button
                       isIconOnly
@@ -321,7 +321,7 @@ export function FansWidgetBody({
         </div>
       )}
 
-      <div className="mt-auto flex items-center justify-between pt-0.5" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-auto flex items-center justify-between pt-0.5">
         <span className="text-xs text-muted">
           {model.totalCount > visibleItems.length
             ? `Showing ${visibleItems.length} of ${model.totalCount} fans`
@@ -407,7 +407,7 @@ export function VacuumsWidgetBody({
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1.5">
           <Button
             size="sm"
             variant={canPause ? 'secondary' : 'primary'}
@@ -484,7 +484,7 @@ export function VacuumsWidgetBody({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant={canPause ? 'secondary' : 'primary'}
@@ -568,7 +568,7 @@ export function VacuumsWidgetBody({
       </div>
 
       {primary.fanSpeedList.length > 0 ? (
-        <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium text-muted">Suction mode</span>
           <ToggleButtonGroup
             aria-label={`Suction mode for ${primary.name}`}
@@ -593,7 +593,7 @@ export function VacuumsWidgetBody({
         </div>
       ) : null}
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-0.5" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-0.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <Button
             size="sm"

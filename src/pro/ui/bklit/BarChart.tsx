@@ -4,7 +4,8 @@
  * --separator) with pointer-scrubbing crosshair pill tooltips and motion/react entrance.
  */
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useMeasuredWidth } from './useBklitChartBox';
 import { cn } from '@/lib/utils';
 
 export interface BklitBarDatum {
@@ -43,31 +44,11 @@ export function BarChart({
   secondaryColor = 'var(--success)',
   ariaLabel = 'Energy usage bar chart'
 }: BarChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { ref: containerRef, nodeRef: containerNodeRef, width: containerWidth } = useMeasuredWidth<HTMLDivElement>();
   const scrubbedRef = useRef(false);
   const pointerDownXRef = useRef<number | null>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let rafId = 0;
-    const measure = () => {
-      const next = Math.round(el.getBoundingClientRect().width);
-      if (next > 0) setContainerWidth(next);
-    };
-    measure();
-    const observer = new ResizeObserver(() => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      rafId = window.requestAnimationFrame(measure);
-    });
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   const width = containerWidth > 0 ? containerWidth : 320;
   const innerWidth = Math.max(40, width - MARGIN.left - MARGIN.right);
@@ -152,7 +133,7 @@ export function BarChart({
 
   const updateIndexFromClientX = useCallback(
     (clientX: number) => {
-      const el = containerRef.current;
+      const el = containerNodeRef.current;
       if (!el || bars.length === 0) return;
       const rect = el.getBoundingClientRect();
       const relX = Math.max(0, Math.min(innerWidth, clientX - rect.left - MARGIN.left));

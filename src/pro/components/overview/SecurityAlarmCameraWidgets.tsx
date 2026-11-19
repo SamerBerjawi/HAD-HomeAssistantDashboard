@@ -76,7 +76,7 @@ export function SecurityAlarmWidgetBody({
 
   return (
     <>
-      {model.isTriggered ? <BorderBeam colorFrom="#ef4444" colorTo="#f97316" /> : null}
+      {model.isTriggered ? <BorderBeam colorFrom="var(--danger)" colorTo="var(--warning)" /> : null}
 
       <div className="relative z-[1] flex flex-col gap-2.5">
         <div className="flex items-start justify-between gap-2.5">
@@ -127,7 +127,7 @@ export function SecurityAlarmWidgetBody({
               </span>
             ) : null}
             {model.openingsCount > 0 ? (
-              <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+              <div data-card-click="ignore" onPointerDown={(e) => e.stopPropagation()}>
                 <Button size="sm" variant="tertiary" className="h-6 px-2 text-[11px]" onPress={onOpenOpenings}>
                   <HugeiconsIcon icon={Alert02Icon} size={12} className="text-warning" />
                   <span>{model.openingsCount} open</span>
@@ -146,7 +146,7 @@ export function SecurityAlarmWidgetBody({
         {size === '1x' ? (
           <div
             className="flex items-center justify-between gap-2 pt-0.5"
-            onClick={(e) => e.stopPropagation()}
+            data-card-click="ignore"
             onPointerDown={(e) => e.stopPropagation()}
           >
             <Button
@@ -183,7 +183,7 @@ export function SecurityAlarmWidgetBody({
                 Door locks ({model.locks.length})
               </span>
               {model.unlockedLocksCount > 0 ? (
-                <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                <div data-card-click="ignore" onPointerDown={(e) => e.stopPropagation()}>
                   <Button size="sm" variant="primary" onPress={() => void onLockAll()}>
                     <HugeiconsIcon icon={SquareLock02Icon} size={13} />
                     Lock all ({model.unlockedLocksCount})
@@ -311,7 +311,7 @@ export function CamerasWidgetBody({
           {size === '2x2' ? (
             <div
               className="flex items-center gap-1"
-              onClick={(e) => e.stopPropagation()}
+              data-card-click="ignore"
               onPointerDown={(e) => e.stopPropagation()}
             >
               <Button
@@ -345,7 +345,7 @@ export function CamerasWidgetBody({
           orientation="horizontal"
           hideScrollBar
           className="flex items-center gap-1.5 pb-0.5"
-          onClick={(e) => e.stopPropagation()}
+          data-card-click="ignore"
           onPointerDown={(e) => e.stopPropagation()}
         >
           {model.cameras.map((cam) => {

@@ -132,7 +132,7 @@ export function ProAlarmModeSegmented({
   compact?: boolean;
 }) {
   return (
-    <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+    <div data-card-click="ignore" onPointerDown={(e) => e.stopPropagation()}>
       <ToggleButtonGroup
         aria-label="Alarm mode"
         size={compact ? 'sm' : 'md'}
@@ -188,7 +188,7 @@ export function ProAlarmDialogs({
     id === 'disarmed' ? 'disarm' : `arm ${model.modes.find((m) => m.id === id)?.label ?? ''}`;
 
   return (
-    <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+    <div data-card-click="ignore" onPointerDown={(e) => e.stopPropagation()}>
       <AlertDialog.Backdrop
         isOpen={confirmMode !== null}
         onOpenChange={(open) => {
@@ -268,7 +268,7 @@ export function ProAlarmLockRow({
   return (
     <div
       className="flex items-center justify-between gap-2.5 rounded-xl bg-default/45 px-3 py-2"
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2.5">

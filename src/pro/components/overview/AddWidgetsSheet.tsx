@@ -4,15 +4,10 @@ import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
   AddCircleIcon,
   ArrowExpand01Icon,
-  BulbIcon,
   DashboardSquare01Icon,
   FilterIcon,
-  FlashIcon,
-  MusicNote01Icon,
   RotateLeft01Icon,
   Search01Icon,
-  Shield01Icon,
-  SunCloud02Icon,
   ViewIcon,
   ViewOffSlashIcon
 } from '@hugeicons/core-free-icons';
@@ -21,19 +16,22 @@ import {
   getProWidgetSize,
   getProWidgetVisibilityMode,
   proWidgetSizeLabel,
-  type ProWidgetCatalogItem,
-  type ProWidgetCategory
+  type ProWidgetCatalogItem
 } from '../../lib/overviewWidgets';
+import { DEFAULT_OVERVIEW_SECTION_ORDER, OVERVIEW_SECTION_LABELS } from '../../lib/overviewSections';
+import type { OverviewTabId } from '../../lib/overviewTabs';
+import { TAB_ICON } from './OverviewTabsBar';
 import { ProSheet } from '../ProSheet';
 import { widgetIcon } from './widgetIcons';
 
-const CATEGORIES: { id: ProWidgetCategory; label: string; icon: IconSvgElement }[] = [
-  { id: 'all', label: 'All', icon: DashboardSquare01Icon },
-  { id: 'weather', label: 'Weather', icon: SunCloud02Icon },
-  { id: 'controls', label: 'Controls', icon: BulbIcon },
-  { id: 'security', label: 'Security', icon: Shield01Icon },
-  { id: 'energy', label: 'Energy', icon: FlashIcon },
-  { id: 'media', label: 'Media', icon: MusicNote01Icon }
+/** Same categories, labels and icons as the Overview tabs (audit P3, 2026-11-19). */
+const CATEGORIES: { id: OverviewTabId; label: string; icon: IconSvgElement }[] = [
+  { id: 'all', label: 'All', icon: TAB_ICON.all },
+  ...DEFAULT_OVERVIEW_SECTION_ORDER.filter((id): id is Exclude<typeof id, 'people'> => id !== 'people').map((id) => ({
+    id,
+    label: OVERVIEW_SECTION_LABELS[id],
+    icon: TAB_ICON[id]
+  }))
 ];
 
 interface AddWidgetsSheetProps {
@@ -65,12 +63,12 @@ export function AddWidgetsSheet({
   onResetLayout
 }: AddWidgetsSheetProps) {
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<ProWidgetCategory>('all');
+  const [category, setCategory] = useState<OverviewTabId>('all');
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return catalog.filter((item) => {
-      if (category !== 'all' && item.category !== category) return false;
+      if (category !== 'all' && !item.tabs.includes(category)) return false;
       if (!q) return true;
       return item.title.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
     });
@@ -107,7 +105,7 @@ export function AddWidgetsSheet({
               selectedKeys={new Set([category])}
               className="flex-wrap gap-1.5"
               onSelectionChange={(keys) => {
-                const next = [...keys][0] as ProWidgetCategory | undefined;
+                const next = [...keys][0] as OverviewTabId | undefined;
                 if (next) setCategory(next);
               }}
             >

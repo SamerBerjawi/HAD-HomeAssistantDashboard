@@ -122,7 +122,7 @@ export function AlarmDetailSheet({
             aria-label="Alarm panel controls"
             className="pro-surface relative flex flex-col gap-4 overflow-hidden p-4 sm:p-5"
           >
-            {model.isTriggered ? <BorderBeam colorFrom="#ef4444" colorTo="#f97316" /> : null}
+            {model.isTriggered ? <BorderBeam colorFrom="var(--danger)" colorTo="var(--warning)" /> : null}
 
             <div className="relative z-[1] flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">

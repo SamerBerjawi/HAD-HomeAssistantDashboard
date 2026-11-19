@@ -31,7 +31,7 @@ export function ProControlSwitch({
   return (
     <div
       className="shrink-0"
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <Switch
@@ -66,7 +66,7 @@ export function ProBrightnessSlider({
   return (
     <div
       className="flex items-center gap-2.5"
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <HugeiconsIcon icon={Sun01Icon} size={13} className="shrink-0 text-warning" />
@@ -265,7 +265,7 @@ function ControlDomainWidgetBody({
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
           <ToggleButtonGroup
             aria-label={`Filter ${model.domain}`}
             size="sm"
@@ -344,7 +344,7 @@ function ControlDomainWidgetBody({
       )}
 
       {visiblePool.length > 6 ? (
-        <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end">
           <Button size="sm" variant="tertiary" className="gap-1.5 text-xs" onPress={onOpenSheet}>
             Manage all {model.totalCount} {model.domain}
             <HugeiconsIcon icon={ArrowUpRight01Icon} size={13} />

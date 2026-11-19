@@ -50,7 +50,6 @@ interface OverviewTabsBarProps {
   onToggleHideBadges: () => void;
   onToggleGroupBySections: () => void;
   onResetLayout: () => void;
-  onDoneEditMode: () => void;
 }
 
 /**
@@ -68,8 +67,7 @@ export function OverviewTabsBar({
   onOpenAddWidgets,
   onToggleHideBadges,
   onToggleGroupBySections,
-  onResetLayout,
-  onDoneEditMode
+  onResetLayout
 }: OverviewTabsBarProps) {
   const smoothItems = useMemo<SwipeTabItem[]>(
     () =>
@@ -199,10 +197,6 @@ export function OverviewTabsBar({
                 Reset layout
               </Button>
 
-              <Button size="sm" variant="secondary" className="min-h-10 md:min-h-9" onPress={onDoneEditMode}>
-                <HugeiconsIcon icon={CheckmarkCircle02Icon} size={16} />
-                Done
-              </Button>
             </div>
           </section>
         </BlurFade>

@@ -9,11 +9,40 @@
  * of leaving holes. `grid-flow-dense` back-fills earlier gaps.
  */
 
-const ROW_PX = 4;
-const GAP_PX = 12;
-import { useLayoutEffect, useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ComponentPropsWithoutRef, type ReactNode, type RefObject } from 'react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import { cn } from '@/lib/utils';
+
+/** Grid row unit and gap; must match `auto-rows-[4px]` and `gap-3` below. */
+export const MASONRY_ROW_PX = 4;
+export const MASONRY_GAP_PX = 12;
+
+/**
+ * Masonry packing for any direct child of a `BentoGrid`: spans as many 4 px rows as the element's
+ * measured height needs, re-measured (once per frame) whenever its size changes. Shared by
+ * `BentoCard`, the Overview widget cards and the grouped sections (audit P4, 2026-11-19).
+ */
+export function useMasonryRowSpan(ref: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let rafId = 0;
+    const fit = () => {
+      const span = Math.max(1, Math.ceil((el.getBoundingClientRect().height + MASONRY_GAP_PX) / (MASONRY_ROW_PX + MASONRY_GAP_PX)));
+      el.style.gridRowEnd = `span ${span}`;
+    };
+    fit();
+    const observer = new ResizeObserver(() => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      rafId = window.requestAnimationFrame(fit);
+    });
+    observer.observe(el);
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, [ref]);
+}
 
 interface BentoGridProps extends ComponentPropsWithoutRef<'div'> {
   children: ReactNode;
@@ -40,17 +69,7 @@ interface BentoCardProps extends Omit<ComponentPropsWithoutRef<'section'>, 'titl
 
 export function BentoCard({ icon, iconClassName, title, aside, children, className, ...props }: BentoCardProps) {
   const ref = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const fit = () => {
-      el.style.gridRowEnd = `span ${Math.max(1, Math.ceil((el.getBoundingClientRect().height + GAP_PX) / (ROW_PX + GAP_PX)))}`;
-    };
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  useMasonryRowSpan(ref);
   return (
     <section ref={ref} aria-label={title} className={cn('pro-surface @container flex min-w-0 flex-col gap-3 self-start p-4', className)} {...props}>
       <header className="flex items-center gap-2.5">

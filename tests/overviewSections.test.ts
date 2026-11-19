@@ -3,10 +3,14 @@ import { mergeConfig } from '@/services/configMerge';
 import { DEFAULT_USER_CONFIG } from '@/types/userConfig';
 import {
   buildOverviewSections,
+  DEFAULT_OVERVIEW_SECTION_ORDER,
+  OVERVIEW_SECTION_LABELS,
   getProGroupBySections,
   getProSectionOrder,
   reorderWidgetsWithinSubset,
+  primarySectionForWidget,
   resolveResizeSnapSize,
+  sectionTab,
   withProGroupBySections,
   withProSectionOrder
 } from '../src/pro/lib/overviewSections';
@@ -94,5 +98,19 @@ describe('overviewSections', () => {
 
     expect(getProGroupBySections(merged)).toBe(true);
     expect(getProSectionOrder(merged)).toEqual(['energy', 'lights', 'security']);
+  });
+
+  it('puts the presence widget in its own People section that opens the Security tab (audit P3)', () => {
+    const users = PRO_STANDARD_WIDGETS.find((w) => w.id === 'users');
+    expect(users).toBeDefined();
+    expect(primarySectionForWidget(users!)).toBe('people');
+    expect(sectionTab('people')).toBe('security');
+    expect(sectionTab('lights')).toBe('lights');
+    expect(DEFAULT_OVERVIEW_SECTION_ORDER).toContain('people');
+    expect(OVERVIEW_SECTION_LABELS.people).toBe('People');
+
+    const sections = buildOverviewSections({ widgetIds: PRO_STANDARD_WIDGETS.map((w) => w.id), catalog: PRO_STANDARD_WIDGETS, tileSizes: undefined });
+    expect(sections.find((s) => s.id === 'people')?.widgetIds).toEqual(['users']);
+    expect(sections.find((s) => s.id === 'security')?.widgetIds ?? []).not.toContain('users');
   });
 });

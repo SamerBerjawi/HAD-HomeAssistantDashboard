@@ -93,7 +93,7 @@ export function ProWaveformScrubber({
     <div
       ref={trackRef}
       className="relative min-w-0 flex-1 select-none"
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
       onPointerMove={(e) => {
         if (isDisabled) return;
@@ -181,7 +181,7 @@ export function ProWaveformScrubber({
     return (
       <div
         className={cn('flex w-full items-center select-none', compact ? 'gap-1.5' : 'gap-2')}
-        onClick={(e) => e.stopPropagation()}
+        data-card-click="ignore"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <span
@@ -209,7 +209,7 @@ export function ProWaveformScrubber({
   return (
     <div
       className="flex w-full flex-col gap-1 select-none"
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
     >
       {sliderTrack}

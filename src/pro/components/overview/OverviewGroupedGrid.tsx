@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useLayoutEffect,
   useMemo,
   useRef,
   type CSSProperties,
@@ -23,10 +22,11 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowUpRight01Icon,
-  DragDropVerticalIcon
+  DragDropVerticalIcon,
+  UserGroupIcon
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
-import type { OverviewSectionGroup, OverviewSectionId } from '../../lib/overviewSections';
+import { OVERVIEW_SECTION_LABELS, sectionTab, type OverviewSectionGroup, type OverviewSectionId } from '../../lib/overviewSections';
 import type { OverviewTabId } from '../../lib/overviewTabs';
 import {
   getProWidgetSize,
@@ -35,12 +35,10 @@ import {
   type ProWidgetLiveSummary,
   type ProWidgetSize
 } from '../../lib/overviewWidgets';
-import { BentoGrid } from '../../ui/magicui/BentoGrid';
+import { BentoGrid, useMasonryRowSpan } from '../../ui/magicui/BentoGrid';
 import { TAB_ICON } from './OverviewTabsBar';
 import { SortableWidgetCard } from './SortableWidgetCard';
 
-const ROW_PX = 4;
-const GAP_PX = 12;
 
 interface SortableSectionContainerProps {
   section: OverviewSectionGroup;
@@ -106,29 +104,7 @@ function SortableSectionContainer({
     [setNodeRef]
   );
 
-  useLayoutEffect(() => {
-    const el = sectionRef.current;
-    if (!el) return;
-    let rafId = 0;
-    const fit = () => {
-      const span = Math.max(
-        1,
-        Math.ceil((el.getBoundingClientRect().height + GAP_PX) / (ROW_PX + GAP_PX))
-      );
-      el.style.gridRowEnd = `span ${span}`;
-    };
-    const scheduleFit = () => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      rafId = window.requestAnimationFrame(fit);
-    };
-    fit();
-    const observer = new ResizeObserver(scheduleFit);
-    observer.observe(el);
-    return () => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      observer.disconnect();
-    };
-  }, [section.widgetIds.length, section.outerColSpan, isEditMode]);
+  useMasonryRowSpan(sectionRef);
 
   const handleWidgetDragEnd = useCallback(
     (event: DragEndEvent) => {
@@ -159,7 +135,8 @@ function SortableSectionContainer({
     zIndex: isDragging ? 30 : undefined
   };
 
-  const SectionIcon = TAB_ICON[section.id];
+  const tabLabel = OVERVIEW_SECTION_LABELS[sectionTab(section.id)];
+  const SectionIcon = section.id === 'people' ? UserGroupIcon : TAB_ICON[section.id];
 
   return (
     <section
@@ -183,7 +160,7 @@ function SortableSectionContainer({
                 size="sm"
                 variant="tertiary"
                 aria-label={`Drag to reorder ${section.label} section`}
-                className="size-7 min-w-7 cursor-grab touch-none active:cursor-grabbing"
+                className="pro-touch-44 size-7 min-w-7 cursor-grab touch-none active:cursor-grabbing"
                 {...attributes}
                 {...listeners}
               >
@@ -216,7 +193,7 @@ function SortableSectionContainer({
                 variant="ghost"
                 isDisabled={!canMoveEarlier}
                 aria-label={`Move ${section.label} section earlier`}
-                className="size-7 min-w-7"
+                className="pro-touch-44 size-7 min-w-7"
                 onPress={onMoveSectionEarlier}
               >
                 <HugeiconsIcon icon={ArrowLeft01Icon} size={14} />
@@ -230,7 +207,7 @@ function SortableSectionContainer({
                 variant="ghost"
                 isDisabled={!canMoveLater}
                 aria-label={`Move ${section.label} section later`}
-                className="size-7 min-w-7"
+                className="pro-touch-44 size-7 min-w-7"
                 onPress={onMoveSectionLater}
               >
                 <HugeiconsIcon icon={ArrowRight01Icon} size={14} />
@@ -244,13 +221,13 @@ function SortableSectionContainer({
               isIconOnly
               size="sm"
               variant="ghost"
-              aria-label={`Open ${section.label} tab`}
-              className="size-7 min-w-7 shrink-0 text-muted"
-              onPress={() => onSelectTab(section.id)}
+              aria-label={`Open ${tabLabel} tab`}
+              className="pro-touch-44 size-7 min-w-7 shrink-0 text-muted"
+              onPress={() => onSelectTab(sectionTab(section.id))}
             >
               <HugeiconsIcon icon={ArrowUpRight01Icon} size={14} />
             </Button>
-            <Tooltip.Content placement="top">Filter to {section.label}</Tooltip.Content>
+            <Tooltip.Content placement="top">Filter to {tabLabel}</Tooltip.Content>
           </Tooltip>
         )}
       </header>

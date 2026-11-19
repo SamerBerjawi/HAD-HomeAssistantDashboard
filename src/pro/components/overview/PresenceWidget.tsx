@@ -257,7 +257,7 @@ export function FamilyPresenceWidgetBody({
         </Badge>
       </div>
 
-      <div onClick={(e) => e.stopPropagation()}>
+      <div>
         <ToggleButtonGroup
           aria-label="Select family member on map"
           size="sm"
@@ -283,7 +283,7 @@ export function FamilyPresenceWidgetBody({
         </ToggleButtonGroup>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="relative overflow-hidden rounded-2xl">
         <Suspense fallback={<div className="h-[168px] w-full animate-pulse rounded-2xl bg-default/50" />}>
           <LazyPresenceMap
             variant="widget"

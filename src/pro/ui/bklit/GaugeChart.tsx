@@ -21,7 +21,7 @@ interface ArcGaugeProps {
 }
 
 const BIPOLAR_ZONES = [
-  { from: 0, to: 50, color: '#818cf8' },
+  { from: 0, to: 50, color: 'var(--energy-export)' },
   { from: 50, to: 100, color: 'var(--accent)' }
 ] as const;
 
@@ -43,6 +43,8 @@ export function ArcGauge({
 
   return (
     <div
+      role="img"
+      aria-label={`${label}: ${centerText}`}
       className={cn(
         'flex min-w-0 flex-col items-center justify-between gap-1 py-1 text-center',
         className
@@ -173,7 +175,7 @@ export function GridBalanceBar({ importKwh, exportKwh, netKwh, className }: Grid
         <span className="font-mono text-[11px] font-semibold">
           <span className="text-[var(--accent)]">{importKwh.toFixed(1)}</span>
           <span className="mx-1 text-muted">-</span>
-          <span className="text-indigo-400">{exportKwh.toFixed(1)}</span>
+          <span className="text-[var(--energy-export)]">{exportKwh.toFixed(1)}</span>
           <span className="mx-1 text-muted">=</span>
           <span className={netKwh < 0 ? 'text-success' : 'text-foreground'}>
             {netKwh.toFixed(1)} kWh
@@ -185,7 +187,7 @@ export function GridBalanceBar({ importKwh, exportKwh, netKwh, className }: Grid
         <div className="flex h-full w-1/2 justify-end border-r border-foreground/45">
           {exportPct > 0 ? (
             <div
-              className="h-full rounded-l-full bg-indigo-400/80 transition-all duration-300"
+              className="h-full rounded-l-full bg-[var(--energy-export)] transition-all duration-300"
               style={{ width: `${exportPct}%` }}
             />
           ) : null}

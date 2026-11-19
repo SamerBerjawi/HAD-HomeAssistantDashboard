@@ -201,7 +201,7 @@ export function ProMediaTransportControls({
   return (
     <div
       className={cn('flex items-center', size === 'sm' ? 'gap-1' : 'gap-1.5')}
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
     >
       {supportsShuffle && onToggleShuffle ? (
@@ -296,7 +296,7 @@ export function ProMediaVolumeSlider({
   return (
     <div
       className="flex min-w-0 items-center gap-2"
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <Button
@@ -377,7 +377,7 @@ export function ProMediaUpNextPanel({
   return (
     <div
       className="flex flex-col gap-2"
-      onClick={(e) => e.stopPropagation()}
+      data-card-click="ignore"
       onPointerDown={(e) => e.stopPropagation()}
     >
       {showToggleHeader ? (

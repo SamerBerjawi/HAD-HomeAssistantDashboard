@@ -11,6 +11,42 @@ export function evenlySpacedIndices(length: number, count: number): number[] {
   return Array.from({ length: visible }, (_, i) => Math.round((i * last) / (visible - 1)));
 }
 
+/**
+ * Width of an element that may mount after the first render (charts show a placeholder until
+ * their data arrives). Returns a callback ref: measuring starts whenever the element appears,
+ * so a chart whose data arrives late still fills its card (audit P1, 2026-11-19).
+ */
+export function useMeasuredWidth<T extends HTMLElement = HTMLDivElement>() {
+  const nodeRef = useRef<T | null>(null);
+  const [node, setNode] = useState<T | null>(null);
+  const [width, setWidth] = useState(0);
+  const ref = useCallback((el: T | null) => {
+    nodeRef.current = el;
+    setNode(el);
+  }, []);
+
+  useEffect(() => {
+    if (!node) return;
+    let rafId = 0;
+    const measure = () => {
+      const next = Math.round(node.clientWidth || node.getBoundingClientRect().width);
+      if (next > 0) setWidth(next);
+    };
+    measure();
+    const observer = new ResizeObserver(() => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      rafId = window.requestAnimationFrame(measure);
+    });
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [node]);
+
+  return { ref, nodeRef, width };
+}
+
 export function useBklitChartBox(p: {
   itemCount: number;
   marginLeft: number;
@@ -18,38 +54,17 @@ export function useBklitChartBox(p: {
   defaultWidth?: number;
 }) {
   const { itemCount, marginLeft, marginRight, defaultWidth = 260 } = p;
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { ref: containerRef, nodeRef, width: containerWidth } = useMeasuredWidth<HTMLDivElement>();
   const scrubbedRef = useRef(false);
   const pointerDownXRef = useRef<number | null>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let rafId = 0;
-    const measure = () => {
-      const next = Math.round(el.clientWidth || el.getBoundingClientRect().width);
-      if (next > 0) setContainerWidth(next);
-    };
-    measure();
-    const observer = new ResizeObserver(() => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      rafId = window.requestAnimationFrame(measure);
-    });
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   const width = containerWidth > 0 ? containerWidth : defaultWidth;
   const innerWidth = Math.max(40, width - marginLeft - marginRight);
 
   const updateIndex = useCallback(
     (clientX: number) => {
-      const el = containerRef.current;
+      const el = nodeRef.current;
       if (!el || itemCount <= 0) return;
       const rect = el.getBoundingClientRect();
       const relX = Math.max(0, Math.min(innerWidth, clientX - rect.left - marginLeft));
@@ -59,7 +74,7 @@ export function useBklitChartBox(p: {
       );
       setActiveIndex(idx);
     },
-    [itemCount, innerWidth, marginLeft]
+    [itemCount, innerWidth, marginLeft, nodeRef]
   );
 
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
