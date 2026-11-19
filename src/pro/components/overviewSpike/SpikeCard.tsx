@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { Button, Dropdown, Label } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowRight01Icon, DragDropVerticalIcon, ResizeFieldIcon, Tick02Icon, ViewOffSlashIcon } from '@hugeicons/core-free-icons';
@@ -15,6 +15,9 @@ interface SpikeCardProps {
   onHide: () => void;
   /** Arrow keys on the drag handle move the card one cell. */
   onMoveBy: (dx: number, dy: number) => void;
+  /** Live subtitle and body from a registry widget (Phase 1 pilot); dummies show their own. */
+  subtitle?: string;
+  children?: ReactNode;
 }
 
 const MOVE_KEYS: Record<string, [number, number]> = {
@@ -28,7 +31,7 @@ const MOVE_KEYS: Record<string, [number, number]> = {
  * Spike card: the header (icon, title, chevron) is the one target that opens details; the body
  * holds controls only. Edit mode adds a drag handle, a size menu and hide.
  */
-export function SpikeCard({ widget, size, isEditing, onOpen, onSetSize, onHide, onMoveBy }: SpikeCardProps) {
+export function SpikeCard({ widget, size, isEditing, onOpen, onSetSize, onHide, onMoveBy, subtitle, children }: SpikeCardProps) {
   const cells = SIZE_CELLS[size];
   const handleKeyDown = (e: KeyboardEvent) => {
     const move = MOVE_KEYS[e.key];
@@ -104,12 +107,19 @@ export function SpikeCard({ widget, size, isEditing, onOpen, onSetSize, onHide, 
           </>
         ) : null}
       </header>
-      <div className="flex min-h-0 flex-1 flex-col justify-end gap-1 px-1.5">
-        <p className="text-lg font-semibold leading-tight">{widget.subtitle}</p>
-        <p className="text-xs text-muted">
-          {SIZE_LABELS[size]} · {cells.w}×{cells.h} cells
-        </p>
-      </div>
+      {children ? (
+        <div className="min-h-0 flex-1 px-1.5">
+          {subtitle && !isEditing ? <p className="sr-only">{subtitle}</p> : null}
+          {children}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col justify-end gap-1 px-1.5">
+          <p className="text-lg font-semibold leading-tight">{subtitle ?? widget.subtitle}</p>
+          <p className="text-xs text-muted">
+            {SIZE_LABELS[size]} · {cells.w}×{cells.h} cells
+          </p>
+        </div>
+      )}
     </article>
   );
 }

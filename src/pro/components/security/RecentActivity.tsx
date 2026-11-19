@@ -69,28 +69,30 @@ export function RecentActivity({ events, loading }: { events: ActivityEvent[]; l
       </div>
 
       {availableFilters.length > 0 ? (
-        <ToggleButtonGroup
-          aria-label="Filter recent activity"
-          size="sm"
-          isDetached
-          selectionMode="single"
-          disallowEmptySelection
-          selectedKeys={new Set([effectiveFilter])}
-          onSelectionChange={(keys) => {
-            const next = [...keys][0] as ActivityFilter | undefined;
-            if (next) {
-              setFilter(next);
-              setExpanded(false);
-            }
-          }}
-          className="flex-wrap gap-1.5"
-        >
-          {availableFilters.map((opt) => (
-            <ToggleButton key={opt.id} id={opt.id} className="h-7 px-2.5 text-xs">
-              {opt.label}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+        <div className="flex justify-start">
+          <ToggleButtonGroup
+            aria-label="Filter recent activity"
+            size="sm"
+            isDetached
+            selectionMode="single"
+            disallowEmptySelection
+            selectedKeys={new Set([effectiveFilter])}
+            onSelectionChange={(keys) => {
+              const next = [...keys][0] as ActivityFilter | undefined;
+              if (next) {
+                setFilter(next);
+                setExpanded(false);
+              }
+            }}
+            className="flex-wrap justify-start gap-1.5"
+          >
+            {availableFilters.map((opt) => (
+              <ToggleButton key={opt.id} id={opt.id} className="h-7 px-2.5 text-xs">
+                {opt.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        </div>
       ) : null}
 
       {loading && events.length === 0 ? (

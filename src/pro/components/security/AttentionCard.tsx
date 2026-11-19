@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '@heroui/react';
+import { Button, Chip } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   Alert02Icon,
@@ -18,7 +18,7 @@ import {
 } from '../../hooks/useSecurityData';
 import { deviceItem, kindRank, type DeviceItem } from '../../lib/securityLogic';
 import { BorderBeam } from '../../ui/magicui/BorderBeam';
-import { DeviceRow } from './DeviceRow';
+import { DeviceRow, KIND_ICON } from './DeviceRow';
 
 interface AttentionCardProps {
   hazards: ResolvedEntity[];
@@ -141,34 +141,60 @@ export function AttentionCard({
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             Device health
           </span>
-          <div className="flex flex-wrap gap-1.5">
+          <ul className="-my-2 flex flex-col divide-y divide-separator">
             {offlineDevices.map(({ entity, kind }) => (
-              <Button
-                key={`off-${entity.entity_id}`}
-                size="sm"
-                variant="tertiary"
-                className="h-7 min-h-7 gap-1.5 rounded-full bg-danger/12 px-2.5 text-xs font-medium text-danger"
-                onPress={() => onSelectDevice?.(deviceItem(entity, kind))}
-              >
-                <HugeiconsIcon icon={WifiDisconnected01Icon} size={13} />
-                <span className="max-w-36 truncate">{entityName(entity)}</span>
-                <span>Offline</span>
-              </Button>
+              <li key={`off-${entity.entity_id}`} className="flex items-center gap-3 py-2.5">
+                <Button
+                  variant="ghost"
+                  aria-label={`Inspect ${entityName(entity)}`}
+                  className="-mx-1.5 flex h-auto min-w-0 flex-1 items-center justify-start gap-3 rounded-xl px-1.5 py-1 hover:bg-default/45"
+                  onPress={() => onSelectDevice?.(deviceItem(entity, kind))}
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-danger/15 text-danger">
+                    <HugeiconsIcon icon={KIND_ICON[kind]} size={18} />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col text-left">
+                    <span className="truncate text-sm font-medium text-foreground">
+                      {entityName(entity)}
+                    </span>
+                    {entity.area?.name ? (
+                      <span className="truncate text-xs text-muted">{entity.area.name}</span>
+                    ) : null}
+                  </span>
+                </Button>
+                <Chip size="sm" variant="soft" color="danger" className="shrink-0">
+                  <HugeiconsIcon icon={WifiDisconnected01Icon} size={12} />
+                  Offline
+                </Chip>
+              </li>
             ))}
             {lowBatteryDevices.map(({ entity, kind, batteryPct }) => (
-              <Button
-                key={`batt-${entity.entity_id}`}
-                size="sm"
-                variant="tertiary"
-                className="h-7 min-h-7 gap-1.5 rounded-full bg-warning/15 px-2.5 text-xs font-medium text-warning"
-                onPress={() => onSelectDevice?.(deviceItem(entity, kind))}
-              >
-                <HugeiconsIcon icon={BatteryLowIcon} size={13} />
-                <span className="max-w-36 truncate">{entityName(entity)}</span>
-                <span className="font-mono">{batteryPct}%</span>
-              </Button>
+              <li key={`batt-${entity.entity_id}`} className="flex items-center gap-3 py-2.5">
+                <Button
+                  variant="ghost"
+                  aria-label={`Inspect ${entityName(entity)}`}
+                  className="-mx-1.5 flex h-auto min-w-0 flex-1 items-center justify-start gap-3 rounded-xl px-1.5 py-1 hover:bg-default/45"
+                  onPress={() => onSelectDevice?.(deviceItem(entity, kind))}
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-warning/15 text-warning">
+                    <HugeiconsIcon icon={KIND_ICON[kind]} size={18} />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col text-left">
+                    <span className="truncate text-sm font-medium text-foreground">
+                      {entityName(entity)}
+                    </span>
+                    {entity.area?.name ? (
+                      <span className="truncate text-xs text-muted">{entity.area.name}</span>
+                    ) : null}
+                  </span>
+                </Button>
+                <Chip size="sm" variant="soft" color="warning" className="shrink-0 font-mono">
+                  <HugeiconsIcon icon={BatteryLowIcon} size={12} />
+                  {batteryPct}%
+                </Chip>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       ) : null}
     </section>

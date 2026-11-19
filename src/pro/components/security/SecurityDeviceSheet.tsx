@@ -114,7 +114,7 @@ export function SecurityDeviceSheet({
           </div>
         </div>
 
-        <div className="pro-surface flex flex-col gap-2.5 p-4">
+        <div className="pro-surface flex flex-col gap-3 p-4">
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground">
             <HugeiconsIcon icon={Clock01Icon} size={14} className="text-[var(--accent)]" />
             24 h history
@@ -125,17 +125,36 @@ export function SecurityDeviceSheet({
               No recorded state changes in the past 24 hours.
             </p>
           ) : (
-            <ol className="flex flex-col gap-2.5">
-              {entityEvents.map((e) => (
-                <li key={e.id} className="flex items-center justify-between gap-3 text-xs">
-                  <span className="min-w-0 truncate font-medium text-foreground">{e.text}</span>
-                  <time
-                    dateTime={new Date(e.when).toISOString()}
-                    className="shrink-0 text-muted"
-                    title={new Date(e.when).toLocaleString()}
+            <ol className="flex flex-col">
+              {entityEvents.map((e, i) => (
+                <li key={e.id} className="relative flex gap-3 pb-4 last:pb-0">
+                  {i < entityEvents.length - 1 ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-[15px] top-8 bottom-0 w-px bg-separator"
+                    />
+                  ) : null}
+                  <span
+                    className={cn(
+                      'relative grid size-8 shrink-0 place-items-center rounded-full',
+                      TONE_TILE[e.tone]
+                    )}
                   >
-                    {timeAgo((Date.now() - e.when) / 60000)}
-                  </time>
+                    <HugeiconsIcon
+                      icon={e.kind === 'alarm' ? Shield01Icon : KIND_ICON[e.kind]}
+                      size={16}
+                    />
+                  </span>
+                  <span className="flex min-w-0 flex-col pt-0.5">
+                    <span className="text-sm font-medium text-foreground">{e.text}</span>
+                    <time
+                      dateTime={new Date(e.when).toISOString()}
+                      className="text-xs text-muted"
+                      title={new Date(e.when).toLocaleString()}
+                    >
+                      {timeAgo((Date.now() - e.when) / 60000)}
+                    </time>
+                  </span>
                 </li>
               ))}
             </ol>

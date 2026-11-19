@@ -3,7 +3,7 @@
  * Seven dummy widgets in three sections on react-grid-layout v2. Layouts live in memory only;
  * Save never writes the shared config.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { Button, Dropdown, Label, Switch, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ComputerIcon, PlusSignIcon, SmartPhone01Icon, Tablet01Icon } from '@hugeicons/core-free-icons';
@@ -14,6 +14,10 @@ import { moveByCell, SPIKE_GAP_PX, type SpikeCompaction } from '../components/ov
 import { SpikeSection } from '../components/overviewSpike/SpikeSection';
 import { SPIKE_WIDGET_BY_ID, SPIKE_WIDGETS } from '../components/overviewSpike/spikeWidgets';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useSheetParam } from '../hooks/useSheetParam';
+import { WidgetSheetHost } from '../components/overviewNext/WidgetSheetHost';
+import { WIDGET_BY_ID } from '../widgets/registry';
+import type { WidgetDefinition } from '../widgets/types';
 import {
   buildDefaultDeviceLayout,
   cellsFor,
@@ -24,33 +28,23 @@ import {
   packPlacements,
   type DeviceLayout,
   type DeviceType,
-  type LayoutPlacement
+  type LayoutPlacement,
+  type WidgetSize
 } from '../lib/overviewLayout';
 import type { OverviewSectionId } from '../lib/overviewSections';
 
 const DEVICE_ICON = { phone: SmartPhone01Icon, tablet: Tablet01Icon, desktop: ComputerIcon };
 const DEVICE_MAX_WIDTH: Record<DeviceType, number | undefined> = { phone: 430, tablet: 1024, desktop: undefined };
 
-function useSheetParam(): [string | null, (id: string | null) => void] {
-  const read = () => new URLSearchParams(window.location.search).get('sheet');
-  const [sheet, setSheetState] = useState<string | null>(read);
-  useEffect(() => {
-    const onPop = () => setSheetState(read());
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
-  const setSheet = useCallback((id: string | null) => {
-    const url = new URL(window.location.href);
-    if (id) {
-      url.searchParams.set('sheet', id);
-      window.history.pushState(window.history.state, '', url);
-      setSheetState(id);
-    } else if (read()) {
-      // Opened by us: go back so the phone back button and this stay in step.
-      window.history.back();
-    }
-  }, []);
-  return [sheet, setSheet];
+/** A registry widget inside the spike card: real model, body and sheet (Phase 1 pilot). */
+function RegistryCard({ def, ...card }: { def: WidgetDefinition<never> } & Omit<ComponentProps<typeof SpikeCard>, 'subtitle' | 'children'>) {
+  const model = def.useModel();
+  const Body = def.Body;
+  return (
+    <SpikeCard {...card} subtitle={def.subtitle?.(model)}>
+      <Body model={model} size={card.size} />
+    </SpikeCard>
+  );
 }
 
 export default function ProOverviewSpike() {
@@ -71,7 +65,7 @@ export default function ProOverviewSpike() {
   const [sideBySide, setSideBySide] = useState(true);
   const [compaction, setCompaction] = useState<SpikeCompaction>('flow');
   const [notice, setNotice] = useState<string | null>(null);
-  const [sheet, setSheet] = useSheetParam();
+  const { sheet, open: openSheet, close: closeSheet } = useSheetParam();
 
   const isEditing = draft !== null;
   const layout = draft ?? saved[device];
@@ -136,7 +130,8 @@ export default function ProOverviewSpike() {
   };
 
   const usedCols = (items: LayoutPlacement[]) => Math.max(2, ...items.map((p) => p.x + cellsFor(p.size, cols).w));
-  const sheetWidget = sheet ? SPIKE_WIDGET_BY_ID.get(sheet) : undefined;
+  // Registry widgets open their real sheet through WidgetSheetHost; dummies get a stand-in.
+  const sheetWidget = sheet && !WIDGET_BY_ID.has(sheet) ? SPIKE_WIDGET_BY_ID.get(sheet) : undefined;
 
   return (
     <div className="pro flex flex-col gap-4" data-page="overview">
@@ -249,28 +244,29 @@ export default function ProOverviewSpike() {
               renderCard={(p) => {
                 const widget = SPIKE_WIDGET_BY_ID.get(p.i);
                 if (!widget) return null;
-                return (
-                  <SpikeCard
-                    widget={widget}
-                    size={p.size}
-                    isEditing={isEditing}
-                    onOpen={() => setSheet(widget.id)}
-                    onSetSize={(size) => setSection(section, items.map((q) => (q.i === p.i ? { ...q, size } : q)))}
-                    onHide={() => hide(widget.id)}
-                    onMoveBy={(dx, dy) => setSection(section, moveByCell(items, p.i, dx, dy, span, compaction))}
-                  />
-                );
+                const real = WIDGET_BY_ID.get(p.i);
+                const card = {
+                  widget,
+                  size: p.size,
+                  isEditing,
+                  onOpen: () => openSheet(widget.id),
+                  onSetSize: (size: WidgetSize) => setSection(section, items.map((q) => (q.i === p.i ? { ...q, size } : q))),
+                  onHide: () => hide(widget.id),
+                  onMoveBy: (dx: number, dy: number) => setSection(section, moveByCell(items, p.i, dx, dy, span, compaction))
+                };
+                return real ? <RegistryCard def={real} {...card} /> : <SpikeCard {...card} />;
               }}
             />
           );
         })}
       </div>
 
-      <ProSheet isOpen={Boolean(sheetWidget)} onOpenChange={(open) => !open && setSheet(null)} title={sheetWidget?.title ?? ''} subtitle={sheetWidget?.subtitle} icon={sheetWidget?.icon ?? PlusSignIcon} page="overview">
+      <ProSheet isOpen={Boolean(sheetWidget)} onOpenChange={(open) => !open && closeSheet()} title={sheetWidget?.title ?? ''} subtitle={sheetWidget?.subtitle} icon={sheetWidget?.icon ?? PlusSignIcon} page="overview">
         <p className="text-sm text-muted">
           Dummy sheet for <code>?sheet={sheet}</code>. The phone back button closes it.
         </p>
       </ProSheet>
+      <WidgetSheetHost />
     </div>
   );
 }
