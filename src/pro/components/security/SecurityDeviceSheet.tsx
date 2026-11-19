@@ -16,7 +16,15 @@ import {
 } from '../../lib/securityLogic';
 import { ProSheet } from '../ProSheet';
 import { TONE_TILE } from './AlarmHero';
-import { GarageAction, KIND_ICON, KIND_LABEL, LockAction, SirenAction, StatusChip } from './DeviceRow';
+import {
+  activityEventIcon,
+  GarageAction,
+  KIND_ICON,
+  KIND_LABEL,
+  LockAction,
+  SirenAction,
+  StatusChip
+} from './DeviceRow';
 
 interface SecurityDeviceSheetProps {
   item: DeviceItem | null;
@@ -147,19 +155,26 @@ export function SecurityDeviceSheet({
                     )}
                   >
                     <HugeiconsIcon
-                      icon={e.kind === 'alarm' ? Shield01Icon : KIND_ICON[e.kind]}
+                      icon={activityEventIcon(e)}
                       size={16}
                     />
                   </span>
                   <span className="flex min-w-0 flex-col pt-0.5">
                     <span className="text-sm font-medium text-foreground">{e.text}</span>
-                    <time
-                      dateTime={new Date(e.when).toISOString()}
-                      className="text-xs text-muted"
-                      title={new Date(e.when).toLocaleString()}
-                    >
-                      {timeAgo((Date.now() - e.when) / 60000)}
-                    </time>
+                    <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                      <time
+                        dateTime={new Date(e.when).toISOString()}
+                        className="font-mono"
+                        title={new Date(e.when).toLocaleString()}
+                      >
+                        {new Date(e.when).toLocaleTimeString(undefined, {
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </time>
+                      <span aria-hidden="true">·</span>
+                      <span>{timeAgo((Date.now() - e.when) / 60000)}</span>
+                    </span>
                   </span>
                 </li>
               ))}

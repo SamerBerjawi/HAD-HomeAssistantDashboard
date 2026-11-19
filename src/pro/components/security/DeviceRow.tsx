@@ -8,6 +8,7 @@ import {
   BatteryLowIcon,
   BatteryMedium01Icon,
   BlindsIcon,
+  Car01Icon,
   CheckmarkCircle02Icon,
   DoorIcon,
   DropletIcon,
@@ -15,8 +16,14 @@ import {
   Megaphone01Icon,
   MegaphoneOffIcon,
   Motion01Icon,
+  PackageIcon,
+  PawPrintIcon,
+  SecurityCheckIcon,
+  Shield01Icon,
   SquareLock02Icon,
   SquareUnlock02Icon,
+  TimeQuarterPassIcon,
+  User02Icon,
   WifiDisconnected01Icon
 } from '@hugeicons/core-free-icons';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
@@ -24,6 +31,7 @@ import { errorMessageField } from '@/lib/errors';
 import { cn } from '@/lib/utils';
 import {
   LOW_BATTERY_THRESHOLD,
+  type ActivityEvent,
   type DeviceItem,
   type DeviceKind,
   type Tone
@@ -61,14 +69,45 @@ const CHIP_COLOR: Record<Tone, 'default' | 'success' | 'warning' | 'danger'> = {
   danger: 'danger'
 };
 
-/** HeroUI soft Chip with a state icon (icon rule, DESIGN.md 5). */
+/** Semantic Hugeicons glyph for a timeline event (unlocked, armed, triggered, person/pet, etc.). */
+export function activityEventIcon(e: ActivityEvent): IconSvgElement {
+  if (e.detection === 'person') return User02Icon;
+  if (e.detection === 'pet' || e.detection === 'animal') return PawPrintIcon;
+  if (e.detection === 'vehicle') return Car01Icon;
+  if (e.detection === 'package') return PackageIcon;
+  if (e.kind === 'alarm') {
+    if (e.tone === 'danger') return Alert02Icon;
+    if (e.tone === 'success') return SecurityCheckIcon;
+    if (e.tone === 'warning') return TimeQuarterPassIcon;
+    return Shield01Icon;
+  }
+  if (e.kind === 'lock') {
+    if (e.tone === 'danger') return Alert02Icon;
+    if (e.tone === 'warning') return SquareUnlock02Icon;
+    return SquareLock02Icon;
+  }
+  if (e.kind === 'siren') {
+    return e.tone === 'default' ? MegaphoneOffIcon : Megaphone01Icon;
+  }
+  return KIND_ICON[e.kind];
+}
+
+const TRANSITION_LABELS = new Set(['Locking…', 'Unlocking…', 'Opening…', 'Closing…']);
+
+/** HeroUI soft Chip with a semantic state icon (icon rule, DESIGN.md 5). */
 export function StatusChip({ item, className }: { item: DeviceItem; className?: string }) {
-  const icon =
-    item.stateLabel === 'Offline'
-      ? WifiDisconnected01Icon
-      : item.tone === 'warning' || item.tone === 'danger'
-        ? Alert02Icon
-        : CheckmarkCircle02Icon;
+  let icon: IconSvgElement = CheckmarkCircle02Icon;
+  if (item.stateLabel === 'Offline') {
+    icon = WifiDisconnected01Icon;
+  } else if (item.stateLabel === 'Jammed') {
+    icon = Alert02Icon;
+  } else if (TRANSITION_LABELS.has(item.stateLabel)) {
+    icon = TimeQuarterPassIcon;
+  } else if (item.kind === 'lock' && item.problem) {
+    icon = SquareUnlock02Icon;
+  } else if (item.tone === 'warning' || item.tone === 'danger') {
+    icon = KIND_ICON[item.kind];
+  }
   return (
     <Chip size="sm" variant="soft" color={CHIP_COLOR[item.tone]} className={className}>
       <HugeiconsIcon icon={icon} size={12} />

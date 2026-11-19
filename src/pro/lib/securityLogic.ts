@@ -272,13 +272,29 @@ export interface LogbookEntry {
   when: number | string;
   name?: string;
   context_user_id?: string | null;
+  context_name?: string | null;
+  context_domain?: string | null;
+}
+
+export type MotionDetectionKind = 'person' | 'pet' | 'animal' | 'vehicle' | 'package';
+
+export interface ActivityEntityMeta {
+  name: string;
+  detection?: MotionDetectionKind;
+  preposition?: 'in' | 'at';
 }
 
 export interface ActivityEvent {
   id: string;
   entityId: string;
   kind: DeviceKind | 'alarm';
+  /** Specific detection subject for motion/camera AI sensors (person, pet, vehicle, package). */
+  detection?: MotionDetectionKind;
   text: string;
+  /** Optional room/area name when not already in the event sentence. */
+  area?: string;
+  /** Optional trigger context (person name or automation/script name). */
+  source?: string;
   /** Epoch ms. */
   when: number;
   tone: Tone;
@@ -287,37 +303,131 @@ export interface ActivityEvent {
 const DOMAIN_KIND = (entityId: string, kinds: Record<string, DeviceKind>): DeviceKind | 'alarm' | null =>
   entityId.startsWith('alarm_control_panel.') ? 'alarm' : kinds[entityId] ?? null;
 
-/** One sentence per state change, e.g. "Front door unlocked by Samer". Unknown states are skipped. */
-export function activitySentence(kind: DeviceKind | 'alarm', who: string, state: string, by?: string): { text: string; tone: Tone } | null {
-  const suffix = by ? ` by ${by}` : '';
+const DETECTION_SUBJECT: Record<MotionDetectionKind, string> = {
+  person: 'Person',
+  pet: 'Pet',
+  animal: 'Animal',
+  vehicle: 'Vehicle',
+  package: 'Package'
+};
+
+const STRIP_SENSOR_SUFFIX =
+  /(?:^|[\s_-]+)(?:cell\s+motion\s+detection|motion\s+detection|person\s+detection|human\s+detection|pet\s+detection|animal\s+detection|vehicle\s+detection|package\s+detection|motion\s+sensor|occupancy\s+sensor|presence\s+sensor|motion|occupancy|presence|person|pet|animal|vehicle|package|detection|sensor)$/i;
+
+const GENERIC_CAMERA_OR_SENSOR =
+  /\b(tapo|c\d{3}|reolink|unifi|wyze|eufy|hikvision|dahua|amcrest|frigate|arlo|blink|camera|cam|sensor)\b/i;
+
+function stripGenericSensorLabel(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let out = raw.trim();
+  for (let i = 0; i < 3; i += 1) {
+    const next = out.replace(STRIP_SENSOR_SUFFIX, '').trim();
+    if (next === out) break;
+    out = next;
+  }
+  return out.replace(/^[-–—:·\s]+|[-–—:·\s]+$/g, '');
+}
+
+/**
+ * Resolves a human-friendly detection subject (`Person`, `Pet`, `Motion`, etc.) and place
+ * (`in Living Room`, `at Entrance Door Bell`) for a motion/AI binary sensor so activity rows
+ * never read "Motion detected at Motion" or "Motion detected at Person Detection".
+ */
+export function resolveMotionActivityMeta(entity: ResolvedEntity): ActivityEntityMeta {
+  const friendly = typeof entity.attributes?.friendly_name === 'string' ? entity.attributes.friendly_name : '';
+  const hay = `${entity.entity_id} ${entity.name ?? ''} ${friendly}`;
+
+  let detection: MotionDetectionKind | undefined;
+  if (/\b(person|human|face)\b|_person\b/i.test(hay)) detection = 'person';
+  else if (/\b(pet|dog|cat)\b|_pet\b/i.test(hay)) detection = 'pet';
+  else if (/\banimal\b|_animal\b/i.test(hay)) detection = 'animal';
+  else if (/\b(vehicle|car|truck)\b|_vehicle\b|_car\b/i.test(hay)) detection = 'vehicle';
+  else if (/\b(package|parcel|delivery)\b|_package\b/i.test(hay)) detection = 'package';
+
+  const areaName = entity.area?.name?.trim() || '';
+  const rawDeviceName = (entity.device?.name_by_user || entity.device?.name || '').trim();
+  const deviceModel = (entity.device?.model || '').trim().toLowerCase();
+
+  const cleanedEntity = stripGenericSensorLabel(entity.name);
+  const cleanedFriendly = stripGenericSensorLabel(friendly);
+  const cleanedDevice = stripGenericSensorLabel(rawDeviceName);
+
+  const candidate = cleanedEntity || cleanedFriendly || cleanedDevice;
+  const candidateLower = candidate.toLowerCase();
+  const isGenericDevice =
+    !candidate ||
+    (areaName && candidateLower === areaName.toLowerCase()) ||
+    GENERIC_CAMERA_OR_SENSOR.test(candidate) ||
+    (deviceModel.length >= 3 && candidateLower.includes(deviceModel));
+
+  if (areaName && isGenericDevice) {
+    return { name: areaName, detection, preposition: 'in' };
+  }
+
+  const fallback =
+    candidate || areaName || rawDeviceName || entity.name || friendly || entity.entity_id;
+  return {
+    name: fallback,
+    detection,
+    preposition: areaName && fallback.toLowerCase() === areaName.toLowerCase() ? 'in' : 'at'
+  };
+}
+
+/**
+ * Explicit, unambiguous sentence per state change (e.g. "Front door unlocked by Samer",
+ * "Motion detected at Entrance Door Bell", "Person detected in Living Room"). Unknown states are skipped.
+ */
+export function activitySentence(
+  kind: DeviceKind | 'alarm',
+  who: string,
+  state: string,
+  by?: string,
+  viaAutomation?: string,
+  opts?: { detection?: MotionDetectionKind; preposition?: 'in' | 'at' }
+): { text: string; tone: Tone } | null {
+  const actor = by ? ` by ${by}` : viaAutomation ? ` via ${viaAutomation}` : '';
   switch (kind) {
     case 'alarm':
-      if (state === 'triggered') return { text: `${who} triggered`, tone: 'danger' };
-      if (state === 'disarmed') return { text: `${who} disarmed${suffix}`, tone: 'default' };
-      if (state.startsWith('armed')) return { text: `${who} ${alarmStateLabel(state).toLowerCase()}${suffix}`, tone: 'success' };
+      if (state === 'triggered') return { text: `Alarm triggered — ${who}`, tone: 'danger' };
+      if (state === 'pending') return { text: `${who}: entry delay started`, tone: 'warning' };
+      if (state === 'arming') return { text: `${who} arming${actor}`, tone: 'warning' };
+      if (state === 'disarmed') return { text: `${who} disarmed${actor}`, tone: 'default' };
+      if (state.startsWith('armed')) {
+        return { text: `${who} ${alarmStateLabel(state).toLowerCase()}${actor}`, tone: 'success' };
+      }
       return null;
     case 'lock':
-      if (state === 'locked') return { text: `${who} locked${suffix}`, tone: 'success' };
-      if (state === 'unlocked' || state === 'open') return { text: `${who} unlocked${suffix}`, tone: 'warning' };
-      if (state === 'jammed') return { text: `${who} jammed`, tone: 'danger' };
+      if (state === 'locked') return { text: `${who} locked${actor}`, tone: 'success' };
+      if (state === 'unlocked' || state === 'open') return { text: `${who} unlocked${actor}`, tone: 'warning' };
+      if (state === 'jammed') return { text: `${who} jammed — check lock`, tone: 'danger' };
       return null;
     case 'garage':
-      if (state === 'open') return { text: `${who} opened${suffix}`, tone: 'warning' };
-      if (state === 'closed') return { text: `${who} closed${suffix}`, tone: 'success' };
+      if (state === 'open') return { text: `${who} opened${actor}`, tone: 'warning' };
+      if (state === 'closed') return { text: `${who} closed${actor}`, tone: 'success' };
       return null;
     case 'siren':
-      if (state === 'on') return { text: `${who} sounded${suffix}`, tone: 'danger' };
-      if (state === 'off') return { text: `${who} silenced${suffix}`, tone: 'default' };
+      if (state === 'on') return { text: `${who} siren activated${actor}`, tone: 'danger' };
+      if (state === 'off') return { text: `${who} siren silenced${actor}`, tone: 'default' };
       return null;
     case 'door':
     case 'window':
       if (state === 'on') return { text: `${who} opened`, tone: 'warning' };
       if (state === 'off') return { text: `${who} closed`, tone: 'default' };
       return null;
-    case 'motion':
-      return state === 'on' ? { text: `Motion at ${who}`, tone: 'warning' } : null;
-    default:
-      return isOn(state) ? { text: `${who}: ${kind === 'leak' ? 'leak' : 'smoke'} detected`, tone: 'danger' } : null;
+    case 'motion': {
+      if (state !== 'on') return null;
+      const subject = opts?.detection ? DETECTION_SUBJECT[opts.detection] : 'Motion';
+      const prep = opts?.preposition ?? 'at';
+      return { text: `${subject} detected ${prep} ${who}`, tone: 'warning' };
+    }
+    default: {
+      const hazardLabel = kind === 'leak' ? 'Water leak' : 'Smoke';
+      if (isOn(state)) return { text: `${hazardLabel} detected at ${who}`, tone: 'danger' };
+      if (state === 'off' || state === 'clear' || state === 'dry') {
+        return { text: `${hazardLabel} cleared at ${who}`, tone: 'success' };
+      }
+      return null;
+    }
   }
 }
 
@@ -325,13 +435,16 @@ const toMs = (when: number | string) => (typeof when === 'number' ? (when < 1e12
 
 /**
  * Turns HA logbook rows into timeline events, newest first. `kinds` maps entity ids to device
- * kinds, `names` gives display names, `users` maps HA user ids to person names.
+ * kinds, `names` gives display names, `users` maps HA user ids to person names, optional
+ * `areas` maps entity ids to room names, and optional `meta` carries motion detection subjects/places.
  */
 export function buildActivity(
   rows: LogbookEntry[],
   kinds: Record<string, DeviceKind>,
   names: Record<string, string>,
-  users: Record<string, string>
+  users: Record<string, string>,
+  areas: Record<string, string> = {},
+  meta: Record<string, ActivityEntityMeta> = {}
 ): ActivityEvent[] {
   const out: ActivityEvent[] = [];
   for (const row of rows) {
@@ -341,8 +454,28 @@ export function buildActivity(
     const when = toMs(row.when);
     if (Number.isNaN(when)) continue;
     const by = row.context_user_id ? users[row.context_user_id] : undefined;
-    const s = activitySentence(kind, names[row.entity_id] ?? row.name ?? row.entity_id, row.state, by);
-    if (s) out.push({ id: `${row.entity_id}-${when}-${row.state}`, entityId: row.entity_id, kind, when, ...s });
+    const via = !by && row.context_name ? row.context_name : undefined;
+    const entityMeta = meta[row.entity_id];
+    const who = entityMeta?.name ?? names[row.entity_id] ?? row.name ?? row.entity_id;
+    const s = activitySentence(kind, who, row.state, by, via, {
+      detection: entityMeta?.detection,
+      preposition: entityMeta?.preposition
+    });
+    if (!s) continue;
+    const rawArea = areas[row.entity_id];
+    const area =
+      rawArea && !s.text.toLowerCase().includes(rawArea.toLowerCase()) ? rawArea : undefined;
+    const source = by ? `by ${by}` : via ? `via ${via}` : undefined;
+    out.push({
+      id: `${row.entity_id}-${when}-${row.state}`,
+      entityId: row.entity_id,
+      kind,
+      detection: entityMeta?.detection,
+      area,
+      source,
+      when,
+      ...s
+    });
   }
   return out.sort((a, b) => b.when - a.when);
 }

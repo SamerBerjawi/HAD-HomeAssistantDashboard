@@ -24,13 +24,62 @@ const DETECTION_PATTERNS: ReadonlyArray<{
   { kind: 'animal', label: 'Animal', regex: /\b(animal|pet|dog|cat)\b|_animal\b|_pet\b/i }
 ];
 
+const PET_REGEX = /\b(pet|dog|cat)\b|_pet\b/i;
+const STREAM_SUFFIX_REGEX = /_(hd_stream|sd_stream|main_stream|sub_stream|live_view|fluent|clear|high|low|main|sub)$/;
+
 function cameraSlug(camera: ResolvedEntity): string {
-  return camera.entity_id.replace(/^camera\./, '').toLowerCase();
+  return camera.entity_id
+    .replace(/^camera\./, '')
+    .toLowerCase()
+    .replace(STREAM_SUFFIX_REGEX, '');
+}
+
+function sensorBelongsToCamera(camera: ResolvedEntity, sensor: ResolvedEntity, slug: string): boolean {
+  const sameDevice = Boolean(camera.device_id && sensor.device_id === camera.device_id);
+  if (sameDevice) return true;
+  const sensorSlug = sensor.entity_id.replace(/^binary_sensor\./, '').toLowerCase();
+  return slug.length >= 3 && sensorSlug.startsWith(slug);
+}
+
+function matchSensorAiRules(
+  sensor: ResolvedEntity
+): Array<{ kind: CameraAiDetectionKind; label: string }> {
+  const hay = `${sensor.entity_id} ${sensor.name ?? ''} ${String(sensor.attributes?.friendly_name ?? '')}`;
+  const out: Array<{ kind: CameraAiDetectionKind; label: string }> = [];
+  for (const rule of DETECTION_PATTERNS) {
+    if (rule.regex.test(hay)) {
+      const label = rule.kind === 'animal' && PET_REGEX.test(hay) ? 'Pet' : rule.label;
+      out.push({ kind: rule.kind, label });
+    }
+  }
+  return out;
+}
+
+/**
+ * Returns the set of AI detection kinds natively supported by `camera` via HA binary sensors
+ * (e.g. Tapo C260 person & pet detection, Frigate, Reolink, UniFi), regardless of current state.
+ */
+export function detectCameraNativeAiKinds(
+  camera: ResolvedEntity,
+  binarySensors: readonly ResolvedEntity[]
+): Set<CameraAiDetectionKind> {
+  const slug = cameraSlug(camera);
+  const kinds = new Set<CameraAiDetectionKind>();
+
+  for (const sensor of binarySensors) {
+    if (sensor.disabled_by || sensor.state === 'unavailable' || sensor.state === 'unknown') continue;
+    if (!sensorBelongsToCamera(camera, sensor, slug)) continue;
+    for (const match of matchSensorAiRules(sensor)) {
+      kinds.add(match.kind);
+    }
+  }
+
+  return kinds;
 }
 
 /**
  * Finds active AI detection binary sensors (`person`, `vehicle`, `package`, `animal`) associated
- * with `camera` via shared `device_id` or matching entity slug prefix (Frigate / Reolink / UniFi).
+ * with `camera` via shared `device_id` or matching entity slug prefix (Tapo / Frigate / Reolink / UniFi).
  */
 export function detectCameraAiAlerts(
   camera: ResolvedEntity,
@@ -41,17 +90,13 @@ export function detectCameraAiAlerts(
 
   for (const sensor of binarySensors) {
     if (sensor.state !== 'on' || sensor.disabled_by) continue;
-    const sameDevice = Boolean(camera.device_id && sensor.device_id === camera.device_id);
-    const sensorSlug = sensor.entity_id.replace(/^binary_sensor\./, '').toLowerCase();
-    const samePrefix = slug.length >= 3 && sensorSlug.startsWith(slug);
-    if (!sameDevice && !samePrefix) continue;
+    if (!sensorBelongsToCamera(camera, sensor, slug)) continue;
 
-    const hay = `${sensor.entity_id} ${sensor.name ?? ''} ${String(sensor.attributes?.friendly_name ?? '')}`;
-    for (const rule of DETECTION_PATTERNS) {
-      if (!found.has(rule.kind) && rule.regex.test(hay)) {
-        found.set(rule.kind, {
-          kind: rule.kind,
-          label: rule.label,
+    for (const match of matchSensorAiRules(sensor)) {
+      if (!found.has(match.kind)) {
+        found.set(match.kind, {
+          kind: match.kind,
+          label: match.label,
           entityId: sensor.entity_id
         });
       }
@@ -59,6 +104,26 @@ export function detectCameraAiAlerts(
   }
 
   return [...found.values()];
+}
+
+/**
+ * Merges native HA camera AI detections with local in-browser AI detections.
+ * Native camera sensors always take priority; local detections for kinds natively covered
+ * by the camera are dropped even when the native sensor is currently off.
+ */
+export function mergeCameraDetections(
+  nativeDetections: readonly CameraAiDetection[],
+  localDetections: readonly CameraAiDetection[],
+  nativeAiKinds: ReadonlySet<CameraAiDetectionKind>
+): CameraAiDetection[] {
+  const map = new Map<CameraAiDetectionKind, CameraAiDetection>();
+  for (const d of nativeDetections) map.set(d.kind, d);
+  for (const d of localDetections) {
+    if (!map.has(d.kind) && !nativeAiKinds.has(d.kind)) {
+      map.set(d.kind, d);
+    }
+  }
+  return [...map.values()];
 }
 
 export interface AlarmTriggerDiagnostic {

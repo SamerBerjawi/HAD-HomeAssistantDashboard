@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Chip, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
+  AiVisionRecognitionIcon,
   Alert02Icon,
   Camera01Icon,
   Car01Icon,
@@ -12,9 +13,10 @@ import {
   Location01Icon,
   Motion01Icon,
   PackageIcon,
+  PawPrintIcon,
   Refresh01Icon,
-  ShieldUserIcon,
   TimeQuarterPassIcon,
+  User02Icon,
   Video01Icon,
   VideoOffIcon,
   VolumeHighIcon,
@@ -26,10 +28,13 @@ import { getCameraMotionStatus, captureAndDownloadSnapshot } from '@/services/ca
 import { isSurveillanceCamera } from '@/lib/entityClassifiers';
 import { cn } from '@/lib/utils';
 import type { ResolvedEntity } from '@/types';
+import { useCameraObjectDetection } from '../../hooks/useCameraObjectDetection';
 import { entityName } from '../../hooks/useSecurityData';
 import type { CameraStreamStatus } from '../../hooks/useWebRtcCamera';
 import {
   detectCameraAiAlerts,
+  detectCameraNativeAiKinds,
+  mergeCameraDetections,
   type CameraAiDetection,
   type CameraAiDetectionKind
 } from '../../lib/securityCameras';
@@ -37,13 +42,22 @@ import { ProCameraPlayer, type ProCameraPlayerHandle } from './ProCameraPlayer';
 
 const FILTER_MIN_CAMERAS = 5;
 const THUMBNAIL_REFRESH_MS = 25_000;
+const AI_PREF_KEY = 'had_pro_camera_local_ai';
 type CameraLayoutMode = 'featured' | 'grid';
 
+function readAiPref(): boolean {
+  try {
+    return localStorage.getItem(AI_PREF_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 const AI_ICON: Record<CameraAiDetectionKind, IconSvgElement> = {
-  person: ShieldUserIcon,
+  person: User02Icon,
   vehicle: Car01Icon,
   package: PackageIcon,
-  animal: Motion01Icon
+  animal: PawPrintIcon
 };
 
 /** Green live; orange motion, connecting or snapshot only; red error/offline. */
@@ -86,6 +100,19 @@ export function SecurityCameras({
   const [area, setArea] = useState('all');
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<CameraLayoutMode>('featured');
+  const [aiEnabled, setAiEnabled] = useState<boolean>(readAiPref);
+
+  const toggleAi = () => {
+    setAiEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(AI_PREF_KEY, next ? '1' : '0');
+      } catch {
+        /* per-browser experimental toggle */
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (focusedCameraId) {
@@ -94,15 +121,17 @@ export function SecurityCameras({
     }
   }, [focusedCameraId]);
 
-  const { motion, aiByCam } = useMemo(() => {
+  const { motion, aiByCam, nativeAiKindsByCam } = useMemo(() => {
     const motionMap: Record<string, boolean> = {};
     const aiMap: Record<string, CameraAiDetection[]> = {};
+    const nativeKindsMap: Record<string, Set<CameraAiDetectionKind>> = {};
     const sensors = binarySensors || [];
     for (const c of cameras) {
       motionMap[c.entity_id] = getCameraMotionStatus(c, sensors).isMotionActive;
       aiMap[c.entity_id] = detectCameraAiAlerts(c, sensors);
+      nativeKindsMap[c.entity_id] = detectCameraNativeAiKinds(c, sensors);
     }
-    return { motion: motionMap, aiByCam: aiMap };
+    return { motion: motionMap, aiByCam: aiMap, nativeAiKindsByCam: nativeKindsMap };
   }, [cameras, binarySensors]);
 
   const areas = useMemo(() => {
@@ -160,7 +189,14 @@ export function SecurityCameras({
               className="h-7 min-h-7 gap-1.5 rounded-full bg-warning/15 px-2.5 text-xs font-medium text-warning"
               onPress={() => setPickedId(offscreenAlertCam.entity_id)}
             >
-              <HugeiconsIcon icon={Motion01Icon} size={13} />
+              <HugeiconsIcon
+                icon={
+                  aiByCam[offscreenAlertCam.entity_id]?.[0]
+                    ? AI_ICON[aiByCam[offscreenAlertCam.entity_id][0].kind]
+                    : Motion01Icon
+                }
+                size={13}
+              />
               {aiByCam[offscreenAlertCam.entity_id]?.[0]?.label || 'Motion'} on{' '}
               {entityName(offscreenAlertCam)}
             </Button>
@@ -191,6 +227,23 @@ export function SecurityCameras({
               ))}
             </ToggleButtonGroup>
           )}
+
+          <Tooltip delay={0}>
+            <Button
+              size="sm"
+              variant={aiEnabled ? 'primary' : 'tertiary'}
+              aria-pressed={aiEnabled}
+              onPress={toggleAi}
+            >
+              <HugeiconsIcon icon={AiVisionRecognitionIcon} size={15} />
+              AI
+            </Button>
+            <Tooltip.Content>
+              {aiEnabled
+                ? 'Disable on-device AI fallback (native camera AI always stays active)'
+                : 'Enable experimental on-device AI for cameras without native detection'}
+            </Tooltip.Content>
+          </Tooltip>
 
           {visible.length >= 2 ? (
             <ToggleButtonGroup
@@ -223,6 +276,8 @@ export function SecurityCameras({
               camera={cam}
               motion={motion[cam.entity_id]}
               detections={aiByCam[cam.entity_id] || []}
+              nativeAiKinds={nativeAiKindsByCam[cam.entity_id]}
+              aiEnabled={aiEnabled}
               compact
               onSnapshot={snapshot}
             />
@@ -235,6 +290,8 @@ export function SecurityCameras({
               camera={featured}
               motion={motion[featured.entity_id]}
               detections={aiByCam[featured.entity_id] || []}
+              nativeAiKinds={nativeAiKindsByCam[featured.entity_id]}
+              aiEnabled={aiEnabled}
               onSnapshot={snapshot}
               onPrev={visible.length > 1 ? () => cycleCamera(-1) : undefined}
               onNext={visible.length > 1 ? () => cycleCamera(1) : undefined}
@@ -299,16 +356,22 @@ interface FeaturedCameraProps {
   camera: ResolvedEntity;
   motion: boolean;
   detections: CameraAiDetection[];
+  nativeAiKinds?: ReadonlySet<CameraAiDetectionKind>;
+  aiEnabled: boolean;
   compact?: boolean;
   onSnapshot: (camera: ResolvedEntity, video: HTMLVideoElement | null) => void;
   onPrev?: () => void;
   onNext?: () => void;
 }
 
+const EMPTY_AI_KINDS: ReadonlySet<CameraAiDetectionKind> = new Set();
+
 function FeaturedCamera({
   camera,
   motion,
   detections,
+  nativeAiKinds = EMPTY_AI_KINDS,
+  aiEnabled,
   compact = false,
   onSnapshot,
   onPrev,
@@ -319,6 +382,18 @@ function FeaturedCamera({
   const [status, setStatus] = useState<CameraStreamStatus>('idle');
   const [muted, setMuted] = useState(true);
   const fullscreen = () => player.current?.enterFullscreen();
+
+  // Prioritize native HA camera AI (e.g. Tapo C260 person & pet detection) over local TFJS.
+  const useLocalAi = aiEnabled && status === 'live' && !offline && nativeAiKinds.size === 0;
+  const { detections: localDetections, modelStatus } = useCameraObjectDetection(
+    () => player.current?.video ?? null,
+    useLocalAi
+  );
+
+  const mergedDetections = useMemo(
+    () => mergeCameraDetections(detections, localDetections, nativeAiKinds),
+    [detections, localDetections, nativeAiKinds]
+  );
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -362,7 +437,14 @@ function FeaturedCamera({
           )}
         </span>
 
-        {detections.map((d) => (
+        {useLocalAi && modelStatus === 'loading' ? (
+          <Chip size="sm" variant="soft" color="default">
+            <HugeiconsIcon icon={AiVisionRecognitionIcon} size={12} />
+            Loading AI…
+          </Chip>
+        ) : null}
+
+        {mergedDetections.map((d) => (
           <Chip key={d.kind} size="sm" variant="soft" color="warning">
             <HugeiconsIcon icon={AI_ICON[d.kind]} size={12} />
             {d.label}

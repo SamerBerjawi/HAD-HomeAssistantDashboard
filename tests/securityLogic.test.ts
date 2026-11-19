@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { classifyBinarySensors } from '@/lib/entityClassifiers';
 import {
   detectCameraAiAlerts,
+  detectCameraNativeAiKinds,
+  mergeCameraDetections,
   resolveAlarmTriggerDiagnostic
 } from '@/pro/lib/securityCameras';
 import {
@@ -17,6 +19,7 @@ import {
   groupByType,
   groupHasDanger,
   packOrder,
+  resolveMotionActivityMeta,
   shouldConfirmArming
 } from '@/pro/lib/securityLogic';
 import type { ResolvedEntity } from '@/types';
@@ -172,8 +175,20 @@ describe('securityLogic: garages, sirens, AI camera alerts & trigger diagnostics
       tone: 'warning'
     });
     expect(activitySentence('siren', 'Indoor Siren', 'on')).toEqual({
-      text: 'Indoor Siren sounded',
+      text: 'Indoor Siren siren activated',
       tone: 'danger'
+    });
+    expect(activitySentence('motion', 'Hallway', 'on')).toEqual({
+      text: 'Motion detected at Hallway',
+      tone: 'warning'
+    });
+    expect(activitySentence('leak', 'Kitchen Sink', 'off')).toEqual({
+      text: 'Water leak cleared at Kitchen Sink',
+      tone: 'success'
+    });
+    expect(activitySentence('lock', 'Front Door', 'locked', undefined, 'Night Auto-Lock')).toEqual({
+      text: 'Front Door locked via Night Auto-Lock',
+      tone: 'success'
     });
   });
 
@@ -220,5 +235,92 @@ describe('securityLogic: garages, sirens, AI camera alerts & trigger diagnostics
     ]);
     expect(res.doorSensors.map((s) => s.entity_id)).toEqual(['binary_sensor.front_door_contact']);
     expect(res.leakSensors.map((s) => s.entity_id)).toEqual(['binary_sensor.kitchen_sink_leak']);
+  });
+
+  it('prioritizes native Tapo C260 person & pet sensors over local in-browser AI', () => {
+    const tapo = ent('camera.tapo_c260_hd_stream', 'streaming', { device_id: 'dev_tapo_1' });
+    const sensors = [
+      ent('binary_sensor.tapo_c260_person_detection', 'off', { device_id: 'dev_tapo_1', name: 'Person Detection' }),
+      ent('binary_sensor.tapo_c260_pet_detection', 'on', { device_id: 'dev_tapo_1', name: 'Pet Detection' })
+    ];
+
+    const nativeKinds = detectCameraNativeAiKinds(tapo, sensors);
+    expect([...nativeKinds].sort()).toEqual(['animal', 'person']);
+
+    const nativeAlerts = detectCameraAiAlerts(tapo, sensors);
+    expect(nativeAlerts).toEqual([
+      { kind: 'animal', label: 'Pet', entityId: 'binary_sensor.tapo_c260_pet_detection' }
+    ]);
+
+    const merged = mergeCameraDetections(
+      nativeAlerts,
+      [
+        { kind: 'person', label: 'Person', entityId: 'local_ai:person' },
+        { kind: 'animal', label: 'Animal', entityId: 'local_ai:animal' },
+        { kind: 'vehicle', label: 'Vehicle', entityId: 'local_ai:vehicle' }
+      ],
+      nativeKinds
+    );
+    expect(merged.map((m) => `${m.kind}:${m.label}`)).toEqual(['animal:Pet', 'vehicle:Vehicle']);
+  });
+
+  it('formats explicit motion, person, and pet activity sentences with device or room names', () => {
+    const doorbell = ent('binary_sensor.entrance_door_bell_motion', 'on', {
+      name: 'Motion',
+      attributes: { friendly_name: 'Entrance Door Bell Motion', device_class: 'motion' },
+      device: { id: 'd1', name: 'Entrance Door Bell' }
+    });
+    const livingPerson = ent('binary_sensor.tapo_c260_person_detection', 'on', {
+      name: 'Person Detection',
+      attributes: { friendly_name: 'Tapo C260 Person Detection', device_class: 'motion' },
+      device: { id: 'd2', name: 'Tapo C260', model: 'C260' },
+      area: { area_id: 'living_room', name: 'Living Room' },
+      area_id: 'living_room'
+    });
+    const bedroomPet = ent('binary_sensor.tapo_c260_pet_detection', 'on', {
+      name: 'Pet Detection',
+      attributes: { friendly_name: 'Tapo C260 Pet Detection', device_class: 'motion' },
+      device: { id: 'd3', name: 'Tapo C260', model: 'C260' },
+      area: { area_id: 'bedroom', name: 'Bedroom' },
+      area_id: 'bedroom'
+    });
+
+    const meta = {
+      [doorbell.entity_id]: resolveMotionActivityMeta(doorbell),
+      [livingPerson.entity_id]: resolveMotionActivityMeta(livingPerson),
+      [bedroomPet.entity_id]: resolveMotionActivityMeta(bedroomPet)
+    };
+
+    const events = buildActivity(
+      [
+        { entity_id: doorbell.entity_id, state: 'on', when: 1_700_000_300 },
+        { entity_id: livingPerson.entity_id, state: 'on', when: 1_700_000_200 },
+        { entity_id: bedroomPet.entity_id, state: 'on', when: 1_700_000_100 }
+      ],
+      {
+        [doorbell.entity_id]: 'motion',
+        [livingPerson.entity_id]: 'motion',
+        [bedroomPet.entity_id]: 'motion'
+      },
+      {
+        [doorbell.entity_id]: 'Motion',
+        [livingPerson.entity_id]: 'Person Detection',
+        [bedroomPet.entity_id]: 'Pet Detection'
+      },
+      {},
+      {
+        [livingPerson.entity_id]: 'Living Room',
+        [bedroomPet.entity_id]: 'Bedroom'
+      },
+      meta
+    );
+
+    expect(events.map((e) => e.text)).toEqual([
+      'Motion detected at Entrance Door Bell',
+      'Person detected in Living Room',
+      'Pet detected in Bedroom'
+    ]);
+    expect(events.map((e) => e.detection)).toEqual([undefined, 'person', 'pet']);
+    expect(events.map((e) => e.area)).toEqual([undefined, undefined, undefined]);
   });
 });

@@ -4,8 +4,11 @@ import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
   AlarmSmokeIcon,
   Alert02Icon,
+  BlindsIcon,
+  DashboardSquare01Icon,
   DashboardSquare02Icon,
   DoorIcon,
+  DropletIcon,
   GarageIcon,
   Megaphone01Icon,
   Motion01Icon,
@@ -41,8 +44,8 @@ const GROUP_ICON: Record<DeviceGroup['kind'], IconSvgElement> = {
   motion: Motion01Icon,
   room: Sofa01Icon,
   door: DoorIcon,
-  window: DoorIcon,
-  leak: AlarmSmokeIcon,
+  window: BlindsIcon,
+  leak: DropletIcon,
   smoke: AlarmSmokeIcon
 };
 
@@ -154,7 +157,10 @@ export function DeviceGroups({
               if (next) setFilterMode(next);
             }}
           >
-            <ToggleButton id="all">All</ToggleButton>
+            <ToggleButton id="all">
+              <HugeiconsIcon icon={DashboardSquare01Icon} size={14} />
+              All
+            </ToggleButton>
             <ToggleButton id="issues">
               <HugeiconsIcon icon={Alert02Icon} size={14} />
               Issues

@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { haWebSocketService } from '@/services/haWebSocket';
 import type { ResolvedEntity } from '@/types';
-import { buildActivity, type ActivityEvent, type DeviceKind, type LogbookEntry, type SecurityEntities } from '../lib/securityLogic';
+import {
+  buildActivity,
+  resolveMotionActivityMeta,
+  type ActivityEntityMeta,
+  type ActivityEvent,
+  type DeviceKind,
+  type LogbookEntry,
+  type SecurityEntities
+} from '../lib/securityLogic';
 import { entityName } from './useSecurityData';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,13 +23,17 @@ export function useSecurityActivity(entities: SecurityEntities, alarms: Resolved
   const [rows, setRows] = useState<LogbookEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const { kinds, names, tracked } = useMemo(() => {
+  const { kinds, names, areas, meta, tracked } = useMemo(() => {
     const kinds: Record<string, DeviceKind> = {};
     const names: Record<string, string> = {};
+    const areas: Record<string, string> = {};
+    const meta: Record<string, ActivityEntityMeta> = {};
     const add = (list: ResolvedEntity[], kind: DeviceKind) =>
       list.forEach((e) => {
         kinds[e.entity_id] = kind;
         names[e.entity_id] = entityName(e);
+        if (e.area?.name) areas[e.entity_id] = e.area.name;
+        if (kind === 'motion') meta[e.entity_id] = resolveMotionActivityMeta(e);
       });
     add(entities.locks, 'lock');
     add(entities.garages || [], 'garage');
@@ -31,9 +43,12 @@ export function useSecurityActivity(entities: SecurityEntities, alarms: Resolved
     add(entities.motionSensors, 'motion');
     add(entities.leakSensors, 'leak');
     add(entities.smokeSensors, 'smoke');
-    alarms.forEach((a) => (names[a.entity_id] = entityName(a)));
+    alarms.forEach((a) => {
+      names[a.entity_id] = entityName(a);
+      if (a.area?.name) areas[a.entity_id] = a.area.name;
+    });
     const tracked = [...Object.keys(kinds), ...alarms.map((a) => a.entity_id)];
-    return { kinds, names, tracked };
+    return { kinds, names, areas, meta, tracked };
   }, [entities, alarms]);
 
   const users = useMemo(() => {
@@ -101,8 +116,8 @@ export function useSecurityActivity(entities: SecurityEntities, alarms: Resolved
       [...alarms, ...entities.locks, ...entities.doorSensors, ...entities.windowSensors, ...entities.motionSensors, ...entities.leakSensors, ...entities.smokeSensors]
         .filter((e) => e.last_changed)
         .map((e) => ({ entity_id: e.entity_id, state: e.state, when: e.last_changed! }));
-    return buildActivity(source, kinds, names, users).filter((e) => e.when >= since);
-  }, [rows, kinds, names, users, alarms, entities]);
+    return buildActivity(source, kinds, names, users, areas, meta).filter((e) => e.when >= since);
+  }, [rows, kinds, names, users, areas, meta, alarms, entities]);
 
   return { events, loading };
 }

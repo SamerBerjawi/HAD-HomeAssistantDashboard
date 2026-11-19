@@ -1,13 +1,22 @@
 import { useMemo, useState } from 'react';
 import { Button, Skeleton, ToggleButton, ToggleButtonGroup } from '@heroui/react';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowDown01Icon, Clock01Icon, Shield01Icon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
+import {
+  AlarmSmokeIcon,
+  ArrowDown01Icon,
+  Clock01Icon,
+  DashboardSquare01Icon,
+  DoorIcon,
+  Motion01Icon,
+  Shield01Icon,
+  SquareLock02Icon
+} from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import { useMinuteTick } from '../../hooks/useMinuteTick';
 import { timeAgo } from '../../lib/pageSentences';
 import type { ActivityEvent } from '../../lib/securityLogic';
 import { TONE_TILE } from './AlarmHero';
-import { KIND_ICON } from './DeviceRow';
+import { activityEventIcon } from './DeviceRow';
 
 const FIRST = 8;
 /** Busy sensors can log thousands of changes a day; the expanded list stops at this many. */
@@ -15,13 +24,13 @@ const MAX = 50;
 
 type ActivityFilter = 'all' | 'alarm' | 'lock' | 'openings' | 'motion' | 'hazards';
 
-const FILTER_OPTIONS: ReadonlyArray<{ id: ActivityFilter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'alarm', label: 'Alarm' },
-  { id: 'lock', label: 'Locks' },
-  { id: 'openings', label: 'Openings' },
-  { id: 'motion', label: 'Motion' },
-  { id: 'hazards', label: 'Hazards' }
+const FILTER_OPTIONS: ReadonlyArray<{ id: ActivityFilter; label: string; icon: IconSvgElement }> = [
+  { id: 'all', label: 'All', icon: DashboardSquare01Icon },
+  { id: 'alarm', label: 'Alarm', icon: Shield01Icon },
+  { id: 'lock', label: 'Locks', icon: SquareLock02Icon },
+  { id: 'openings', label: 'Openings', icon: DoorIcon },
+  { id: 'motion', label: 'Motion', icon: Motion01Icon },
+  { id: 'hazards', label: 'Hazards', icon: AlarmSmokeIcon }
 ];
 
 function matchesFilter(e: ActivityEvent, filter: ActivityFilter): boolean {
@@ -31,9 +40,16 @@ function matchesFilter(e: ActivityEvent, filter: ActivityFilter): boolean {
   return e.kind === filter;
 }
 
+function formatClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
+
 /**
  * Recent activity timeline (DESIGN.md 7.5): last 8 events of 24 h with category filters,
- * live 30s relative timestamp updates, and Show more up to 50.
+ * explicit room/actor/exact-time details, live 30s relative timestamp updates, and Show more up to 50.
  */
 export function RecentActivity({ events, loading }: { events: ActivityEvent[]; loading: boolean }) {
   useMinuteTick();
@@ -87,7 +103,8 @@ export function RecentActivity({ events, loading }: { events: ActivityEvent[]; l
             className="flex-wrap justify-start gap-1.5"
           >
             {availableFilters.map((opt) => (
-              <ToggleButton key={opt.id} id={opt.id} className="h-7 px-2.5 text-xs">
+              <ToggleButton key={opt.id} id={opt.id} className="h-7 gap-1.5 px-2.5 text-xs">
+                <HugeiconsIcon icon={opt.icon} size={14} />
                 {opt.label}
               </ToggleButton>
             ))}
@@ -114,17 +131,27 @@ export function RecentActivity({ events, loading }: { events: ActivityEvent[]; l
                 <span aria-hidden="true" className="absolute left-[15px] top-8 bottom-0 w-px bg-separator" />
               )}
               <span className={cn('relative grid size-8 shrink-0 place-items-center rounded-full', TONE_TILE[e.tone])}>
-                <HugeiconsIcon icon={e.kind === 'alarm' ? Shield01Icon : KIND_ICON[e.kind]} size={16} />
+                <HugeiconsIcon icon={activityEventIcon(e)} size={16} />
               </span>
               <span className="flex min-w-0 flex-col pt-0.5">
-                <span className="text-sm font-medium">{e.text}</span>
-                <time
-                  dateTime={new Date(e.when).toISOString()}
-                  className="text-xs text-muted"
-                  title={new Date(e.when).toLocaleString()}
-                >
-                  {timeAgo((Date.now() - e.when) / 60000)}
-                </time>
+                <span className="text-sm font-medium text-foreground">{e.text}</span>
+                <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                  <time
+                    dateTime={new Date(e.when).toISOString()}
+                    className="font-mono"
+                    title={new Date(e.when).toLocaleString()}
+                  >
+                    {formatClock(e.when)}
+                  </time>
+                  <span aria-hidden="true">·</span>
+                  <span>{timeAgo((Date.now() - e.when) / 60000)}</span>
+                  {e.area ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="truncate">{e.area}</span>
+                    </>
+                  ) : null}
+                </span>
               </span>
             </li>
           ))}
