@@ -47,3 +47,140 @@
 }
 .pro-soft { background: var(--pro-accent-soft); color: var(--pro-accent-soft-fg); }
 .pro-accent { background: var(--accent); color: var(--accent-foreground); }
+
+/* HeroUI InputOTP: the real <input> is invisible and spans all slots; the active slot already shows
+ * the focus ring, so the global UI-006 ring (index.css) would only draw a stray box around it. */
+.pro .input-otp__input:focus-visible {
+  outline: none !important;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes marquee-vertical {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+.animate-marquee {
+  animation: marquee var(--duration) linear infinite;
+}
+
+.animate-marquee-vertical {
+  animation: marquee-vertical var(--duration) linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-marquee-vertical {
+    animation: none;
+  }
+}
+
+/* Minimal dark & light basemap styling applied to OpenStreetMap tile layer only (markers unaffected). */
+.pro .pro-osm-tiles-dark {
+  filter: invert(0.92) hue-rotate(180deg) saturate(0.28) brightness(0.9) contrast(1.06);
+}
+
+.pro .pro-osm-tiles-light {
+  filter: saturate(0.28) brightness(1.03) contrast(0.92);
+}
+
+/* Custom waveform scrubber track & playhead pin: override HeroUI Slider borders and thumb pill. */
+.pro .slider[data-orientation='horizontal'] .slider__track.pro-waveform-track {
+  border-inline-width: 0 !important;
+  border-inline-color: transparent !important;
+  background: transparent !important;
+}
+.pro .slider[data-orientation='horizontal'] .slider__thumb.pro-waveform-thumb {
+  width: 3px !important;
+  min-width: 3px !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+}
+.pro .slider[data-orientation='horizontal'] .slider__thumb.pro-waveform-thumb::before,
+.pro .slider[data-orientation='horizontal'] .slider__thumb.pro-waveform-thumb::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Official bklit UI chart tokens mapped onto Pro-UI HeroUI semantic variables. */
+.pro {
+  --chart-background: var(--default);
+  --chart-foreground: var(--foreground);
+  --chart-foreground-muted: var(--muted);
+  --chart-label: var(--muted);
+  --chart-1: var(--accent);
+  --chart-2: var(--success);
+  --chart-3: var(--warning);
+  --chart-4: var(--energy-export);
+  --chart-5: var(--success);
+  /* Energy series colours (audit P2, 2026-11-19): one place for light and dark, AA on surfaces. */
+  --energy-solar: var(--warning);
+  --energy-battery: oklch(0.6 0.118 184.7);
+  --energy-grid: oklch(0.588 0.158 241.97);
+  --energy-export: oklch(0.511 0.262 276.97);
+  --energy-gas: oklch(0.558 0.252 302.32);
+  --energy-untracked: oklch(0.554 0.046 257.42);
+}
+.dark .pro,
+.pro.dark {
+  --energy-battery: oklch(0.777 0.152 181.91);
+  --energy-grid: oklch(0.746 0.16 232.66);
+  --energy-export: oklch(0.673 0.182 276.94);
+  --energy-gas: oklch(0.714 0.203 305.5);
+  --energy-untracked: oklch(0.704 0.04 256.79);
+}
+.pro .text-chart-label {
+  color: var(--chart-label);
+}
+
+/* Touch targets (DESIGN.md 6, audit P2 2026-11-19): small edit-mode controls grow to 44 px on
+ * touch screens; mouse layouts keep their compact size. */
+@media (pointer: coarse) {
+  .pro .pro-touch-44 {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+}
+
+/* Overview layout engine (rebuild): react-grid-layout in pro tokens. */
+.pro .pro-rgl .react-grid-item.react-grid-placeholder {
+  background: var(--accent);
+  opacity: 0.16;
+  border-radius: 1.25rem;
+}
+.pro .pro-rgl .react-grid-item.react-draggable-dragging {
+  opacity: 0.92;
+  filter: drop-shadow(0 12px 24px rgb(0 0 0 / 0.18));
+}
+.pro .pro-rgl .pro-rgl-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 20px;
+  height: 20px;
+  cursor: se-resize;
+  border-right: 3px solid var(--accent);
+  border-bottom: 3px solid var(--accent);
+  border-bottom-right-radius: 10px;
+  opacity: 0.7;
+}
+.pro .pro-rgl .pro-rgl-handle:hover {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pro .pro-rgl .react-grid-item {
+    transition: none;
+  }
+}

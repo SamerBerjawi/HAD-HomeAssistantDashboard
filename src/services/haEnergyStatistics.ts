@@ -509,7 +509,7 @@ export async function fetchHAEnergyStatistics(
 // Synthetic Statistics Generator (Demo Mode only)
 // -------------------------------------------------------------
 
-function generateSyntheticStatistics(
+export function generateSyntheticStatistics(
   statIds: string[],
   startTime: string,
   endTime: string,
@@ -617,9 +617,11 @@ function generateSyntheticStatistics(
         delta = (exactHour >= 6 && exactHour <= 9 ? 0.75 : 0.35) * hourFraction;
       } else if (id.includes('ev') || id.includes('wallbox') || id.includes('charger')) {
         delta = (exactHour >= 1 && exactHour <= 4 ? 1.8 : 0) * hourFraction;
-      } else if (id.includes('gas')) {
+      } else if (id.includes('gas') && !id.includes('energy')) {
+        // "_energy" sensors of gas/water appliances (sensor.water_heater_energy) are electricity
+        // in kWh, not gas or water volume.
         delta = (periodType === 'hour' || periodType === '5minute' ? 0.05 * hourFraction : (periodType === 'day' ? 0.8 : 22));
-      } else if (id.includes('water')) {
+      } else if (id.includes('water') && !id.includes('energy')) {
         delta = (periodType === 'hour' || periodType === '5minute' ? 12 * hourFraction : (periodType === 'day' ? 140 : 4200));
       } else {
         delta = (0.08 + Math.abs(Math.sin(i * 0.2)) * 0.05) * hourFraction;

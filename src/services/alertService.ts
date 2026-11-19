@@ -12,21 +12,13 @@ import { HANativePersistentNotification } from '../types/notifications';
 import { useAlertStore } from '../store/useAlertStore';
 import { useAutoLayoutStore } from '../store/useAutoLayoutStore';
 import { haWebSocketService } from './haWebSocket';
-import { isLeakSensor, isRainOrWeatherSensor } from '../lib/entityClassifiers';
+import { isRainOrWeatherSensor } from '../lib/entityClassifiers';
+import { EMERGENCY_TITLE, emergencyTypeOf } from './notifications/emergency';
 
 // State transition history tracking to avoid duplicate alerts
 const previousStateCache = new Map<string, { state: string; timestamp: number }>();
 const debounceTimestamps = new Map<string, number>();
 
-// Critical hazard device classes
-const CRITICAL_DEVICE_CLASSES = new Set([
-  'smoke',
-  'gas',
-  'carbon_monoxide',
-  'co',
-  'moisture',
-  'safety'
-]);
 
 // Audio synthesizer for hazard alert chime
 function playCriticalAlertBeep() {
@@ -177,42 +169,17 @@ export class AlertService {
       return;
     }
 
-    const isMoisture = deviceClass === 'moisture';
-    const isWaterLeak = isMoisture ? isLeakSensor(sensorPayload) : isLeakSensor(sensorPayload);
-    const isCriticalSensor = isMoisture 
-      ? isWaterLeak 
-      : (CRITICAL_DEVICE_CLASSES.has(deviceClass) || isWaterLeak);
+    // Binary sensors and triggered alarms only; see notifications/emergency.ts.
+    const emergency = emergencyTypeOf(entityId, newStateStr, newState.attributes || {}, friendlyName);
 
-    const isAlarmTriggered = entityId.startsWith('alarm_control_panel.') && newStateStr === 'triggered';
-
-    if ((isCriticalSensor && (newStateStr === 'on' || newStateStr === 'problem')) || isAlarmTriggered) {
+    if (emergency) {
       // Debounce critical alerts to once every 10 seconds per entity
       const lastTrigger = debounceTimestamps.get(entityId) || 0;
       if (Date.now() - lastTrigger < 10000) return;
       debounceTimestamps.set(entityId, Date.now());
 
-      let sensorType: 'smoke' | 'gas' | 'co' | 'moisture' | 'safety' | 'alarm' | 'hazard' = 'hazard';
-      let hazardTitle = 'CRITICAL ALERT';
-
-      if (deviceClass === 'smoke') {
-        sensorType = 'smoke';
-        hazardTitle = 'SMOKE DETECTED';
-      } else if (deviceClass === 'gas') {
-        sensorType = 'gas';
-        hazardTitle = 'GAS LEAK DETECTED';
-      } else if (deviceClass === 'carbon_monoxide' || deviceClass === 'co') {
-        sensorType = 'co';
-        hazardTitle = 'CARBON MONOXIDE DETECTED';
-      } else if (isMoisture || isWaterLeak) {
-        sensorType = 'moisture';
-        hazardTitle = 'WATER LEAK DETECTED';
-      } else if (deviceClass === 'safety') {
-        sensorType = 'safety';
-        hazardTitle = 'SAFETY HAZARD TRIGGERED';
-      } else if (isAlarmTriggered) {
-        sensorType = 'alarm';
-        hazardTitle = 'INTRUSION ALARM TRIGGERED';
-      }
+      const sensorType = emergency;
+      const hazardTitle = EMERGENCY_TITLE[emergency];
 
       const alertMessage = areaName 
         ? `${friendlyName} has detected a hazard in ${areaName}!`

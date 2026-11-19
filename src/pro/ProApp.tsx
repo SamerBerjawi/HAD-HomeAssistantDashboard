@@ -11,10 +11,17 @@ import { useStartupState } from '@/hooks/app/useStartupState';
 import { useShellOverlays } from '@/hooks/app/useShellOverlays';
 import FullScreenLoadingPage from '@/components/ui/FullScreenLoadingPage';
 import ProShell from './components/ProShell';
+import ProOverview from './pages/ProOverview';
 import ProSecurity from './pages/ProSecurity';
+import ProToaster from './components/toasts/ProToaster';
 
-const AuthModal = lazy(() => import('@/components/auth/AuthModal'));
-const NotificationDrawer = lazy(() => import('@/components/notifications/NotificationDrawer'));
+// Overview rebuild in progress (docs/pro-ui/OVERVIEW_REBUILD.md): dev builds only, /overview?next.
+const ProOverviewNext = import.meta.env.DEV ? lazy(() => import('./pages/ProOverviewNext')) : null;
+const showNext = () => ProOverviewNext !== null && new URLSearchParams(window.location.search).has('next');
+
+const ProSignIn = lazy(() => import('./components/ProSignIn'));
+const ProNotificationCenter = lazy(() => import('./components/notifications/ProNotificationCenter'));
+const ProEmergencyAlert = lazy(() => import('./components/toasts/ProEmergencyAlert'));
 
 /** Entry for the pro design language: same providers, stores and startup flow as the classic App. */
 export default function ProApp() {
@@ -85,24 +92,35 @@ export default function ProApp() {
         onToggleTheme={() => handleToggleDarkMode()}
         onOpenNotifications={overlays.handleOpenNotifications}
       >
-        {activeTab === 'security' ? (
+        {activeTab === 'overview' && ProOverviewNext && showNext() ? (
+          <Suspense fallback={null}>
+            <ProOverviewNext />
+          </Suspense>
+        ) : activeTab === 'overview' ? (
+          <ProOverview />
+        ) : activeTab === 'security' ? (
           <ProSecurity />
         ) : (
           <div className="pro-surface p-8 flex flex-col gap-2">
-            <h1 className="text-2xl font-bold tracking-tight capitalize">{activeTab}</h1>
-            <p className="text-muted">This page has not been rebuilt in the pro design yet. Security is the pilot.</p>
+            <p className="text-muted">This page has not been rebuilt in the pro design yet. Security and Overview are in progress.</p>
           </div>
         )}
       </ProShell>
 
       {overlays.hasOpenedAuth && (
         <Suspense fallback={null}>
-          <AuthModal darkMode={darkMode} />
+          <ProSignIn darkMode={darkMode} onDemo={() => useAutoLayoutStore.getState().reloadDemoData()} />
         </Suspense>
       )}
       {overlays.hasOpenedNotifications && (
         <Suspense fallback={null}>
-          <NotificationDrawer isOpen={overlays.isNotificationOpen} onClose={overlays.handleCloseNotifications} darkMode={darkMode} />
+          <ProNotificationCenter isOpen={overlays.isNotificationOpen} onClose={overlays.handleCloseNotifications} page={activeTab} />
+        </Suspense>
+      )}
+      <ProToaster shellToasts={overlays.toasts} onDismissShellToast={overlays.dismissToast} page={activeTab} />
+      {overlays.hasCriticalAlert && (
+        <Suspense fallback={null}>
+          <ProEmergencyAlert onOpenSecurity={() => setActiveTab('security')} />
         </Suspense>
       )}
     </>

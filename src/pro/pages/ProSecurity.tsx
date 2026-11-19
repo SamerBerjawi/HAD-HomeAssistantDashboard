@@ -1,76 +1,108 @@
-import { useState } from 'react';
-import { Button, Chip } from '@heroui/react';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, CloseButton, Skeleton, Toast } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import {
-  Shield01Icon,
-  SquareLock02Icon,
-  SquareUnlock02Icon,
-  Alert02Icon,
-  CheckmarkCircle02Icon,
-  DoorIcon,
-  FireIcon,
-  Camera01Icon
-} from '@hugeicons/core-free-icons';
-import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
-import CameraFeedSection from '@/components/views/security/CameraFeedSection';
-import { errorMessageField } from '@/lib/errors';
-import { entityName, useSecurityData } from '../hooks/useSecurityData';
+import { Alert02Icon, Shield01Icon } from '@hugeicons/core-free-icons';
+import { cn } from '@/lib/utils';
+import { useSecurityData } from '../hooks/useSecurityData';
+import { useSecurityActivity } from '../hooks/useSecurityActivity';
+import { AlarmHero } from '../components/security/AlarmHero';
+import { AttentionCard } from '../components/security/AttentionCard';
+import { DeviceGroups } from '../components/security/DeviceGroups';
+import { SecurityCameras } from '../components/security/SecurityCameras';
+import { RecentActivity } from '../components/security/RecentActivity';
+import { SecurityDeviceSheet } from '../components/security/SecurityDeviceSheet';
+import { deviceItem, type DeviceItem, type SecurityEntities } from '../lib/securityLogic';
 
-const ALARM_MODES = [
-  { state: 'armed_home', service: 'alarm_arm_home', label: 'Home' },
-  { state: 'armed_away', service: 'alarm_arm_away', label: 'Away' },
-  { state: 'armed_night', service: 'alarm_arm_night', label: 'Night' }
-] as const;
+const { toast } = Toast;
 
-function Card({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="pro-surface p-5 flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold">{title}</h2>
-        {aside}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function Metric({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="pro-surface p-4 flex flex-col gap-1">
-      <span className="text-sm text-muted">{label}</span>
-      <span className="text-2xl font-bold tracking-tight">{value}</span>
-      <span className="text-xs text-muted">{hint}</span>
-    </div>
-  );
-}
-
+/**
+ * Pro Security page (docs/pro-ui/DESIGN.md 7.5): alarm hero + needs attention, cameras + recent
+ * activity, device groups in a bento grid, and device detail ProSheet.
+ */
 export default function ProSecurity() {
   const data = useSecurityData();
-  const callHAService = useAutoLayoutStore((s) => s.callHAService);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [focusedCameraId, setFocusedCameraId] = useState<string | null>(null);
+  const [selectedDeviceKey, setSelectedDeviceKey] = useState<{
+    entityId: string;
+    kind: DeviceItem['kind'];
+  } | null>(null);
 
-  const run = async (key: string, domain: string, service: string, entityId: string) => {
-    setBusy(key);
-    setError(null);
-    try {
-      await callHAService(domain, service, {}, { entity_id: entityId });
-    } catch (e) {
-      setError(errorMessageField(e) || 'Home Assistant rejected the command');
-    } finally {
-      setBusy(null);
+  const handleError = useCallback((message: string | null) => {
+    setError(message);
+    if (message) {
+      toast.danger(message);
     }
-  };
+  }, []);
+
+  const handleFocusCamera = useCallback((cameraId: string) => {
+    setFocusedCameraId(cameraId);
+    const el = document.getElementById('pro-security-cameras');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
+  const entities: SecurityEntities = useMemo(
+    () => ({
+      locks: data.locks,
+      garages: data.garages,
+      sirens: data.sirens,
+      doorSensors: data.doorSensors,
+      windowSensors: data.windowSensors,
+      motionSensors: data.motionSensors,
+      leakSensors: data.leakSensors,
+      smokeSensors: data.smokeSensors
+    }),
+    [
+      data.locks,
+      data.garages,
+      data.sirens,
+      data.doorSensors,
+      data.windowSensors,
+      data.motionSensors,
+      data.leakSensors,
+      data.smokeSensors
+    ]
+  );
+  const activity = useSecurityActivity(entities, data.alarms, data.people);
+
+  const selectedItem = useMemo<DeviceItem | null>(() => {
+    if (!selectedDeviceKey) return null;
+    const all = [
+      ...data.locks,
+      ...data.garages,
+      ...data.sirens,
+      ...data.doorSensors,
+      ...data.windowSensors,
+      ...data.motionSensors,
+      ...data.leakSensors,
+      ...data.smokeSensors
+    ];
+    const found = all.find((e) => e.entity_id === selectedDeviceKey.entityId);
+    return found ? deviceItem(found, selectedDeviceKey.kind) : null;
+  }, [selectedDeviceKey, data]);
+
+  const handleSelectDevice = useCallback((item: DeviceItem) => {
+    setSelectedDeviceKey({ entityId: item.entity.entity_id, kind: item.kind });
+  }, []);
 
   if (data.isLoading) {
-    return <p className="text-muted">Loading security devices…</p>;
+    return (
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Skeleton className="h-48 rounded-2xl lg:col-span-2" />
+        <Skeleton className="h-48 rounded-2xl" />
+        <Skeleton className="h-64 rounded-2xl lg:col-span-3" />
+      </div>
+    );
   }
+
   if (data.total === 0) {
     return (
-      <div className="pro-surface p-8 text-center flex flex-col items-center gap-3">
-        <HugeiconsIcon icon={Shield01Icon} size={32} className="text-muted" />
+      <div className="pro-surface flex flex-col items-center gap-3 p-8 text-center">
+        <span className="pro-soft grid size-12 place-items-center rounded-2xl">
+          <HugeiconsIcon icon={Shield01Icon} size={24} />
+        </span>
         <h2 className="text-lg font-semibold">No security devices yet</h2>
-        <p className="text-muted max-w-md">
+        <p className="max-w-md text-muted">
           Add alarm panels, locks, cameras or door, window, motion and leak sensors in Home Assistant and they appear here.
         </p>
       </div>
@@ -78,135 +110,92 @@ export default function ProSecurity() {
   }
 
   const alarm = data.activeAlarm;
-  const alarmState = alarm?.state || 'disarmed';
-  const armed = alarmState.startsWith('armed');
-  const triggered = alarmState === 'triggered';
-  const alarmLabel = alarmState.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  const openings = [...data.openDoors, ...data.openWindows];
+  const hasCameras = data.cameras.length > 0;
 
   return (
-    <>
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Security</h1>
-          <p className="text-muted">
-            {data.attentionCount === 0 ? 'Everything is secure' : `${data.attentionCount} item${data.attentionCount === 1 ? '' : 's'} need attention`}
-          </p>
-        </div>
-        <Chip color={data.attentionCount === 0 ? 'success' : 'warning'} variant="soft">
-          {data.attentionCount === 0 ? 'All clear' : 'Attention'}
-        </Chip>
-      </header>
-
+    <div className="flex flex-col gap-4">
       {error && (
-        <div role="alert" className="rounded-2xl bg-danger/10 text-danger px-4 py-3 text-sm font-medium">
-          {error}
-        </div>
+        <Alert status="danger">
+          <Alert.Indicator>
+            <HugeiconsIcon icon={Alert02Icon} size={18} />
+          </Alert.Indicator>
+          <Alert.Content>
+            <Alert.Title>{error}</Alert.Title>
+          </Alert.Content>
+          <CloseButton aria-label="Dismiss" onPress={() => setError(null)} />
+        </Alert>
       )}
 
-      {alarm && (
-        <Card
-          title="Alarm"
-          aside={
-            <Chip color={triggered ? 'danger' : armed ? 'success' : 'default'} variant="soft">
-              {alarmLabel}
-            </Chip>
-          }
-        >
-          <p className="text-sm text-muted">{entityName(alarm)}</p>
-          <div className="flex flex-wrap gap-2">
-            {ALARM_MODES.map((m) => (
-              <Button
-                key={m.state}
-                variant={alarmState === m.state ? 'primary' : 'secondary'}
-                isPending={busy === m.state}
-                onPress={() => run(m.state, 'alarm_control_panel', m.service, alarm.entity_id)}
-              >
-                {m.label}
-              </Button>
-            ))}
-            <Button
-              variant="outline"
-              isDisabled={!armed && !triggered}
-              isPending={busy === 'disarm'}
-              onPress={() => run('disarm', 'alarm_control_panel', 'alarm_disarm', alarm.entity_id)}
-            >
-              Disarm
-            </Button>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {alarm && (
+          <div className="min-w-0 lg:col-span-2">
+            <AlarmHero
+              alarm={alarm}
+              alarms={data.alarms}
+              openings={openings}
+              openGarages={data.openGarages}
+              unlockedLocks={data.unlockedLocks}
+              activeSirens={data.activeSirens}
+              hazards={data.activeHazards}
+              people={data.people}
+              cameras={data.cameras}
+              events={activity.events}
+              serverUrl={data.serverUrl}
+              onFocusCamera={hasCameras ? handleFocusCamera : undefined}
+              onError={handleError}
+            />
           </div>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Metric label="Doors" value={`${data.doorSensors.length - data.openDoors.length}/${data.doorSensors.length}`} hint="closed" />
-        <Metric label="Windows" value={`${data.windowSensors.length - data.openWindows.length}/${data.windowSensors.length}`} hint="closed" />
-        <Metric label="Locks" value={`${data.locks.length - data.unlockedLocks.length}/${data.locks.length}`} hint="locked" />
-        <Metric label="Motion" value={String(data.activeMotion.length)} hint="active now" />
+        )}
+        <div className={cn('grid min-w-0', !alarm && 'lg:col-span-3')}>
+          <AttentionCard
+            hazards={data.activeHazards}
+            activeSirens={data.activeSirens}
+            jammedLocks={data.jammedLocks}
+            openDoors={data.openDoors}
+            openWindows={data.openWindows}
+            openGarages={data.openGarages}
+            unlockedLocks={data.unlockedLocks}
+            deviceBatteryByEntityId={data.deviceBatteryByEntityId}
+            lowBatteryDevices={data.lowBatteryDevices}
+            offlineDevices={data.offlineDevices}
+            onError={handleError}
+            onSelectDevice={handleSelectDevice}
+          />
+        </div>
       </div>
 
-      <Card
-        title="Needs attention"
-        aside={<HugeiconsIcon icon={data.attentionCount === 0 ? CheckmarkCircle02Icon : Alert02Icon} size={20} className={data.attentionCount === 0 ? 'text-success' : 'text-warning'} />}
-      >
-        {data.attentionCount === 0 ? (
-          <p className="text-muted">Doors and windows are closed, locks are secured and no hazards are detected.</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-separator">
-            {data.activeHazards.map((e) => (
-              <li key={e.entity_id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <HugeiconsIcon icon={FireIcon} size={18} className="text-danger" />
-                <span className="flex-1 font-medium">{entityName(e)}</span>
-                <Chip color="danger" variant="soft">Detected</Chip>
-              </li>
-            ))}
-            {[...data.openDoors, ...data.openWindows].map((e) => (
-              <li key={e.entity_id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <HugeiconsIcon icon={DoorIcon} size={18} className="text-warning" />
-                <span className="flex-1 font-medium">{entityName(e)}</span>
-                <Chip color="warning" variant="soft">Open</Chip>
-              </li>
-            ))}
-            {data.unlockedLocks.map((e) => (
-              <li key={e.entity_id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <HugeiconsIcon icon={SquareUnlock02Icon} size={18} className="text-warning" />
-                <span className="flex-1 font-medium">{entityName(e)}</span>
-                <Button size="sm" variant="secondary" isPending={busy === e.entity_id} onPress={() => run(e.entity_id, 'lock', 'lock', e.entity_id)}>
-                  Lock
-                </Button>
-              </li>
-            ))}
-          </ul>
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        {hasCameras && (
+          <div className="min-w-0 lg:col-span-2">
+            <SecurityCameras
+              cameras={data.cameras}
+              focusedCameraId={focusedCameraId}
+              onError={handleError}
+            />
+          </div>
         )}
-      </Card>
+        <div className={cn('min-w-0', !hasCameras && 'lg:col-span-3')}>
+          <RecentActivity events={activity.events} loading={activity.loading} />
+        </div>
+      </div>
 
-      {data.locks.length > 0 && (
-        <Card title="Locks">
-          <ul className="flex flex-col divide-y divide-separator">
-            {data.locks.map((e) => {
-              const open = e.state === 'unlocked' || e.state === 'open';
-              return (
-                <li key={e.entity_id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <HugeiconsIcon icon={open ? SquareUnlock02Icon : SquareLock02Icon} size={18} className={open ? 'text-warning' : 'text-success'} />
-                  <span className="flex-1 font-medium">{entityName(e)}</span>
-                  <Button
-                    size="sm"
-                    variant={open ? 'primary' : 'secondary'}
-                    isPending={busy === `lock-${e.entity_id}`}
-                    onPress={() => run(`lock-${e.entity_id}`, 'lock', open ? 'lock' : 'unlock', e.entity_id)}
-                  >
-                    {open ? 'Lock' : 'Unlock'}
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      )}
+      <DeviceGroups
+        entities={entities}
+        deviceBatteryByEntityId={data.deviceBatteryByEntityId}
+        onError={handleError}
+        onSelectDevice={handleSelectDevice}
+      />
 
-      {data.cameras.length > 0 && (
-        <Card title="Cameras" aside={<HugeiconsIcon icon={Camera01Icon} size={20} className="text-muted" />}>
-          <CameraFeedSection darkMode={false} cameraEntities={data.cameras} columns={2} />
-        </Card>
-      )}
-    </>
+      <SecurityDeviceSheet
+        item={selectedItem}
+        batteryPct={
+          selectedItem ? data.deviceBatteryByEntityId[selectedItem.entity.entity_id] : undefined
+        }
+        events={activity.events}
+        onClose={() => setSelectedDeviceKey(null)}
+        onError={handleError}
+      />
+    </div>
   );
 }
