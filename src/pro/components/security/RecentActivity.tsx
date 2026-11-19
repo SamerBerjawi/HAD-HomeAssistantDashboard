@@ -26,8 +26,8 @@ const FILTER_OPTIONS: ReadonlyArray<{ id: ActivityFilter; label: string }> = [
 
 function matchesFilter(e: ActivityEvent, filter: ActivityFilter): boolean {
   if (filter === 'all') return true;
-  if (filter === 'openings') return e.kind === 'door' || e.kind === 'window';
-  if (filter === 'hazards') return e.kind === 'leak' || e.kind === 'smoke';
+  if (filter === 'openings') return e.kind === 'door' || e.kind === 'window' || e.kind === 'garage';
+  if (filter === 'hazards') return e.kind === 'leak' || e.kind === 'smoke' || e.kind === 'siren';
   return e.kind === filter;
 }
 

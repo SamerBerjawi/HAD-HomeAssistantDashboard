@@ -125,13 +125,82 @@ export function packPlacements(items: readonly { i: string; size: WidgetSize }[]
   return out;
 }
 
+/**
+ * Flow placement (owner decision 2026-11-19): widgets keep their reading order. Each one goes in
+ * the first free spot at or after the previous widget's spot, like CSS grid without `dense`.
+ * Never overlaps, whatever the sizes (react-grid-layout's wrapCompactor overlaps mixed sizes).
+ */
+export function flowCells(items: readonly { i: string; w: number; h: number }[], cols: number): { i: string; x: number; y: number }[] {
+  const taken: boolean[][] = [];
+  const free = (x: number, y: number, w: number, h: number) => {
+    if (x + w > cols) return false;
+    for (let r = y; r < y + h; r++) for (let c = x; c < x + w; c++) if (taken[r]?.[c]) return false;
+    return true;
+  };
+  let cursorY = 0;
+  let cursorX = 0;
+  const out: { i: string; x: number; y: number }[] = [];
+  for (const item of items) {
+    const w = Math.min(item.w, cols);
+    let x = cursorX;
+    let y = cursorY;
+    while (!free(x, y, w, item.h)) {
+      x += 1;
+      if (x + w > cols) {
+        x = 0;
+        y += 1;
+      }
+    }
+    for (let r = y; r < y + item.h; r++) {
+      taken[r] = taken[r] ?? [];
+      for (let c = x; c < x + w; c++) taken[r][c] = true;
+    }
+    out.push({ i: item.i, x, y });
+    cursorX = x + w;
+    cursorY = y;
+  }
+  return out;
+}
+
+/** Flow placement for sized widgets, in the given order. */
+export function flowPlacements(items: readonly { i: string; size: WidgetSize }[], cols: number): LayoutPlacement[] {
+  const cells = flowCells(items.map((it) => ({ i: it.i, ...cellsFor(it.size, cols) })), cols);
+  return items.map((it, idx) => ({ i: it.i, x: cells[idx].x, y: cells[idx].y, size: it.size }));
+}
+
+/** Reading order of placed widgets (top to bottom, left to right). */
+export function readingOrder<T extends { x: number; y: number }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+/** Moves one widget a step earlier (-1) or later (+1) in the flow and re-flows. */
+export function moveInFlow(placements: readonly LayoutPlacement[], id: string, dir: -1 | 1, cols: number): LayoutPlacement[] {
+  const order = readingOrder(placements);
+  const from = order.findIndex((p) => p.i === id);
+  const to = from + dir;
+  if (from < 0 || to < 0 || to >= order.length) return [...placements];
+  const [moved] = order.splice(from, 1);
+  order.splice(to, 0, moved);
+  return flowPlacements(order, cols);
+}
+
+/** Changes one widget's size and re-flows (sizes change what fits where). */
+export function resizeInFlow(placements: readonly LayoutPlacement[], id: string, size: WidgetSize, cols: number): LayoutPlacement[] {
+  return flowPlacements(readingOrder(placements).map((p) => (p.i === id ? { ...p, size } : p)), cols);
+}
+
+/** Adds a widget at the end of a section's flow. */
+export function appendToFlow(placements: readonly LayoutPlacement[], id: string, size: WidgetSize, cols: number): LayoutPlacement[] {
+  return flowPlacements([...readingOrder(placements).filter((p) => p.i !== id), { i: id, x: 0, y: 0, size }], cols);
+}
+
 /** Registry defaults for one device type: default sizes, widgets in registry order per section. */
 export function buildDefaultDeviceLayout(widgets: readonly LayoutWidgetInfo[], device: DeviceType): DeviceLayout {
   const cols = DEVICE_COLUMNS[device];
   const items: DeviceLayout['items'] = {};
   for (const section of DEFAULT_OVERVIEW_SECTION_ORDER) {
     const list = widgets.filter((w) => w.section === section).map((w) => ({ i: w.id, size: w.defaultSize }));
-    if (list.length > 0) items[section] = packPlacements(list, cols);
+    if (list.length > 0) items[section] = flowPlacements(list, cols);
   }
   return { sectionOrder: [...DEFAULT_OVERVIEW_SECTION_ORDER], collapsed: [], hidden: [], items };
 }
@@ -157,7 +226,8 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
   const hidden = Array.isArray(raw.hidden) ? raw.hidden.filter((id): id is string => typeof id === 'string' && byId.has(id)) : [];
 
   const storedItems = raw.items && typeof raw.items === 'object' ? (raw.items as Record<string, unknown>) : {};
-  const seen = new Set<string>();
+  // Hidden widgets have no place; Add puts them back at the end of their section.
+  const seen = new Set<string>(hidden);
   const items: DeviceLayout['items'] = {};
   for (const section of DEFAULT_OVERVIEW_SECTION_ORDER) {
     const list = Array.isArray(storedItems[section]) ? (storedItems[section] as unknown[]) : [];
@@ -175,14 +245,11 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
       seen.add(def.id);
     }
     const missing = widgets.filter((w) => w.section === section && !seen.has(w.id));
-    if (missing.length > 0) {
-      const bottom = kept.reduce((max, p) => Math.max(max, p.y + cellsFor(p.size, cols).h), 0);
-      for (const p of packPlacements(missing.map((w) => ({ i: w.id, size: w.defaultSize })), cols)) {
-        kept.push({ ...p, y: p.y + bottom });
-        seen.add(p.i);
-      }
-    }
-    if (kept.length > 0) items[section] = kept;
+    for (const w of missing) seen.add(w.id);
+    // Re-flow in reading order: positions follow the order, and a tampered or stale layout can
+    // never overlap. New widgets go at the end.
+    const ordered = [...readingOrder(kept), ...missing.map((w) => ({ i: w.id, x: 0, y: 0, size: w.defaultSize }))];
+    if (ordered.length > 0) items[section] = flowPlacements(ordered, cols);
   }
   return { sectionOrder, collapsed, hidden, items };
 }
@@ -225,7 +292,7 @@ export function migrateLegacyOverview(
       .map((id) => byId.get(id))
       .filter((def): def is LayoutWidgetInfo => Boolean(def && def.section === section))
       .map((def) => ({ i: def.id, size: sizeOf.get(def.id) ?? def.defaultSize }));
-    if (list.length > 0) items[section] = packPlacements(list, cols);
+    if (list.length > 0) items[section] = flowPlacements(list, cols);
   }
 
   const hidden = [...new Set((overview.hiddenTiles ?? []).map(toNew))].filter((id) => byId.has(id));
@@ -270,4 +337,59 @@ export function withoutDeviceLayout(prev: UserDashboardConfig, device: DeviceTyp
     ...prev,
     preferences: { ...(prev.preferences || {}), proOverviewLayout: next } as UserDashboardConfig['preferences']
   };
+}
+
+/* ---------- Edit operations (pure; the page applies them to the draft) ---------- */
+
+export interface VisibleSection {
+  section: OverviewSectionId;
+  items: LayoutPlacement[];
+}
+
+/** Sections in the user's order that have at least one widget on the page. */
+export function visibleSections(layout: DeviceLayout): VisibleSection[] {
+  return layout.sectionOrder
+    .map((section) => ({ section, items: (layout.items[section] ?? []).filter((p) => !layout.hidden.includes(p.i)) }))
+    .filter((s) => s.items.length > 0);
+}
+
+export function withSectionItems(layout: DeviceLayout, section: OverviewSectionId, items: LayoutPlacement[]): DeviceLayout {
+  return { ...layout, items: { ...layout.items, [section]: items } };
+}
+
+/** Takes a widget off the page (its section re-flows). */
+export function hideWidget(layout: DeviceLayout, widget: LayoutWidgetInfo, cols: number): DeviceLayout {
+  const rest = readingOrder((layout.items[widget.section] ?? []).filter((p) => p.i !== widget.id));
+  return {
+    ...withSectionItems(layout, widget.section, flowPlacements(rest, cols)),
+    hidden: layout.hidden.includes(widget.id) ? layout.hidden : [...layout.hidden, widget.id]
+  };
+}
+
+/** Puts a hidden widget back at the end of its section, at its default size. */
+export function showWidget(layout: DeviceLayout, widget: LayoutWidgetInfo, cols: number): DeviceLayout {
+  const items = appendToFlow(layout.items[widget.section] ?? [], widget.id, widget.defaultSize, cols);
+  return { ...withSectionItems(layout, widget.section, items), hidden: layout.hidden.filter((id) => id !== widget.id) };
+}
+
+/** Moves a section up or down past the next visible section. */
+export function moveSection(layout: DeviceLayout, section: OverviewSectionId, dir: -1 | 1): DeviceLayout {
+  const shown = visibleSections(layout).map((v) => v.section);
+  const target = shown[shown.indexOf(section) + dir];
+  if (!target) return layout;
+  const order = [...layout.sectionOrder];
+  const a = order.indexOf(section);
+  const b = order.indexOf(target);
+  [order[a], order[b]] = [order[b], order[a]];
+  return { ...layout, sectionOrder: order };
+}
+
+export function toggleSectionCollapsed(layout: DeviceLayout, section: OverviewSectionId): DeviceLayout {
+  const collapsed = layout.collapsed.includes(section) ? layout.collapsed.filter((s) => s !== section) : [...layout.collapsed, section];
+  return { ...layout, collapsed };
+}
+
+/** Columns a section needs in view mode (side by side on wide screens); at least 2. */
+export function sectionSpan(items: readonly LayoutPlacement[], cols: number): number {
+  return Math.min(cols, Math.max(2, ...items.map((p) => p.x + cellsFor(p.size, cols).w)));
 }

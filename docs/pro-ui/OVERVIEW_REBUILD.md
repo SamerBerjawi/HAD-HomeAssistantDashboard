@@ -1,6 +1,6 @@
 # Overview rebuild plan
 
-Status: **Phase 0 spike built, awaiting owner review** (2026-11-19). Plan approved by the owner the same day.
+Status: **Phase 1 foundations built** (2026-11-19). Phase 0 approved by the owner: Flow reorder, one "⋯" edit menu, sections side by side on desktop.
 Scope: `src/pro/` only. The classic UI (`src/components/*`) and its config keys stay untouched.
 
 ## Owner decisions (2026-11-19)

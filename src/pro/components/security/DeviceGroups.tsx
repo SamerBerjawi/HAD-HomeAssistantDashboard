@@ -6,6 +6,8 @@ import {
   Alert02Icon,
   DashboardSquare02Icon,
   DoorIcon,
+  GarageIcon,
+  Megaphone01Icon,
   Motion01Icon,
   SecurityCheckIcon,
   Sofa01Icon,
@@ -32,6 +34,8 @@ const VIEW_KEY = 'had_pro_security_group_view';
 
 const GROUP_ICON: Record<DeviceGroup['kind'], IconSvgElement> = {
   lock: SquareLock02Icon,
+  garage: GarageIcon,
+  siren: Megaphone01Icon,
   openings: DoorIcon,
   hazards: AlarmSmokeIcon,
   motion: Motion01Icon,
@@ -73,6 +77,8 @@ export function DeviceGroups({
 
   const totalCount =
     entities.locks.length +
+    (entities.garages?.length ?? 0) +
+    (entities.sirens?.length ?? 0) +
     entities.doorSensors.length +
     entities.windowSensors.length +
     entities.motionSensors.length +
@@ -213,7 +219,7 @@ export function DeviceGroups({
                   className={cn(
                     '-my-2.5 flex flex-col divide-y divide-separator',
                     g.items.length >= 4 &&
-                      (g.items.some((i) => i.kind === 'lock')
+                      (g.items.some((i) => i.kind === 'lock' || i.kind === 'garage' || i.kind === 'siren')
                         ? '@xl:grid @xl:grid-cols-2 @xl:gap-x-6 @xl:divide-y-0'
                         : '@md:grid @md:grid-cols-2 @md:gap-x-6 @md:divide-y-0')
                   )}

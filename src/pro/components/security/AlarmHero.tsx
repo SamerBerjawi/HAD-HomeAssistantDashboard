@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { AlertDialog, Button, ListBox, Select, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertDialog,
+  Avatar,
+  Button,
+  ListBox,
+  Select,
+  ToggleButton,
+  ToggleButtonGroup
+} from '@heroui/react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
   Airplane01Icon,
@@ -8,8 +16,10 @@ import {
   CheckmarkCircle02Icon,
   Clock01Icon,
   DoorIcon,
+  GarageIcon,
   Home01Icon,
   Logout03Icon,
+  MegaphoneOffIcon,
   Moon02Icon,
   PowerIcon,
   SecurityCheckIcon,
@@ -17,14 +27,17 @@ import {
   ShieldUserIcon,
   SquareLock02Icon,
   SquareUnlock02Icon,
-  TimeQuarterPassIcon
+  TimeQuarterPassIcon,
+  Video01Icon
 } from '@hugeicons/core-free-icons';
 import { haWebSocketService } from '@/services/haWebSocket';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
 import { errorMessageField } from '@/lib/errors';
 import { cn } from '@/lib/utils';
 import type { ResolvedEntity } from '@/types';
+import { resolveAssetUrl } from '@/utils/assetUrl';
 import { timeAgo } from '../../lib/pageSentences';
+import { resolveAlarmTriggerDiagnostic } from '../../lib/securityCameras';
 import {
   alarmCodeIsNumeric,
   alarmModes,
@@ -32,6 +45,7 @@ import {
   alarmStateLabel,
   alarmTone,
   shouldConfirmArming,
+  type ActivityEvent,
   type AlarmModeId,
   type Tone
 } from '../../lib/securityLogic';
@@ -77,30 +91,53 @@ function readDelaySeconds(alarm: ResolvedEntity): number {
   return 30;
 }
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts.length >= 2
+    ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+}
+
 interface AlarmHeroProps {
   alarm: ResolvedEntity;
-  /** All alarm panels; a picker shows when there is more than one. */
   alarms: ResolvedEntity[];
   openings: ResolvedEntity[];
+  openGarages?: ResolvedEntity[];
   unlockedLocks?: ResolvedEntity[];
+  activeSirens?: ResolvedEntity[];
+  hazards?: ResolvedEntity[];
+  people?: ResolvedEntity[];
+  cameras?: ResolvedEntity[];
+  events?: ActivityEvent[];
+  serverUrl?: string | null;
+  onFocusCamera?: (cameraId: string) => void;
   onError: (message: string | null) => void;
 }
 
 /**
  * Alarm hero (DESIGN.md 7.5): state-tinted shield tile, BorderBeam when triggered,
- * arming/entry delay countdown bar, readiness summary, Lock-all-and-arm confirmation,
- * and segmented modes (Off · Home · Away · Night + optional Vacation/Custom).
+ * Who's Home presence context, siren silence button, triggered diagnostics + camera jump,
+ * arming/entry delay countdown, readiness pill, Secure & arm confirmation, and segmented modes.
  */
 export function AlarmHero({
   alarm,
   alarms,
   openings,
+  openGarages = [],
   unlockedLocks = [],
+  activeSirens = [],
+  hazards = [],
+  people = [],
+  cameras = [],
+  events = [],
+  serverUrl = null,
+  onFocusCamera,
   onError
 }: AlarmHeroProps) {
   const setSelectedAlarm = useAutoLayoutStore((s) => s.setSelectedAlarmEntityId);
   const callHAService = useAutoLayoutStore((s) => s.callHAService);
   const updateEntityState = useAutoLayoutStore((s) => s.updateEntityState);
+  const resolvedEntities = useAutoLayoutStore((s) => s.resolvedEntities);
   useMinuteTick();
 
   const [busy, setBusy] = useState(false);
@@ -133,18 +170,54 @@ export function AlarmHero({
   const delayRemainingSec = Math.max(0, Math.ceil(delayTotalSec - delayElapsedSec));
   const delayPct = Math.min(100, Math.max(0, (delayElapsedSec / delayTotalSec) * 100));
 
+  const entityById = useMemo(
+    () => new Map(Object.entries(resolvedEntities || {})),
+    [resolvedEntities]
+  );
+
+  const diagnostic = useMemo(
+    () =>
+      resolveAlarmTriggerDiagnostic({
+        alarm,
+        hazards,
+        openings: [...openGarages, ...openings],
+        events,
+        cameras,
+        entityById
+      }),
+    [alarm, hazards, openGarages, openings, events, cameras, entityById]
+  );
+
+  const homePeople = useMemo(() => people.filter((p) => p.state === 'home'), [people]);
+  const everyoneAway = people.length > 0 && homePeople.length === 0;
+  const canArmAway = modes.some((m) => m.id === 'armed_away');
+
   const send = async (mode: AlarmModeId, code?: string) => {
     const service = modes.find((m) => m.id === mode)!.service;
     setBusy(true);
     onError(null);
     try {
-      await callHAService('alarm_control_panel', service, code ? { code } : {}, { entity_id: alarm.entity_id });
+      await callHAService('alarm_control_panel', service, code ? { code } : {}, {
+        entity_id: alarm.entity_id
+      });
       if (haWebSocketService.isDemo()) updateEntityState(alarm.entity_id, mode, { changed_by: 'You' });
       setCodeMode(null);
     } catch (e) {
       const message = errorMessageField(e) || 'Home Assistant rejected the change';
       if (code) setCodeError(message);
       else onError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const silenceSirens = async () => {
+    setBusy(true);
+    onError(null);
+    try {
+      await callHAService('siren', 'turn_off', {}, { entity_id: activeSirens.map((s) => s.entity_id) });
+    } catch (e) {
+      onError(errorMessageField(e) || 'Could not silence siren');
     } finally {
       setBusy(false);
     }
@@ -161,7 +234,7 @@ export function AlarmHero({
 
   const select = (mode: AlarmModeId) => {
     if (mode === state) return;
-    if (shouldConfirmArming(mode, openings.length, unlockedLocks.length)) {
+    if (shouldConfirmArming(mode, openings.length + openGarages.length, unlockedLocks.length)) {
       confirmOpenedAt.current = performance.now();
       setConfirmMode(mode);
     } else proceed(mode);
@@ -174,19 +247,33 @@ export function AlarmHero({
     proceed(mode);
   };
 
-  const lockAllAndArm = async () => {
+  const secureAndArm = async () => {
     if (performance.now() - confirmOpenedAt.current < 400) return;
     const mode = confirmMode!;
     setConfirmMode(null);
     setBusy(true);
     onError(null);
     try {
+      const jobs: Promise<unknown>[] = [];
       if (unlockedLocks.length > 0) {
-        await callHAService('lock', 'lock', {}, { entity_id: unlockedLocks.map((l) => l.entity_id) });
+        jobs.push(
+          callHAService('lock', 'lock', {}, { entity_id: unlockedLocks.map((l) => l.entity_id) })
+        );
       }
+      if (openGarages.length > 0) {
+        jobs.push(
+          callHAService(
+            'cover',
+            'close_cover',
+            {},
+            { entity_id: openGarages.map((g) => g.entity_id) }
+          )
+        );
+      }
+      if (jobs.length > 0) await Promise.all(jobs);
       proceed(mode);
     } catch (e) {
-      onError(errorMessageField(e) || 'Could not lock all doors before arming');
+      onError(errorMessageField(e) || 'Could not secure entries before arming');
     } finally {
       setBusy(false);
     }
@@ -196,14 +283,16 @@ export function AlarmHero({
     id === 'disarmed' ? 'disarm' : `arm ${modes.find((m) => m.id === id)?.label ?? ''}`;
 
   const readinessIssues: string[] = [];
-  if (openings.length > 0) {
-    readinessIssues.push(openings.length === 1 ? '1 opening open' : `${openings.length} openings open`);
+  const totalOpenings = openings.length + openGarages.length;
+  if (totalOpenings > 0) {
+    readinessIssues.push(totalOpenings === 1 ? '1 opening open' : `${totalOpenings} openings open`);
   }
   if (unlockedLocks.length > 0) {
     readinessIssues.push(
       unlockedLocks.length === 1 ? '1 lock unlocked' : `${unlockedLocks.length} locks unlocked`
     );
   }
+  const canAutoSecure = unlockedLocks.length > 0 || openGarages.length > 0;
 
   return (
     <section aria-label="Alarm" className="pro-surface relative overflow-hidden">
@@ -211,8 +300,8 @@ export function AlarmHero({
         <BorderBeam colorFrom="var(--danger)" colorTo="#fb7185" duration={3.5} borderWidth={2} />
       ) : null}
 
-      <div className={cn('flex flex-col gap-5 p-5 md:p-6', TONE_WASH[tone])}>
-        <div className="flex items-start justify-between gap-3">
+      <div className={cn('flex flex-col gap-4 p-5 md:p-6', TONE_WASH[tone])}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-4">
             <span
               className={cn(
@@ -285,21 +374,103 @@ export function AlarmHero({
             </div>
           </div>
 
-          <span
+          <div className="flex flex-wrap items-center gap-2">
+            {activeSirens.length > 0 ? (
+              <Button size="sm" variant="danger" isPending={busy} onPress={() => void silenceSirens()}>
+                <HugeiconsIcon icon={MegaphoneOffIcon} size={15} />
+                Silence siren
+              </Button>
+            ) : null}
+
+            <span
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
+                readinessIssues.length > 0
+                  ? 'bg-warning/15 text-warning'
+                  : 'bg-success/15 text-success'
+              )}
+            >
+              <HugeiconsIcon
+                icon={readinessIssues.length > 0 ? Alert02Icon : CheckmarkCircle02Icon}
+                size={13}
+              />
+              {readinessIssues.length > 0 ? readinessIssues.join(' · ') : 'Ready to arm'}
+            </span>
+          </div>
+        </div>
+
+        {people.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="flex -space-x-2">
+                {(homePeople.length > 0 ? homePeople : people).slice(0, 4).map((p) => {
+                  const pName = entityName(p);
+                  const pic = p.attributes?.entity_picture as string | undefined;
+                  const src = pic ? resolveAssetUrl(pic, serverUrl || undefined) : undefined;
+                  return (
+                    <Avatar
+                      key={p.entity_id}
+                      size="sm"
+                      className={cn(
+                        'size-6 ring-2 ring-surface text-[10px]',
+                        p.state !== 'home' && 'opacity-55 grayscale'
+                      )}
+                    >
+                      {src ? <Avatar.Image src={src} alt={pName} /> : null}
+                      <Avatar.Fallback>{initials(pName)}</Avatar.Fallback>
+                    </Avatar>
+                  );
+                })}
+              </div>
+              <span className="text-xs text-muted">
+                {homePeople.length > 0
+                  ? `${homePeople.length} of ${people.length} home`
+                  : 'Everyone is away'}
+              </span>
+            </div>
+
+            {everyoneAway && state === 'disarmed' && canArmAway ? (
+              <Button
+                size="sm"
+                variant="tertiary"
+                className="h-7 min-h-7 rounded-full bg-warning/15 px-2.5 text-xs font-medium text-warning"
+                onPress={() => select('armed_away')}
+              >
+                <HugeiconsIcon icon={Logout03Icon} size={13} />
+                Arm Away?
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {diagnostic ? (
+          <div
             className={cn(
-              'hidden shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium sm:inline-flex',
-              readinessIssues.length > 0
-                ? 'bg-warning/15 text-warning'
-                : 'bg-success/15 text-success'
+              'flex flex-wrap items-center justify-between gap-2 rounded-2xl p-3',
+              state === 'triggered' ? 'bg-danger/15' : 'bg-warning/12'
             )}
           >
-            <HugeiconsIcon
-              icon={readinessIssues.length > 0 ? Alert02Icon : CheckmarkCircle02Icon}
-              size={13}
-            />
-            {readinessIssues.length > 0 ? readinessIssues.join(' · ') : 'Ready to arm'}
-          </span>
-        </div>
+            <span
+              className={cn(
+                'inline-flex min-w-0 items-center gap-2 text-xs font-semibold',
+                state === 'triggered' ? 'text-danger' : 'text-warning'
+              )}
+            >
+              <HugeiconsIcon icon={Alert02Icon} size={15} className="shrink-0" />
+              <span className="truncate">{diagnostic.summary}</span>
+            </span>
+            {diagnostic.cameraId && onFocusCamera ? (
+              <Button
+                size="sm"
+                variant={state === 'triggered' ? 'danger' : 'secondary'}
+                onPress={() => onFocusCamera(diagnostic.cameraId!)}
+              >
+                <HugeiconsIcon icon={Video01Icon} size={14} />
+                View camera
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
 
         {isDelayState ? (
           <div className="flex flex-col gap-2 rounded-2xl bg-warning/10 p-3">
@@ -360,6 +531,12 @@ export function AlarmHero({
             </AlertDialog.Header>
             <AlertDialog.Body>
               <ul className="flex flex-col gap-1.5">
+                {openGarages.map((g) => (
+                  <li key={g.entity_id} className="flex items-center gap-2 text-sm">
+                    <HugeiconsIcon icon={GarageIcon} size={16} className="text-warning" />
+                    {entityName(g)} (open)
+                  </li>
+                ))}
                 {openings.map((o) => (
                   <li key={o.entity_id} className="flex items-center gap-2 text-sm">
                     <HugeiconsIcon
@@ -385,15 +562,15 @@ export function AlarmHero({
               <Button size="sm" variant="tertiary" onPress={() => setConfirmMode(null)}>
                 Cancel
               </Button>
-              {unlockedLocks.length > 0 ? (
-                <Button size="sm" variant="primary" isPending={busy} onPress={() => void lockAllAndArm()}>
+              {canAutoSecure ? (
+                <Button size="sm" variant="primary" isPending={busy} onPress={() => void secureAndArm()}>
                   <HugeiconsIcon icon={SquareLock02Icon} size={15} />
-                  Lock all &amp; arm
+                  {openGarages.length > 0 ? 'Secure & arm' : 'Lock all & arm'}
                 </Button>
               ) : null}
               <Button
                 size="sm"
-                variant={unlockedLocks.length > 0 ? 'secondary' : 'primary'}
+                variant={canAutoSecure ? 'secondary' : 'primary'}
                 onPress={armAnyway}
               >
                 <HugeiconsIcon icon={SecurityCheckIcon} size={15} />

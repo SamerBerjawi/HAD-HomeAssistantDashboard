@@ -152,7 +152,7 @@ export function buildOverviewSensorDomainModel(
     const isOffline = dev.stateLabel === 'Offline';
     const isActive =
       domain === 'motion'
-        ? dev.stateLabel === 'Motion'
+        ? dev.stateLabel === 'Detected' || dev.stateLabel === 'Motion'
         : dev.problem;
 
     return {

@@ -24,6 +24,8 @@ export function useSecurityActivity(entities: SecurityEntities, alarms: Resolved
         names[e.entity_id] = entityName(e);
       });
     add(entities.locks, 'lock');
+    add(entities.garages || [], 'garage');
+    add(entities.sirens || [], 'siren');
     add(entities.doorSensors, 'door');
     add(entities.windowSensors, 'window');
     add(entities.motionSensors, 'motion');
@@ -45,7 +47,17 @@ export function useSecurityActivity(entities: SecurityEntities, alarms: Resolved
 
   // Changes whenever a tracked entity changes state, which triggers a refetch.
   const signature = useMemo(() => {
-    const all = [...alarms, ...entities.locks, ...entities.doorSensors, ...entities.windowSensors, ...entities.motionSensors, ...entities.leakSensors, ...entities.smokeSensors];
+    const all = [
+      ...alarms,
+      ...entities.locks,
+      ...(entities.garages || []),
+      ...(entities.sirens || []),
+      ...entities.doorSensors,
+      ...entities.windowSensors,
+      ...entities.motionSensors,
+      ...entities.leakSensors,
+      ...entities.smokeSensors
+    ];
     return all.map((e) => `${e.entity_id}:${e.state}`).join('|');
   }, [entities, alarms]);
 

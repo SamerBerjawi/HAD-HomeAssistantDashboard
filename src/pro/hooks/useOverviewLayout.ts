@@ -9,11 +9,13 @@ import {
   buildDefaultDeviceLayout,
   getDeviceLayout,
   normalizeDeviceLayout,
+  toggleSectionCollapsed,
   withDeviceLayout,
   type DeviceLayout,
   type DeviceType,
   type LayoutWidgetInfo
 } from '../lib/overviewLayout';
+import type { OverviewSectionId } from '../lib/overviewSections';
 import { useOverviewLayoutDraft } from '../store/useOverviewLayoutDraft';
 
 export interface OverviewLayoutApi {
@@ -27,6 +29,8 @@ export interface OverviewLayoutApi {
   save: () => Promise<void>;
   /** Replaces the draft with the defaults (saved only on Save). */
   resetToDefault: () => void;
+  /** Collapse is a view preference: in view mode it saves at once, in edit mode it joins the draft. */
+  toggleCollapsed: (section: OverviewSectionId) => void;
 }
 
 export function useOverviewLayout(widgets: readonly LayoutWidgetInfo[], device: DeviceType, legacyIdMap?: Readonly<Record<string, string>>): OverviewLayoutApi {
@@ -54,5 +58,13 @@ export function useOverviewLayout(widgets: readonly LayoutWidgetInfo[], device: 
   }, [device, end, updateConfig, widgets]);
   const resetToDefault = useCallback(() => update(() => buildDefaultDeviceLayout(widgets, device)), [device, update, widgets]);
 
-  return { device, layout, isEditing, isDirty, begin, update, cancel: end, save, resetToDefault };
+  const toggleCollapsed = useCallback(
+    (section: OverviewSectionId) => {
+      if (isEditing) update((l) => toggleSectionCollapsed(l, section));
+      else void updateConfig((prev) => withDeviceLayout(prev, device, toggleSectionCollapsed(saved, section)));
+    },
+    [device, isEditing, saved, update, updateConfig]
+  );
+
+  return { device, layout, isEditing, isDirty, begin, update, cancel: end, save, resetToDefault, toggleCollapsed };
 }

@@ -1,16 +1,19 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Chip, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
-import { HugeiconsIcon } from '@hugeicons/react';
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
   Alert02Icon,
   Camera01Icon,
+  Car01Icon,
   FullScreenIcon,
   GridViewIcon,
   Image01Icon,
   Layout01Icon,
   Location01Icon,
   Motion01Icon,
+  PackageIcon,
   Refresh01Icon,
+  ShieldUserIcon,
   TimeQuarterPassIcon,
   Video01Icon,
   VideoOffIcon,
@@ -25,11 +28,23 @@ import { cn } from '@/lib/utils';
 import type { ResolvedEntity } from '@/types';
 import { entityName } from '../../hooks/useSecurityData';
 import type { CameraStreamStatus } from '../../hooks/useWebRtcCamera';
+import {
+  detectCameraAiAlerts,
+  type CameraAiDetection,
+  type CameraAiDetectionKind
+} from '../../lib/securityCameras';
 import { ProCameraPlayer, type ProCameraPlayerHandle } from './ProCameraPlayer';
 
 const FILTER_MIN_CAMERAS = 5;
 const THUMBNAIL_REFRESH_MS = 25_000;
 type CameraLayoutMode = 'featured' | 'grid';
+
+const AI_ICON: Record<CameraAiDetectionKind, IconSvgElement> = {
+  person: ShieldUserIcon,
+  vehicle: Car01Icon,
+  package: PackageIcon,
+  animal: Motion01Icon
+};
 
 /** Green live; orange motion, connecting or snapshot only; red error/offline. */
 function CameraStatus({ status, motion }: { status: CameraStreamStatus; motion: boolean }) {
@@ -51,14 +66,17 @@ function CameraStatus({ status, motion }: { status: CameraStreamStatus; motion: 
 }
 
 /**
- * Cameras (DESIGN.md 7.5): Featured + Strip or 2×2 Wall Grid toggle, audio mute/unmute,
- * WebRTC retry button, snapshot download even on snapshot-only cameras, and full-window prev/next.
+ * Cameras (DESIGN.md 7.5): Featured + Strip or 2×2 Wall Grid toggle, AI detection Chips
+ * (Person / Vehicle / Package / Animal), 1-tap jump to active motion on non-featured cameras,
+ * audio mute/unmute, WebRTC retry button, snapshot download, and full-window prev/next.
  */
 export function SecurityCameras({
   cameras: all,
+  focusedCameraId,
   onError
 }: {
   cameras: ResolvedEntity[];
+  focusedCameraId?: string | null;
   onError: (m: string | null) => void;
 }) {
   const { binarySensors, serverUrl } = useAutoLayoutStore(
@@ -69,10 +87,22 @@ export function SecurityCameras({
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<CameraLayoutMode>('featured');
 
-  const motion = useMemo(() => {
-    const map: Record<string, boolean> = {};
-    for (const c of cameras) map[c.entity_id] = getCameraMotionStatus(c, binarySensors || []).isMotionActive;
-    return map;
+  useEffect(() => {
+    if (focusedCameraId) {
+      setPickedId(focusedCameraId);
+      setLayoutMode('featured');
+    }
+  }, [focusedCameraId]);
+
+  const { motion, aiByCam } = useMemo(() => {
+    const motionMap: Record<string, boolean> = {};
+    const aiMap: Record<string, CameraAiDetection[]> = {};
+    const sensors = binarySensors || [];
+    for (const c of cameras) {
+      motionMap[c.entity_id] = getCameraMotionStatus(c, sensors).isMotionActive;
+      aiMap[c.entity_id] = detectCameraAiAlerts(c, sensors);
+    }
+    return { motion: motionMap, aiByCam: aiMap };
   }, [cameras, binarySensors]);
 
   const areas = useMemo(() => {
@@ -88,10 +118,15 @@ export function SecurityCameras({
 
   const featured =
     visible.find((c) => c.entity_id === pickedId) ??
-    visible.find((c) => motion[c.entity_id]) ??
+    visible.find((c) => motion[c.entity_id] || (aiByCam[c.entity_id]?.length ?? 0) > 0) ??
     visible[0];
   const others = visible.filter((c) => c !== featured);
   const featuredIdx = featured ? visible.findIndex((c) => c.entity_id === featured.entity_id) : 0;
+
+  const offscreenAlertCam =
+    layoutMode === 'featured'
+      ? others.find((c) => motion[c.entity_id] || (aiByCam[c.entity_id]?.length ?? 0) > 0)
+      : undefined;
 
   const cycleCamera = (delta: -1 | 1) => {
     if (visible.length < 2) return;
@@ -105,13 +140,32 @@ export function SecurityCameras({
   };
 
   return (
-    <section aria-label="Cameras" className="pro-surface flex flex-col gap-4 p-4 md:p-5">
+    <section
+      id="pro-security-cameras"
+      aria-label="Cameras"
+      className="pro-surface flex flex-col gap-4 p-4 md:p-5"
+    >
       <header className="flex flex-wrap items-center justify-between gap-2.5">
-        <h2 className="inline-flex items-center gap-2 text-base font-semibold">
-          <HugeiconsIcon icon={Video01Icon} size={18} className="text-[var(--accent)]" />
-          Cameras
-          <span className="text-sm font-normal text-muted">· {cameras.length}</span>
-        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="inline-flex items-center gap-2 text-base font-semibold">
+            <HugeiconsIcon icon={Video01Icon} size={18} className="text-[var(--accent)]" />
+            Cameras
+            <span className="text-sm font-normal text-muted">· {cameras.length}</span>
+          </h2>
+
+          {offscreenAlertCam ? (
+            <Button
+              size="sm"
+              variant="tertiary"
+              className="h-7 min-h-7 gap-1.5 rounded-full bg-warning/15 px-2.5 text-xs font-medium text-warning"
+              onPress={() => setPickedId(offscreenAlertCam.entity_id)}
+            >
+              <HugeiconsIcon icon={Motion01Icon} size={13} />
+              {aiByCam[offscreenAlertCam.entity_id]?.[0]?.label || 'Motion'} on{' '}
+              {entityName(offscreenAlertCam)}
+            </Button>
+          ) : null}
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {showFilter && (
@@ -168,6 +222,7 @@ export function SecurityCameras({
               key={cam.entity_id}
               camera={cam}
               motion={motion[cam.entity_id]}
+              detections={aiByCam[cam.entity_id] || []}
               compact
               onSnapshot={snapshot}
             />
@@ -179,6 +234,7 @@ export function SecurityCameras({
             <FeaturedCamera
               camera={featured}
               motion={motion[featured.entity_id]}
+              detections={aiByCam[featured.entity_id] || []}
               onSnapshot={snapshot}
               onPrev={visible.length > 1 ? () => cycleCamera(-1) : undefined}
               onNext={visible.length > 1 ? () => cycleCamera(1) : undefined}
@@ -190,38 +246,47 @@ export function SecurityCameras({
               aria-label="Other cameras"
               className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:none]"
             >
-              {others.map((c) => (
-                <li key={c.entity_id} className="w-40 shrink-0 snap-start md:w-48">
-                  <Button
-                    variant="ghost"
-                    aria-label={`Show ${entityName(c)}`}
-                    className="flex h-auto w-full flex-col items-stretch gap-1.5 rounded-xl p-0 hover:bg-transparent"
-                    onPress={() => setPickedId(c.entity_id)}
-                  >
-                    <span
-                      className={cn(
-                        'relative block aspect-video overflow-hidden rounded-xl bg-black',
-                        motion[c.entity_id] && 'ring-2 ring-warning'
-                      )}
+              {others.map((c) => {
+                const hasAlert = motion[c.entity_id] || (aiByCam[c.entity_id]?.length ?? 0) > 0;
+                const firstAi = aiByCam[c.entity_id]?.[0];
+                return (
+                  <li key={c.entity_id} className="w-40 shrink-0 snap-start md:w-48">
+                    <Button
+                      variant="ghost"
+                      aria-label={`Show ${entityName(c)}`}
+                      className="flex h-auto w-full flex-col items-stretch gap-1.5 rounded-xl p-0 hover:bg-transparent"
+                      onPress={() => setPickedId(c.entity_id)}
                     >
-                      <ProCameraPlayer
-                        camera={c}
-                        live={false}
-                        refreshIntervalMs={THUMBNAIL_REFRESH_MS}
-                        className="pointer-events-none absolute inset-0 h-full w-full"
-                      />
-                    </span>
-                    <span className="flex items-center gap-1 px-0.5 text-left text-xs font-medium">
-                      <HugeiconsIcon
-                        icon={motion[c.entity_id] ? Motion01Icon : Video01Icon}
-                        size={12}
-                        className={motion[c.entity_id] ? 'text-warning' : 'text-muted'}
-                      />
-                      <span className="truncate">{entityName(c)}</span>
-                    </span>
-                  </Button>
-                </li>
-              ))}
+                      <span
+                        className={cn(
+                          'relative block aspect-video overflow-hidden rounded-xl bg-black',
+                          hasAlert && 'ring-2 ring-warning'
+                        )}
+                      >
+                        <ProCameraPlayer
+                          camera={c}
+                          live={false}
+                          refreshIntervalMs={THUMBNAIL_REFRESH_MS}
+                          className="pointer-events-none absolute inset-0 h-full w-full"
+                        />
+                      </span>
+                      <span className="flex items-center gap-1 px-0.5 text-left text-xs font-medium">
+                        <HugeiconsIcon
+                          icon={firstAi ? AI_ICON[firstAi.kind] : hasAlert ? Motion01Icon : Video01Icon}
+                          size={12}
+                          className={hasAlert ? 'text-warning' : 'text-muted'}
+                        />
+                        <span className="truncate">{entityName(c)}</span>
+                        {firstAi ? (
+                          <span className="ml-auto shrink-0 text-[10px] font-semibold text-warning">
+                            {firstAi.label}
+                          </span>
+                        ) : null}
+                      </span>
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>
@@ -233,6 +298,7 @@ export function SecurityCameras({
 interface FeaturedCameraProps {
   camera: ResolvedEntity;
   motion: boolean;
+  detections: CameraAiDetection[];
   compact?: boolean;
   onSnapshot: (camera: ResolvedEntity, video: HTMLVideoElement | null) => void;
   onPrev?: () => void;
@@ -242,6 +308,7 @@ interface FeaturedCameraProps {
 function FeaturedCamera({
   camera,
   motion,
+  detections,
   compact = false,
   onSnapshot,
   onPrev,
@@ -281,7 +348,7 @@ function FeaturedCamera({
           onPress={fullscreen}
         />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="flex min-w-0 flex-1 flex-col">
           <span className={cn('inline-flex min-w-0 items-center gap-1.5 font-semibold', compact && 'text-sm')}>
             <HugeiconsIcon icon={Video01Icon} size={15} className="shrink-0 text-[var(--accent)]" />
@@ -294,6 +361,14 @@ function FeaturedCamera({
             </span>
           )}
         </span>
+
+        {detections.map((d) => (
+          <Chip key={d.kind} size="sm" variant="soft" color="warning">
+            <HugeiconsIcon icon={AI_ICON[d.kind]} size={12} />
+            {d.label}
+          </Chip>
+        ))}
+
         {offline ? (
           <Chip size="sm" variant="soft" color="danger">
             <HugeiconsIcon icon={VideoOffIcon} size={12} />

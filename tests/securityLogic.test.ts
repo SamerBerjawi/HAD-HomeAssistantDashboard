@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { classifyBinarySensors } from '@/lib/entityClassifiers';
+import {
+  detectCameraAiAlerts,
+  resolveAlarmTriggerDiagnostic
+} from '@/pro/lib/securityCameras';
 import {
   ALARM_FEATURE,
   activitySentence,
@@ -81,7 +86,7 @@ describe('securityLogic: devices', () => {
     expect(deviceItem(ent('lock.front', 'unlocked'), 'lock')).toMatchObject({ problem: true, stateLabel: 'Unlocked', tone: 'warning' });
     expect(deviceItem(ent('lock.front', 'jammed'), 'lock')).toMatchObject({ problem: true, tone: 'danger' });
     expect(deviceItem(ent('binary_sensor.d', 'on'), 'door')).toMatchObject({ problem: true, stateLabel: 'Open' });
-    expect(deviceItem(ent('binary_sensor.m', 'on'), 'motion')).toMatchObject({ problem: false, stateLabel: 'Motion' });
+    expect(deviceItem(ent('binary_sensor.m', 'on'), 'motion')).toMatchObject({ problem: false, stateLabel: 'Detected' });
     expect(deviceItem(ent('binary_sensor.l', 'off'), 'leak')).toMatchObject({ stateLabel: 'Dry' });
     expect(deviceItem(ent('binary_sensor.s', 'unavailable'), 'smoke')).toMatchObject({ stateLabel: 'Offline', problem: false, tone: 'danger' });
     // Pill colours (owner 2026-11-18): green fine, orange needs a look, red problem.
@@ -142,5 +147,78 @@ describe('securityLogic: activity', () => {
     );
     expect(events.map((e) => e.text)).toEqual(['Alarm armed home by Samer', 'Garage door opened', 'Front door locked']);
     expect(events[2].when).toBe(1_700_000_000_000);
+  });
+});
+
+describe('securityLogic: garages, sirens, AI camera alerts & trigger diagnostics', () => {
+  it('handles garage covers and sirens cleanly', () => {
+    expect(deviceItem(ent('cover.garage', 'open'), 'garage')).toMatchObject({
+      problem: true,
+      stateLabel: 'Open',
+      tone: 'warning'
+    });
+    expect(deviceItem(ent('cover.garage', 'closed'), 'garage')).toMatchObject({
+      problem: false,
+      stateLabel: 'Closed',
+      tone: 'success'
+    });
+    expect(deviceItem(ent('siren.indoor', 'on'), 'siren')).toMatchObject({
+      problem: true,
+      stateLabel: 'Sounding',
+      tone: 'danger'
+    });
+    expect(activitySentence('garage', 'Main Garage', 'open', 'Samer')).toEqual({
+      text: 'Main Garage opened by Samer',
+      tone: 'warning'
+    });
+    expect(activitySentence('siren', 'Indoor Siren', 'on')).toEqual({
+      text: 'Indoor Siren sounded',
+      tone: 'danger'
+    });
+  });
+
+  it('detects active AI camera detections by device_id or slug prefix', () => {
+    const cam = ent('camera.front_porch', 'streaming', { device_id: 'dev_cam1' });
+    const sensors = [
+      ent('binary_sensor.front_porch_person', 'on', { device_id: 'dev_cam1', name: 'Front Porch Person' }),
+      ent('binary_sensor.front_porch_package', 'on', { name: 'Front Porch Package' }),
+      ent('binary_sensor.backyard_vehicle', 'on', { name: 'Backyard Vehicle' })
+    ];
+    const alerts = detectCameraAiAlerts(cam, sensors);
+    expect(alerts.map((a) => a.kind)).toEqual(['person', 'package']);
+  });
+
+  it('resolves triggered alarm diagnostic and matches nearest camera by area', () => {
+    const alarm = ent('alarm_control_panel.home', 'triggered');
+    const door = ent('binary_sensor.patio_door', 'on', { name: 'Patio Door', area_id: 'patio' });
+    const cam1 = ent('camera.front', 'idle', { area_id: 'front' });
+    const cam2 = ent('camera.patio', 'idle', { area_id: 'patio' });
+    const diag = resolveAlarmTriggerDiagnostic({
+      alarm,
+      hazards: [],
+      openings: [door],
+      events: [],
+      cameras: [cam1, cam2]
+    });
+    expect(diag).toEqual({
+      summary: 'Triggered by Patio Door',
+      areaId: 'patio',
+      cameraId: 'camera.patio'
+    });
+  });
+
+  it('classifies door/garage-named motion sensors as motion (never doors) and classifies leak sensors', () => {
+    const res = classifyBinarySensors([
+      ent('binary_sensor.front_door_motion', 'on', { attributes: { device_class: 'motion' } }),
+      ent('binary_sensor.garage_occupancy', 'off', { attributes: { device_class: 'occupancy' } }),
+      ent('binary_sensor.front_door_contact', 'on', { attributes: { device_class: 'door' } }),
+      ent('binary_sensor.kitchen_sink_leak', 'off', { attributes: { device_class: 'moisture' } })
+    ]);
+    expect(res.motionSensors.map((s) => s.entity_id)).toEqual([
+      'binary_sensor.front_door_motion',
+      'binary_sensor.garage_occupancy'
+    ]);
+    expect(res.doorSensors.map((s) => s.entity_id)).toEqual(['binary_sensor.front_door_contact']);
+    expect(res.leakSensors.map((s) => s.entity_id)).toEqual(['binary_sensor.kitchen_sink_leak']);
   });
 });

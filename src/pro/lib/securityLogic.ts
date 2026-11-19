@@ -100,12 +100,12 @@ export function groupHasDanger(items: readonly DeviceItem[]): boolean {
 
 // ---------------------------------------------------------------- devices
 
-export type DeviceKind = 'lock' | 'door' | 'window' | 'motion' | 'leak' | 'smoke';
+export type DeviceKind = 'lock' | 'garage' | 'door' | 'window' | 'motion' | 'leak' | 'smoke' | 'siren';
 
 export interface DeviceItem {
   entity: ResolvedEntity;
   kind: DeviceKind;
-  /** Needs attention: open, unlocked, detected. */
+  /** Needs attention: open, unlocked, detected, sounding. */
   problem: boolean;
   stateLabel: string;
   tone: Tone;
@@ -124,11 +124,13 @@ export interface DeviceGroup {
 
 export interface SecurityEntities {
   locks: ResolvedEntity[];
+  garages?: ResolvedEntity[];
   doorSensors: ResolvedEntity[];
   windowSensors: ResolvedEntity[];
   motionSensors: ResolvedEntity[];
   leakSensors: ResolvedEntity[];
   smokeSensors: ResolvedEntity[];
+  sirens?: ResolvedEntity[];
 }
 
 const isOn = (s: string) => s === 'on' || s === 'detected' || s === 'wet';
@@ -143,17 +145,28 @@ export function deviceItem(entity: ResolvedEntity, kind: DeviceKind): DeviceItem
       const open = s === 'unlocked' || s === 'open' || s === 'opening';
       return { entity, kind, problem: open, stateLabel: open ? 'Unlocked' : 'Locked', tone: open ? 'warning' : 'success' };
     }
+    case 'garage': {
+      if (s === 'opening' || s === 'closing') {
+        return { entity, kind, problem: s === 'opening', stateLabel: s === 'opening' ? 'Opening…' : 'Closing…', tone: 'warning' };
+      }
+      const open = s === 'open';
+      return { entity, kind, problem: open, stateLabel: open ? 'Open' : 'Closed', tone: open ? 'warning' : 'success' };
+    }
+    case 'siren': {
+      const active = s === 'on';
+      return { entity, kind, problem: active, stateLabel: active ? 'Sounding' : 'Idle', tone: active ? 'danger' : 'success' };
+    }
     case 'door':
     case 'window':
       return { entity, kind, problem: s === 'on', stateLabel: s === 'on' ? 'Open' : 'Closed', tone: s === 'on' ? 'warning' : 'success' };
     case 'motion':
-      return { entity, kind, problem: false, stateLabel: s === 'on' ? 'Motion' : 'Clear', tone: s === 'on' ? 'warning' : 'success' };
+      return { entity, kind, problem: false, stateLabel: s === 'on' ? 'Detected' : 'Clear', tone: s === 'on' ? 'warning' : 'success' };
     default:
       return { entity, kind, problem: isOn(s), stateLabel: isOn(s) ? 'Detected' : kind === 'leak' ? 'Dry' : 'Clear', tone: isOn(s) ? 'danger' : 'success' };
   }
 }
 
-const KIND_ORDER: DeviceKind[] = ['smoke', 'leak', 'lock', 'door', 'window', 'motion'];
+const KIND_ORDER: DeviceKind[] = ['smoke', 'leak', 'siren', 'lock', 'garage', 'door', 'window', 'motion'];
 const name = (e: ResolvedEntity) => e.name || (e.attributes?.friendly_name as string | undefined) || e.entity_id;
 
 /** Problems first, then active motion, then by name. */
@@ -171,8 +184,9 @@ function summary(kind: DeviceGroup['kind'], items: DeviceItem[]): string {
   if (kind === 'lock') return problems ? `${problems} unlocked` : 'All locked';
   if (kind === 'openings') return problems ? `${problems} open` : 'All closed';
   if (kind === 'hazards') return problems ? `${problems} detected` : 'All clear';
+  if (kind === 'siren') return problems ? `${problems} sounding` : 'All idle';
   if (kind === 'motion') {
-    const active = items.filter((i) => i.stateLabel === 'Motion').length;
+    const active = items.filter((i) => i.stateLabel === 'Detected').length;
     return active ? `${active} active` : 'All clear';
   }
   return problems ? `${problems} ${problems === 1 ? 'alert' : 'alerts'}` : 'All clear';
@@ -187,21 +201,26 @@ function allItems(e: SecurityEntities): DeviceItem[] {
   return [
     ...e.smokeSensors.map((x) => deviceItem(x, 'smoke')),
     ...e.leakSensors.map((x) => deviceItem(x, 'leak')),
+    ...(e.sirens || []).map((x) => deviceItem(x, 'siren')),
     ...e.locks.map((x) => deviceItem(x, 'lock')),
+    ...(e.garages || []).map((x) => deviceItem(x, 'garage')),
     ...e.doorSensors.map((x) => deviceItem(x, 'door')),
     ...e.windowSensors.map((x) => deviceItem(x, 'window')),
     ...e.motionSensors.map((x) => deviceItem(x, 'motion'))
   ];
 }
 
-/** By type: Locks, Doors & windows, Motion, Hazards. Empty groups are dropped. */
+/** By type: Locks, Doors & windows (incl. garage/gate), Hazards, Sirens, Motion. Empty groups dropped. */
 export function groupByType(e: SecurityEntities): DeviceGroup[] {
   const items = allItems(e);
   const of = (...kinds: DeviceKind[]) => items.filter((i) => kinds.includes(i.kind));
+  const openingsItems = of('garage', 'door', 'window');
+  const openingsTitle = (e.garages || []).length > 0 ? 'Doors, windows & gates' : 'Doors & windows';
   return [
     group('locks', 'Locks', 'lock', of('lock')),
-    group('openings', 'Doors & windows', 'openings', of('door', 'window')),
+    group('openings', openingsTitle, 'openings', openingsItems),
     group('hazards', 'Hazards', 'hazards', of('smoke', 'leak')),
+    group('sirens', 'Sirens', 'siren', of('siren')),
     group('motion', 'Motion', 'motion', of('motion'))
   ].filter((g) => g.items.length > 0);
 }
@@ -281,6 +300,14 @@ export function activitySentence(kind: DeviceKind | 'alarm', who: string, state:
       if (state === 'locked') return { text: `${who} locked${suffix}`, tone: 'success' };
       if (state === 'unlocked' || state === 'open') return { text: `${who} unlocked${suffix}`, tone: 'warning' };
       if (state === 'jammed') return { text: `${who} jammed`, tone: 'danger' };
+      return null;
+    case 'garage':
+      if (state === 'open') return { text: `${who} opened${suffix}`, tone: 'warning' };
+      if (state === 'closed') return { text: `${who} closed${suffix}`, tone: 'success' };
+      return null;
+    case 'siren':
+      if (state === 'on') return { text: `${who} sounded${suffix}`, tone: 'danger' };
+      if (state === 'off') return { text: `${who} silenced${suffix}`, tone: 'default' };
       return null;
     case 'door':
     case 'window':

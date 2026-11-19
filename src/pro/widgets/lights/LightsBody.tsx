@@ -18,7 +18,7 @@ function ToggleSwitch({ isSelected, onChange, label }: { isSelected: boolean; on
 }
 
 /** Rows a Large card has room for under its summary (4-row rule). */
-const LARGE_ROWS = 4;
+const LARGE_ROWS = 3;
 
 /**
  * Lights body (pilot widget, Overview rebuild Phase 1). Controls only; the card header opens the

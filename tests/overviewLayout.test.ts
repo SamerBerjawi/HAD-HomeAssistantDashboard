@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_USER_CONFIG, type UserDashboardConfig } from '@/types/userConfig';
 import {
+  appendToFlow,
   buildDefaultDeviceLayout,
+  flowPlacements,
+  moveInFlow,
+  readingOrder,
+  resizeInFlow,
   cellsFor,
   deviceTypeForWidth,
   getDeviceLayout,
@@ -85,14 +90,14 @@ describe('overviewLayout', () => {
     expect(layout.sectionOrder).toHaveLength(10);
     expect(layout.collapsed).toEqual(['climate']);
     expect(layout.hidden).toEqual(['fans']);
-    // fans: 'l' not allowed → default 's'; weather was missing → added below.
+    // fans: 'l' not allowed → default 's'; weather was missing → added after it; re-flowed.
     expect(layout.items.climate).toEqual([
-      { i: 'fans', x: 5, y: 0, size: 's' },
-      { i: 'weather', x: 0, y: 1, size: 'w' }
+      { i: 'fans', x: 0, y: 0, size: 's' },
+      { i: 'weather', x: 1, y: 0, size: 'w' }
     ]);
     expect(layout.items.energy).toEqual([
       { i: 'energy_now', x: 0, y: 0, size: 'l' },
-      { i: 'energy_today', x: 0, y: 2, size: 'w' }
+      { i: 'energy_today', x: 2, y: 0, size: 'w' }
     ]);
     expect(layout.items.lights).toEqual([{ i: 'lights', x: 0, y: 0, size: 'w' }]);
     expect(normalizeDeviceLayout('nope', WIDGETS, 'phone')).toEqual(buildDefaultDeviceLayout(WIDGETS, 'phone'));
@@ -125,5 +130,42 @@ describe('overviewLayout', () => {
     expect(getDeviceLayout(reset, WIDGETS, 'phone').collapsed).toEqual([]);
     expect((reset.preferences as { proOverviewLayout?: { desktop?: unknown } }).proOverviewLayout?.desktop).toBeDefined();
     expect(base.overview).toEqual(stored.overview);
+  });
+
+  it('flows in reading order without overlaps, whatever the sizes', () => {
+    const placed = flowPlacements(
+      [
+        { i: 'a', size: 'l' },
+        { i: 'b', size: 's' },
+        { i: 'c', size: 'w' },
+        { i: 'd', size: 's' },
+        { i: 'e', size: 't' },
+        { i: 'f', size: 'w' }
+      ],
+      4
+    );
+    const cells = new Set<string>();
+    for (const p of placed) {
+      const c = cellsFor(p.size, 4);
+      for (let y = p.y; y < p.y + c.h; y++) for (let x = p.x; x < p.x + c.w; x++) {
+        expect(cells.has(`${x},${y}`)).toBe(false);
+        cells.add(`${x},${y}`);
+      }
+    }
+    // Order is kept: each widget starts at or after the previous one.
+    for (let k = 1; k < placed.length; k++) {
+      const prev = placed[k - 1];
+      const cur = placed[k];
+      expect(cur.y > prev.y || (cur.y === prev.y && cur.x > prev.x)).toBe(true);
+    }
+  });
+
+  it('moves, resizes and appends within the flow', () => {
+    const base = flowPlacements([{ i: 'a', size: 's' }, { i: 'b', size: 'w' }, { i: 'c', size: 's' }], 4);
+    expect(readingOrder(moveInFlow(base, 'c', -1, 4)).map((p) => p.i)).toEqual(['a', 'c', 'b']);
+    expect(moveInFlow(base, 'a', -1, 4)).toEqual(base);
+    const grown = resizeInFlow(base, 'a', 'l', 4);
+    expect(grown.find((p) => p.i === 'a')).toEqual({ i: 'a', x: 0, y: 0, size: 'l' });
+    expect(readingOrder(appendToFlow(base, 'z', 's', 4)).map((p) => p.i)).toEqual(['a', 'b', 'c', 'z']);
   });
 });

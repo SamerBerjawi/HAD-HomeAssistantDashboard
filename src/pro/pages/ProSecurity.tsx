@@ -22,6 +22,7 @@ const { toast } = Toast;
 export default function ProSecurity() {
   const data = useSecurityData();
   const [error, setError] = useState<string | null>(null);
+  const [focusedCameraId, setFocusedCameraId] = useState<string | null>(null);
   const [selectedDeviceKey, setSelectedDeviceKey] = useState<{
     entityId: string;
     kind: DeviceItem['kind'];
@@ -34,9 +35,17 @@ export default function ProSecurity() {
     }
   }, []);
 
+  const handleFocusCamera = useCallback((cameraId: string) => {
+    setFocusedCameraId(cameraId);
+    const el = document.getElementById('pro-security-cameras');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
   const entities: SecurityEntities = useMemo(
     () => ({
       locks: data.locks,
+      garages: data.garages,
+      sirens: data.sirens,
       doorSensors: data.doorSensors,
       windowSensors: data.windowSensors,
       motionSensors: data.motionSensors,
@@ -45,6 +54,8 @@ export default function ProSecurity() {
     }),
     [
       data.locks,
+      data.garages,
+      data.sirens,
       data.doorSensors,
       data.windowSensors,
       data.motionSensors,
@@ -58,6 +69,8 @@ export default function ProSecurity() {
     if (!selectedDeviceKey) return null;
     const all = [
       ...data.locks,
+      ...data.garages,
+      ...data.sirens,
       ...data.doorSensors,
       ...data.windowSensors,
       ...data.motionSensors,
@@ -121,7 +134,15 @@ export default function ProSecurity() {
               alarm={alarm}
               alarms={data.alarms}
               openings={openings}
+              openGarages={data.openGarages}
               unlockedLocks={data.unlockedLocks}
+              activeSirens={data.activeSirens}
+              hazards={data.activeHazards}
+              people={data.people}
+              cameras={data.cameras}
+              events={activity.events}
+              serverUrl={data.serverUrl}
+              onFocusCamera={hasCameras ? handleFocusCamera : undefined}
               onError={handleError}
             />
           </div>
@@ -129,10 +150,13 @@ export default function ProSecurity() {
         <div className={cn('grid min-w-0', !alarm && 'lg:col-span-3')}>
           <AttentionCard
             hazards={data.activeHazards}
+            activeSirens={data.activeSirens}
             jammedLocks={data.jammedLocks}
             openDoors={data.openDoors}
             openWindows={data.openWindows}
+            openGarages={data.openGarages}
             unlockedLocks={data.unlockedLocks}
+            deviceBatteryByEntityId={data.deviceBatteryByEntityId}
             lowBatteryDevices={data.lowBatteryDevices}
             offlineDevices={data.offlineDevices}
             onError={handleError}
@@ -144,7 +168,11 @@ export default function ProSecurity() {
       <div className="grid items-start gap-4 lg:grid-cols-3">
         {hasCameras && (
           <div className="min-w-0 lg:col-span-2">
-            <SecurityCameras cameras={data.cameras} onError={handleError} />
+            <SecurityCameras
+              cameras={data.cameras}
+              focusedCameraId={focusedCameraId}
+              onError={handleError}
+            />
           </div>
         )}
         <div className={cn('min-w-0', !hasCameras && 'lg:col-span-3')}>

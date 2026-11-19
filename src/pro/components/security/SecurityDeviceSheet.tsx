@@ -16,7 +16,7 @@ import {
 } from '../../lib/securityLogic';
 import { ProSheet } from '../ProSheet';
 import { TONE_TILE } from './AlarmHero';
-import { KIND_ICON, KIND_LABEL, LockAction, StatusChip } from './DeviceRow';
+import { GarageAction, KIND_ICON, KIND_LABEL, LockAction, SirenAction, StatusChip } from './DeviceRow';
 
 interface SecurityDeviceSheetProps {
   item: DeviceItem | null;
@@ -78,6 +78,12 @@ export function SecurityDeviceSheet({
           {item.kind === 'lock' &&
           (item.stateLabel === 'Locked' || item.stateLabel === 'Unlocked') ? (
             <LockAction item={item} onError={onError} />
+          ) : item.kind === 'garage' &&
+            (item.stateLabel === 'Open' || item.stateLabel === 'Closed') ? (
+            <GarageAction item={item} onError={onError} />
+          ) : item.kind === 'siren' &&
+            (item.stateLabel === 'Sounding' || item.stateLabel === 'Idle') ? (
+            <SirenAction item={item} onError={onError} />
           ) : null}
         </div>
 

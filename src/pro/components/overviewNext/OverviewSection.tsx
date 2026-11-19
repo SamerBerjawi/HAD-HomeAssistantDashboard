@@ -3,45 +3,39 @@ import { Button } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowDown01Icon, ArrowUp01Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
-import type { LayoutPlacement } from '../../lib/overviewLayout';
 import { OVERVIEW_SECTION_LABELS, type OverviewSectionId } from '../../lib/overviewSections';
-import { SpikeSectionGrid, type SpikeCompaction } from './SpikeSectionGrid';
 
-interface SpikeSectionProps {
+interface OverviewSectionProps {
   id: OverviewSectionId;
-  placements: LayoutPlacement[];
-  cols: number;
-  /** Outer columns this section spans (view mode, side by side). */
+  count: number;
+  /** Outer grid columns this section spans. */
   span: number;
   isEditing: boolean;
-  compaction: SpikeCompaction;
   isCollapsed: boolean;
   isFirst: boolean;
   isLast: boolean;
   onToggleCollapsed: () => void;
   onMove: (dir: -1 | 1) => void;
-  onChange: (next: LayoutPlacement[]) => void;
-  renderCard: (placement: LayoutPlacement) => ReactNode;
+  children: ReactNode;
 }
 
-/** A section: header (title, collapse, reorder in edit mode) over its own grid. */
-export function SpikeSection({ id, placements, cols, span, isEditing, compaction, isCollapsed, isFirst, isLast, onToggleCollapsed, onMove, onChange, renderCard }: SpikeSectionProps) {
+/** A section (= a tab): title with collapse, and up/down to reorder sections in edit mode. */
+export function OverviewSection({ id, count, span, isEditing, isCollapsed, isFirst, isLast, onToggleCollapsed, onMove, children }: OverviewSectionProps) {
   const label = OVERVIEW_SECTION_LABELS[id];
   const style: CSSProperties = { gridColumn: `span ${span} / span ${span}` };
   return (
     <section aria-label={`${label} section`} className="flex min-w-0 flex-col gap-2" style={style}>
-      <header className="flex items-center gap-1">
+      <header className="flex min-h-9 items-center gap-1">
         <Button
           variant="ghost"
           size="sm"
           className="gap-1.5 px-1.5 text-sm font-semibold"
           aria-expanded={!isCollapsed}
-          aria-label={`${label}, ${isCollapsed ? 'expand' : 'collapse'} section`}
+          aria-label={`${label} section, ${count} ${count === 1 ? 'widget' : 'widgets'}. ${isCollapsed ? 'Expand' : 'Collapse'}`}
           onPress={onToggleCollapsed}
         >
-          <HugeiconsIcon icon={ArrowDown01Icon} size={14} className={cn('transition-transform', isCollapsed && '-rotate-90')} />
+          <HugeiconsIcon icon={ArrowDown01Icon} size={14} className={cn('transition-transform motion-reduce:transition-none', isCollapsed && '-rotate-90')} />
           {label}
-          <span className="text-xs font-normal text-muted">{placements.length}</span>
         </Button>
         {isEditing ? (
           <span className="ml-auto flex items-center gap-1">
@@ -54,7 +48,7 @@ export function SpikeSection({ id, placements, cols, span, isEditing, compaction
           </span>
         ) : null}
       </header>
-      {!isCollapsed ? <SpikeSectionGrid placements={placements} cols={cols} isEditing={isEditing} compaction={compaction} onChange={onChange} renderCard={renderCard} /> : null}
+      {!isCollapsed ? children : null}
     </section>
   );
 }

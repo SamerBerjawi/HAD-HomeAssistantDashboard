@@ -154,7 +154,7 @@
   }
 }
 
-/* Overview layout spike (Phase 0): react-grid-layout in pro tokens. */
+/* Overview layout engine (rebuild): react-grid-layout in pro tokens. */
 .pro .pro-rgl .react-grid-item.react-grid-placeholder {
   background: var(--accent);
   opacity: 0.16;

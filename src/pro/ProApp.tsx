@@ -15,9 +15,9 @@ import ProOverview from './pages/ProOverview';
 import ProSecurity from './pages/ProSecurity';
 import ProToaster from './components/toasts/ProToaster';
 
-// Phase 0 layout spike (docs/pro-ui/OVERVIEW_REBUILD.md): dev builds only, /overview?spike.
-const ProOverviewSpike = import.meta.env.DEV ? lazy(() => import('./pages/ProOverviewSpike')) : null;
-const showSpike = () => ProOverviewSpike !== null && new URLSearchParams(window.location.search).has('spike');
+// Overview rebuild in progress (docs/pro-ui/OVERVIEW_REBUILD.md): dev builds only, /overview?next.
+const ProOverviewNext = import.meta.env.DEV ? lazy(() => import('./pages/ProOverviewNext')) : null;
+const showNext = () => ProOverviewNext !== null && new URLSearchParams(window.location.search).has('next');
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
 const ProNotificationCenter = lazy(() => import('./components/notifications/ProNotificationCenter'));
@@ -92,9 +92,9 @@ export default function ProApp() {
         onToggleTheme={() => handleToggleDarkMode()}
         onOpenNotifications={overlays.handleOpenNotifications}
       >
-        {activeTab === 'overview' && ProOverviewSpike && showSpike() ? (
+        {activeTab === 'overview' && ProOverviewNext && showNext() ? (
           <Suspense fallback={null}>
-            <ProOverviewSpike />
+            <ProOverviewNext />
           </Suspense>
         ) : activeTab === 'overview' ? (
           <ProOverview />
