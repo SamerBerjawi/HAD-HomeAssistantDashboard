@@ -53,3 +53,79 @@
 .pro .input-otp__input:focus-visible {
   outline: none !important;
 }
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes marquee-vertical {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+.animate-marquee {
+  animation: marquee var(--duration) linear infinite;
+}
+
+.animate-marquee-vertical {
+  animation: marquee-vertical var(--duration) linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-marquee-vertical {
+    animation: none;
+  }
+}
+
+/* Minimal dark & light basemap styling applied to OpenStreetMap tile layer only (markers unaffected). */
+.pro .pro-osm-tiles-dark {
+  filter: invert(0.92) hue-rotate(180deg) saturate(0.28) brightness(0.9) contrast(1.06);
+}
+
+.pro .pro-osm-tiles-light {
+  filter: saturate(0.28) brightness(1.03) contrast(0.92);
+}
+
+/* Custom waveform scrubber track & playhead pin: override HeroUI Slider borders and thumb pill. */
+.pro .slider[data-orientation='horizontal'] .slider__track.pro-waveform-track {
+  border-inline-width: 0 !important;
+  border-inline-color: transparent !important;
+  background: transparent !important;
+}
+.pro .slider[data-orientation='horizontal'] .slider__thumb.pro-waveform-thumb {
+  width: 3px !important;
+  min-width: 3px !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+}
+.pro .slider[data-orientation='horizontal'] .slider__thumb.pro-waveform-thumb::before,
+.pro .slider[data-orientation='horizontal'] .slider__thumb.pro-waveform-thumb::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Official bklit UI chart tokens mapped onto Pro-UI HeroUI semantic variables. */
+.pro {
+  --chart-background: var(--default);
+  --chart-foreground: var(--foreground);
+  --chart-foreground-muted: var(--muted);
+  --chart-label: var(--muted);
+  --chart-1: var(--accent);
+  --chart-2: var(--success);
+  --chart-3: var(--warning);
+  --chart-4: #818cf8;
+  --chart-5: var(--success);
+}
+.pro .text-chart-label {
+  color: var(--chart-label);
+}
