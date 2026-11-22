@@ -20,6 +20,8 @@ import ProToaster from './components/toasts/ProToaster';
 const WidgetStudio = import.meta.env.DEV ? lazy(() => import('./studio/WidgetStudio')) : null;
 // Area Tiles Studio (docs/pro-ui/AREA_TILES.md): dev builds only, /?studio=areas.
 const AreaStudio = import.meta.env.DEV ? lazy(() => import('./areas/studio/AreaStudio')) : null;
+// Rooms Studio (docs/pro-ui/ROOMS.md §5): dev builds only, /?studio=rooms.
+const RoomsStudio = import.meta.env.DEV ? lazy(() => import('./pages/rooms/studio/RoomsStudio')) : null;
 const showStudio = () => WidgetStudio !== null && new URLSearchParams(window.location.search).has('studio');
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
@@ -67,6 +69,13 @@ export default function ProApp() {
     return (
       <Suspense fallback={null}>
         <AreaStudio />
+      </Suspense>
+    );
+  }
+  if (RoomsStudio && new URLSearchParams(window.location.search).get('studio') === 'rooms') {
+    return (
+      <Suspense fallback={null}>
+        <RoomsStudio />
       </Suspense>
     );
   }

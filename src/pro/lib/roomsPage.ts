@@ -37,6 +37,21 @@ export interface RoomItem extends ProAreaItem {
   air: RoomAir;
   /** When motion was last seen (ms), null while there is motion or no sensor. */
   lastMotion: number | null;
+  /** Fans in the room and how many run (the fan quick action). */
+  fanIds: string[];
+  fansOn: number;
+  /** Covers (blinds, shades, curtains) and how many are open (the cover quick action). */
+  coverIds: string[];
+  coversOpen: number;
+  /** The room's main media player (the playing one, else the first that is on), for play/pause. */
+  media: RoomMedia | null;
+}
+
+export interface RoomMedia {
+  entityId: string;
+  playing: boolean;
+  /** What is playing (`media_title`), when HA says. */
+  title: string | null;
 }
 
 /** The user's Rooms settings that shape the page (shared with the classic Rooms page). */
@@ -61,6 +76,7 @@ export interface RoomsFloor {
   totalLights: number;
   occupied: number;
   avgTemp: number | null;
+  devices: number;
 }
 
 export interface RoomsTotals {
@@ -69,7 +85,9 @@ export interface RoomsTotals {
   active: number;
   occupied: number;
   lightsOn: number;
+  totalLights: number;
   roomsLit: number;
+  devices: number;
   open: number;
   powerWatts: number;
   minTemp: number | null;
@@ -91,7 +109,7 @@ const avg = (vals: number[]) => (vals.length ? Math.round((vals.reduce((a, b) =>
 
 /** The extra room facts, on top of the Areas widget's item. */
 export type RoomFacts = Pick<RoomItem, 'climateActive' | 'targetTemp' | 'cleaning' | 'lowBattery' | 'switchesOn' | 'deviceCount'> &
-  Partial<Pick<RoomItem, 'lightColor' | 'scenes' | 'thermostat' | 'air' | 'lastMotion'>>;
+  Partial<Pick<RoomItem, 'lightColor' | 'scenes' | 'thermostat' | 'air' | 'lastMotion' | 'fanIds' | 'fansOn' | 'coverIds' | 'coversOpen' | 'media'>>;
 
 /** Signals and activity from a room's facts (also used for fixtures). */
 export function finishRoom(base: ProAreaItem, facts: RoomFacts): RoomItem {
@@ -110,6 +128,11 @@ export function finishRoom(base: ProAreaItem, facts: RoomFacts): RoomItem {
     thermostat: null,
     air: NO_AIR,
     lastMotion: null,
+    fanIds: [],
+    fansOn: 0,
+    coverIds: [],
+    coversOpen: 0,
+    media: null,
     ...base,
     ...facts,
     occupied: base.motion || base.mediaPlaying > 0,
@@ -209,6 +232,18 @@ export function roomLightColor(lights: readonly Pick<ResolvedEntity, 'state' | '
   return `rgb(${avgCh(0)} ${avgCh(1)} ${avgCh(2)})`;
 }
 
+const OFF_MEDIA = new Set(['off', 'unavailable', 'unknown', 'standby']);
+const OPEN_COVER = new Set(['open', 'opening']);
+
+/** The room's main media player: the playing one, else a paused one, else the first that is on. */
+export function roomMedia(players: readonly Pick<ResolvedEntity, 'entity_id' | 'state' | 'attributes'>[]): RoomMedia | null {
+  const on = players.filter((p) => !OFF_MEDIA.has(p.state));
+  const p = on.find((x) => x.state === 'playing') ?? on.find((x) => x.state === 'paused') ?? on[0];
+  if (!p) return null;
+  const title = p.attributes?.media_title;
+  return { entityId: p.entity_id, playing: p.state === 'playing', title: typeof title === 'string' && title.trim() ? title : null };
+}
+
 export function buildRoomItem(area: ResolvedArea, floorName: string | null, isFavorite: boolean): RoomItem {
   const s = area.summary;
   const by = area.entitiesByDomain ?? {};
@@ -225,7 +260,12 @@ export function buildRoomItem(area: ResolvedArea, floorName: string | null, isFa
     scenes: (by.scene ?? []).slice(0, 4).map((e) => ({ entityId: e.entity_id, name: e.name || String(e.attributes?.friendly_name ?? e.entity_id) })),
     thermostat,
     air: roomAir(area.entities ?? []),
-    lastMotion: lastMotionAt(area.entities ?? [])
+    lastMotion: lastMotionAt(area.entities ?? []),
+    fanIds: (by.fan ?? []).map((e) => e.entity_id),
+    fansOn: (by.fan ?? []).filter((e) => e.state === 'on').length,
+    coverIds: (by.cover ?? []).map((e) => e.entity_id),
+    coversOpen: (by.cover ?? []).filter((e) => OPEN_COVER.has(e.state)).length,
+    media: roomMedia(by.media_player ?? [])
   });
 }
 
@@ -242,7 +282,7 @@ export function assembleRoomsPage(rooms: readonly RoomItem[], floors: readonly H
     let g = groups.get(key);
     if (!g) {
       const f = key ? floorById.get(key) : undefined;
-      g = { floorId: key || null, name: f?.name ?? 'Other areas', level: f ? (f.level ?? 0) : NO_FLOOR_LEVEL, rooms: [], lightsOn: 0, totalLights: 0, occupied: 0, avgTemp: null };
+      g = { floorId: key || null, name: f?.name ?? 'Other areas', level: f ? (f.level ?? 0) : NO_FLOOR_LEVEL, rooms: [], lightsOn: 0, totalLights: 0, occupied: 0, avgTemp: null, devices: 0 };
       groups.set(key, g);
     }
     g.rooms.push(r);
@@ -251,6 +291,7 @@ export function assembleRoomsPage(rooms: readonly RoomItem[], floors: readonly H
     g.lightsOn = g.rooms.reduce((n, r) => n + r.lightsOn, 0);
     g.totalLights = g.rooms.reduce((n, r) => n + r.totalLights, 0);
     g.occupied = g.rooms.filter((r) => r.occupied).length;
+    g.devices = g.rooms.reduce((n, r) => n + r.deviceCount, 0);
     g.avgTemp = avg(g.rooms.map((r) => r.temperature).filter((t): t is number => t !== null));
   }
   const temps = rooms.map((r) => r.temperature).filter((t): t is number => t !== null);
@@ -264,6 +305,8 @@ export function assembleRoomsPage(rooms: readonly RoomItem[], floors: readonly H
       active: active.length,
       occupied: rooms.filter((r) => r.occupied).length,
       lightsOn: rooms.reduce((n, r) => n + r.lightsOn, 0),
+      totalLights: rooms.reduce((n, r) => n + r.totalLights, 0),
+      devices: rooms.reduce((n, r) => n + r.deviceCount, 0),
       roomsLit: rooms.filter((r) => r.lightsOn > 0).length,
       open: rooms.reduce((n, r) => n + r.openContacts, 0),
       powerWatts: rooms.reduce((n, r) => n + r.powerWatts, 0),

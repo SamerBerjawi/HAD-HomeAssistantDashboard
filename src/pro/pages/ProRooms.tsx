@@ -1,8 +1,9 @@
 /**
- * Pro Rooms page (docs/pro-ui/ROOMS.md): the Gallery (owner's pick, 2026-11-20). Every room as a
- * picture card by floor (highest first), with "Happening now" on top; "Customize" (button and the
- * header ⋮ menu) sets page options, floor and room order, colours, favourites and what is shown.
- * Opening a room shows its room page (`room/RoomPage.tsx`: the Area page, B + C).
+ * Pro Rooms page (docs/pro-ui/ROOMS.md): the Ambient explorer (owner, 2026-11-22). Every room as
+ * an ambient tile (compact, standard or expanded) in collapsible floor sections; "Customize"
+ * (button and the header ⋮ menu) sets page options, quick actions, floor and room order, tile
+ * sizes, colours, favourites and what is shown. Opening a room shows its room page
+ * (`room/RoomPage.tsx`: the Area page, B + C), unchanged.
  */
 import { useMemo, useState } from 'react';
 import { PaintBoardIcon } from '@hugeicons/core-free-icons';
@@ -13,7 +14,7 @@ import { useProPageHeader } from '../components/pageHeaderContext';
 import { useDerivedModel } from '../widgets/shared/entities';
 import { RoomsCustomizeSheet } from './rooms/RoomsCustomizeSheet';
 import RoomPage from './room/RoomPage';
-import RoomsGallery from './rooms/RoomsGallery';
+import RoomsExplorer from './rooms/RoomsExplorer';
 import { readRoomsPrefs } from './rooms/shared';
 
 const EMPTY: string[] = [];
@@ -50,7 +51,7 @@ function useRoomsPageModels(): { model: RoomsPageModel; all: RoomsPageModel } {
 export default function ProRooms() {
   const { config } = useUserConfig();
   const { model, all } = useRoomsPageModels();
-  const prefs = readRoomsPrefs(config.preferences);
+  const prefs = useMemo(() => readRoomsPrefs(config.preferences), [config.preferences]);
   const [customizing, setCustomizing] = useState(false);
   const selectedAreaId = useAutoLayoutStore((s) => s.selectedAreaId);
   const setSelectedAreaId = useAutoLayoutStore((s) => s.setSelectedAreaId);
@@ -63,7 +64,7 @@ export default function ProRooms() {
     return <div className="pro-surface rounded-[22px] px-6 py-12 text-center text-sm text-muted">No rooms yet. Areas you create in Home Assistant show up here, grouped by floor.</div>;
   return (
     <>
-      <RoomsGallery model={model} prefs={prefs} onOpenRoom={setSelectedAreaId} onCustomize={() => setCustomizing(true)} />
+      <RoomsExplorer model={model} prefs={prefs} onOpenRoom={setSelectedAreaId} onCustomize={() => setCustomizing(true)} />
       {sheet}
     </>
   );

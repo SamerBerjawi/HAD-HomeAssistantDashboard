@@ -1,28 +1,10 @@
 /**
- * Shared parts of the Rooms page (docs/pro-ui/ROOMS.md): each signal's icon and label, room
- * colours, page options and the lights action.
+ * Shared parts of the Rooms page (docs/pro-ui/ROOMS.md): room colours, page options
+ * (`preferences.proRooms`) and the temperature format.
  */
-import { useMemo } from 'react';
-import type { IconSvgElement } from '@hugeicons/react';
-import { BatteryLowIcon, BulbIcon, Door01Icon, Motion01Icon, MusicNote03Icon, Robot01Icon, ThermometerIcon } from '@hugeicons/core-free-icons';
-import type { RoomItem, RoomSignal } from '../../lib/roomsPage';
-import { useAreaActions } from '../../widgets/areas/concepts/shared';
+import { QUICK_ACTIONS, type QuickAction, type TileSizeChoice } from '../../lib/roomTiles';
 
 export { areaIcon as roomIcon } from '../../widgets/areas/concepts/shared';
-
-/** Each signal's icon and short label. */
-export const SIGNAL: Record<RoomSignal, { icon: IconSvgElement; label: (r: RoomItem) => string }> = {
-  open: { icon: Door01Icon, label: (r) => `${r.openContacts} open` },
-  motion: { icon: Motion01Icon, label: () => 'Motion' },
-  media: { icon: MusicNote03Icon, label: () => 'Playing' },
-  lights: { icon: BulbIcon, label: (r) => `${r.lightsOn} on` },
-  climate: { icon: ThermometerIcon, label: (r) => (r.targetTemp !== null ? `Set ${Number(r.targetTemp.toFixed(1))}°` : 'Climate') },
-  cleaning: { icon: Robot01Icon, label: () => 'Cleaning' },
-  battery: { icon: BatteryLowIcon, label: (r) => `${r.lowBattery} low battery` }
-};
-
-/** Background for a room without a picture: its colour, darker towards the bottom. */
-export const roomGradient = (color: string) => `linear-gradient(150deg, ${color}, color-mix(in oklab, ${color} 48%, black))`;
 
 /** Colours offered for a room (hex, saved in `rooms.areaOverrides[id].customColor`, shared with the classic page). */
 export const ROOM_COLORS = [
@@ -40,8 +22,15 @@ export const ROOM_COLORS = [
 
 /** Page options (`preferences.proRooms`, all screens). Every extra can be switched off in Customize. */
 export interface RoomsPagePrefs {
-  cardSize: 'large' | 'compact';
-  showActive: boolean;
+  /**
+   * "large" = mixed sizes (automatic or the user's per-room choice); "compact" = every tile
+   * compact; "standard" = every tile standard, in an even grid of about 300×200 px tiles.
+   */
+  cardSize: 'large' | 'compact' | 'standard';
+  /** Tile size per room, by area id ("auto" or missing = automatic). */
+  sizes: Record<string, TileSizeChoice>;
+  /** The big number on standard and large tiles. */
+  metric: 'temperature' | 'humidity';
   showSummary: boolean;
   groupByFloor: boolean;
   swipeFloors: boolean;
@@ -50,45 +39,71 @@ export interface RoomsPagePrefs {
   showMood: boolean;
   showClimate: boolean;
   showScenes: boolean;
+  actLights: boolean;
+  actMedia: boolean;
+  actFan: boolean;
+  actCover: boolean;
   lightColorGlow: boolean;
-  nightLook: boolean;
+  /** The room's Home Assistant area picture behind the tile (off by default). */
+  showPictures: boolean;
   animations: boolean;
 }
-export type RoomsToggle = Exclude<keyof RoomsPagePrefs, 'cardSize'>;
+export type RoomsToggle = Exclude<keyof RoomsPagePrefs, 'cardSize' | 'sizes' | 'metric'>;
 
 /** The switches in Customize, in order, with what each one does. */
-export const ROOMS_TOGGLES: { key: RoomsToggle; group: 'page' | 'cards'; label: string; hint?: string }[] = [
-  { key: 'showSummary', group: 'page', label: 'Home summary', hint: 'Rooms lit, temperatures, power, open; tap to filter' },
-  { key: 'showActive', group: 'page', label: 'Happening now' },
-  { key: 'groupByFloor', group: 'page', label: 'Group by floor', hint: 'With lights off per floor' },
+export const ROOMS_TOGGLES: { key: RoomsToggle; group: 'page' | 'cards' | 'actions'; label: string; hint?: string }[] = [
+  { key: 'showSummary', group: 'page', label: 'Home status', hint: 'Lights, temperatures, power, people home; lights filter the rooms' },
+  { key: 'groupByFloor', group: 'page', label: 'Group by floor', hint: 'Collapsible floors with lights off per floor' },
   { key: 'swipeFloors', group: 'page', label: 'Swipe between floors', hint: 'Phones and tablets' },
-  { key: 'showMood', group: 'cards', label: 'Room status', hint: 'Cozy, Too warm, Empty for 3 h…' },
+  { key: 'showMood', group: 'cards', label: 'Room status', hint: 'Cozy, Too warm, Empty for 3 h… on large tiles' },
   { key: 'showFacts', group: 'cards', label: 'Humidity and power' },
-  { key: 'showAir', group: 'cards', label: 'Air quality', hint: 'CO₂, AQI or PM2.5 when the room has a sensor' },
-  { key: 'showClimate', group: 'cards', label: 'Heating and cooling', hint: 'Ring on the temperature and the −/+ chip' },
-  { key: 'showScenes', group: 'cards', label: 'Scenes button' },
+  { key: 'showAir', group: 'cards', label: 'Air quality', hint: 'CO₂, AQI or PM2.5 on large tiles' },
+  { key: 'showPictures', group: 'cards', label: 'Area pictures', hint: 'The picture set for the area in Home Assistant, behind the tile' },
   { key: 'lightColorGlow', group: 'cards', label: 'Glow in the lights’ colour' },
-  { key: 'nightLook', group: 'cards', label: 'Night look', hint: 'Dimmer pictures after sunset, lit rooms stand out' },
-  { key: 'animations', group: 'cards', label: 'Animations', hint: 'Presence shimmer, music bars, fades' }
+  { key: 'animations', group: 'cards', label: 'Animations', hint: 'Music bars and soft fades' },
+  { key: 'actLights', group: 'actions', label: 'Lights', hint: 'Every light in the room on or off' },
+  { key: 'showClimate', group: 'actions', label: 'Climate', hint: 'Heating or cooling, −/+ on the target' },
+  { key: 'actMedia', group: 'actions', label: 'Media', hint: 'Play or pause the room’s player' },
+  { key: 'actFan', group: 'actions', label: 'Fans' },
+  { key: 'actCover', group: 'actions', label: 'Blinds and covers', hint: 'Open or close them all' },
+  { key: 'showScenes', group: 'actions', label: 'Scenes' }
 ];
+
+/** Which quick action each switch controls. */
+export const ACTION_PREF: Record<QuickAction, RoomsToggle> = {
+  lights: 'actLights',
+  climate: 'showClimate',
+  media: 'actMedia',
+  fan: 'actFan',
+  cover: 'actCover',
+  scenes: 'showScenes'
+};
+export const enabledActions = (p: RoomsPagePrefs) => new Set(QUICK_ACTIONS.filter((a) => p[ACTION_PREF[a]]));
 
 export const DEFAULT_ROOMS_PREFS: RoomsPagePrefs = {
   cardSize: 'large',
-  ...(Object.fromEntries(ROOMS_TOGGLES.map((t) => [t.key, true])) as Record<RoomsToggle, boolean>)
+  sizes: {},
+  metric: 'temperature',
+  ...(Object.fromEntries(ROOMS_TOGGLES.map((t) => [t.key, true])) as Record<RoomsToggle, boolean>),
+  showPictures: false
 };
 export const ROOMS_PREF_KEY = 'proRooms';
+const SIZE_CHOICES = new Set<TileSizeChoice>(['auto', 'compact', 'standard', 'expanded']);
+
+/** The stored options as saved (older keys included), so a save keeps what this version doesn't use. */
+export function rawRoomsPrefs(preferences: unknown): Record<string, unknown> {
+  const v = (preferences as Record<string, unknown> | undefined)?.[ROOMS_PREF_KEY];
+  return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+}
+
 export function readRoomsPrefs(preferences: unknown): RoomsPagePrefs {
-  const v = ((preferences as Record<string, unknown> | undefined)?.[ROOMS_PREF_KEY] ?? {}) as Partial<RoomsPagePrefs>;
-  const out: RoomsPagePrefs = { ...DEFAULT_ROOMS_PREFS, cardSize: v.cardSize === 'compact' ? 'compact' : 'large' };
+  const v = rawRoomsPrefs(preferences) as Partial<RoomsPagePrefs>;
+  const sizes: Record<string, TileSizeChoice> = {};
+  for (const [id, c] of Object.entries(v.sizes ?? {})) if (SIZE_CHOICES.has(c)) sizes[id] = c;
+  const out: RoomsPagePrefs = { ...DEFAULT_ROOMS_PREFS, cardSize: v.cardSize === 'compact' || v.cardSize === 'standard' ? v.cardSize : 'large', sizes, metric: v.metric === 'humidity' ? 'humidity' : 'temperature' };
   for (const t of ROOMS_TOGGLES) if (typeof v[t.key] === 'boolean') out[t.key] = v[t.key] as boolean;
   return out;
 }
 
 /** Temperature for a card: "21.5°". */
 export const temp = (t: number | null) => (t === null ? '–' : `${Number(t.toFixed(1))}°`);
-
-/** Lights on/off for a room (the action every card carries). */
-export function useRoomLights() {
-  const { setLights } = useAreaActions();
-  return useMemo(() => ({ toggle: (r: RoomItem) => setLights(r, r.lightsOn === 0) }), [setLights]);
-}

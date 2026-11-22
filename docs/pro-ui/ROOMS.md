@@ -42,7 +42,103 @@ the room pages are built, opening a room shows a placeholder with Back.
 | Strengths | Fastest to scan, dense, works at 20+ rooms | Most personal and beautiful, room pictures | Spatial: see the whole house at once, where things happen |
 | Trade-offs | Least visual | Fewer rooms per screen | New idea, needs a legend; cells get small with many rooms |
 
-## 3. The page (Gallery)
+## 3. The page (Ambient explorer, owner 2026-11-22)
+
+**Tiles in production: Design D · Soft blend** (owner approved 2026-11-22; `RoomTileBlend.tsx`,
+row heights `blendMetrics`): B's soft surface, title label and glowing toggles, A's information,
+C's tinted room icon, a lights toggle on every size; devices use the flow-connection icon.
+Options (Customize, 2026-11-22): **Area pictures** (`showPictures`, off by default) puts the
+area's HA picture behind the tile under a dark scrim (light text, the room's light still glows
+over it); **Sizes: All standard** (`cardSize: 'standard'`) is an even grid of standard tiles,
+columns ≥ 288 px (`EVEN_TILE_MIN`, ~300×200 on desktop), the same width on every row. The
+tile notes below describe Design A, whose layout rules (sizes, packing, ambient light, actions)
+D shares; A, B and C stay in the studio (§5).
+
+Replaces the Gallery (kept below as history). Direction: the owner's reference screenshot, a mix
+of concept 1 "Adaptive ambient" (soft gradients, curved accents, purpose-built tiles) and concept 3
+"Compact explorer" (floor groups, dense mixed-size layout). No room pictures. Room pages unchanged.
+Code: `pages/rooms/RoomsExplorer.tsx` (page body), `RoomTile.tsx`, `RoomQuickActions.tsx`,
+`lib/roomTiles.ts` (pure: sizes, tone, packing), tile CSS `.pro-rt*` in `pro.css`.
+
+- **Status bar**: "7 rooms · 22 devices", then chips: lights on / all lights (tap: only lit rooms),
+  temperature range, power **in rooms** (the sum of the rooms' power sensors, labelled as such: not a
+  whole-home figure), people home (HA `person` entities; hidden when there are none), open doors and
+  windows (warning colour; tap: only those rooms). Switch: "Home status".
+- **Filter**: All, Favourites (when any), one per HA floor (when more than one), plus the status
+  filter while on. Remembered per browser (`had.pro.rooms.filter`). Swipe sideways on touch.
+- **Floors**: HA floors in the user's order, else highest first; rooms without a floor last as
+  "Other areas". Heading: chevron + name (collapses smoothly, remembered per browser in
+  `had.pro.rooms.collapsed`; collapsed content is `inert`), room and device counts, average
+  temperature, and "Lights off" for the floor when any are on.
+- **Tile sizes** (never from the room's name; refined 2026-11-22): `autoTileSize` counts the
+  controls that matter (lights, media, fans, covers; a thermostat alone does not grow a room).
+  **Compact** when there are none or a single light only; **expanded** for media with lights, three
+  or more kinds, or a favourite with two; else **standard**. Per room override in Customize (tap
+  the room's icon: Auto, Compact, Standard, Large; `preferences.proRooms.sizes`). "All compact"
+  keeps the old Compact card size.
+  - Compact: a short horizontal card: icon, name, reading or state word with device count, status
+    dot (green: someone there; orange: open). No controls.
+  - Standard / expanded: identity row (icon tile + name), big reading, a facts line (status word,
+    climate action, what is playing, humidity, power, open covers, air: more on large tiles), then
+    lights and devices; actions in a column on the right (2 / 3). Narrow tiles (< 15rem, container
+    query) put two actions in the top row, the name under it, and drop the facts line.
+- **Layout**: columns from the real width (`tileColumns`: ≥195 px each, 2–6; phones 2, tablets 3,
+  laptops 5). Tiles pack into bands (`packTileBands`): compact tiles pair up in one column, an
+  expanded tile spans 2, a tile that fits goes before a wide one that doesn't, and a wide tile
+  narrows into space left when nothing else fits. Each band is one CSS grid row with explicit
+  column weights (`bandLayout`): a last row of two or more tiles fills the width; a lone last tile
+  takes at most half the row. Heights (`bandMetrics`): 184/200 px rows (180/196 tablet, 176/192
+  phone), compact 86 px. A compact tile with no partner in a row of bigger tiles takes the standard
+  composition. Phones: compact tiles are 68 px full-width rows.
+- **Ambient light** (`roomAmbient`, palette `AMBIENT`: amber, teal, violet, blue, rose, neutral):
+  lights give the main glow (amber, or the lights' own colour), media violet (under the lights'
+  glow when both), fans teal. Heating and cooling never take over a tile: a calm tile with a soft
+  rose or blue glow from the bottom left. Idle rooms are neutral with a faint hint of the nearest
+  palette tone to their colour. CSS (`.pro-rt::before`): a main radial glow top right, a second
+  one bottom left, a faint luminous highlight and a 135° base gradient; one thin masked curve (no
+  fill, none on compact tiles). Light theme: pale surfaces with the same light, darker ink.
+- **Quick actions** (only when the room has the entities; order lights, climate, media, fan, cover,
+  scenes; each can be switched off in Customize): lights on/off for all the room's lights, climate
+  −/+ popover, media play/pause, fans on/off, covers open/close all, scenes menu. 40 px quiet
+  round buttons; while on they are tinted (20 % fill, coloured icon and edge) in the action's
+  colour, never filled or glowing. Labels say the
+  scope ("turn off both lights"); spinner while HA answers; optimistic state; errors toast. The rest
+  of the tile opens the room page.
+- **Customize** adds: big number (temperature or humidity), quick-action switches, per-room size.
+  Saving keeps option keys this version no longer uses (Happening now, Night look), so nothing saved
+  is dropped.
+
+## 5. Rooms Studio (2026-11-22)
+
+Dev only: `/?studio=rooms` (`pages/rooms/studio/RoomsStudio.tsx`). Three designs on the same
+sample home (`studioRooms.ts`: 12 rooms on 3 floors, states Evening busy, All quiet, Heating
+morning, Coloured lights), light, dark or both, at page widths for 375, 768, 1024, 1440 and 1920 px
+screens. Each design shows its tile sizes and the floor-grouped page. Quick actions are live on the
+sample only (`RoomServiceContext` swaps HA's service for `applyStudioService`); nothing reaches
+Home Assistant. "Approve" records the pick in this browser (`had.pro.roomsStudio.pick`) with
+notes and "Copy for the chat"; production keeps Design A until the change is applied.
+
+| | A · Refined adaptive ambient (production) | B · Soft atmospheric (studio only) | C · Precision ambient (studio only) |
+|---|---|---|---|
+| Light | Layered radial glows, highlight, one thin curve | Two large diffused glows and a haze; no border, no curve | Fine light line along the top edge, faint corner wash |
+| Composition | Icon tile + name, big reading, facts, summary; actions column | Quiet name label top, large light-weight reading bottom, one sentence; actions row top right | Header with state code, medium reading, labelled data row; square actions bottom right |
+| Compact | Short card: icon tile, name, reading · devices, dot | Rounded strip with a glowing light dot and the reading on the right | One dense line: icon, name, reading, state code |
+| Floors | Chevron, name, counts, Lights off | Light large name, "3 lights on", "Dim the floor" | Uppercase label on a hairline rule, counts, square Lights off |
+| Density | Rows 184/200 px | Rows +16/+20 px | Rows −16/−12 px |
+
+**D · Soft blend** (owner, 2026-11-22: "B's style, toggles and title, A's information, C's coloured
+room icon, a light toggle on all sizes"): `.pro-rs` surface and haze, B's title label and borderless
+glowing toggles, A's big reading, facts line (status word, climate, media, humidity…) and
+lights · devices summary, the room icon tinted in the room's light (`.pro-rb-ico`). Compact tiles
+keep a lights toggle (lights only); standard 2 and expanded 3 actions, lights first. B's row
+heights (+16/+20 px, `blendMetrics`). `RoomTileBlend.tsx`, `.pro-rb*`. **In production** since
+2026-11-22 (devices use `FlowConnectionIcon`); the studio opens on D.
+
+Tiles share `tileParts.ts` (what a room says) and `RoomQuickActions` (with a look per design), so
+the designs differ only in composition. Styles: `.pro-rt*` (A), `.pro-rs*` (B), `.pro-rp*` (C) in
+`pro.css`.
+
+## 4. Gallery (history, 2026-11-20 to 2026-11-22)
 
 - **Happening now** on top: the busy rooms as pills, busiest first (open, motion, media, lights,
   climate, cleaning); "All quiet" when nothing is going on.
