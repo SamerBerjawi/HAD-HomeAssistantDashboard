@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { HAState } from '../types';
+import type { HAState, HAZone } from '../types';
 import { resolveHAGraph, resolvedEntityToHAEntity, shareGraphStructure } from '../services/graphResolution';
 import { haWebSocketService } from '../services/haWebSocket';
 import { startHAOAuthFlow, refreshHAOAuthTokenWithStatus, normalizeHAUrl } from '../services/haAuth';
@@ -27,17 +27,67 @@ import type { AutoLayoutStoreState } from './autoLayout/types';
 export type { AutoLayoutStoreState } from './autoLayout/types';
 export { hasConfiguredHACredentials } from './autoLayout/authCache';
 
+/**
+ * Zones are rebuilt from scratch on every state change, and each carries an `entity_id`, so
+ * `shareGraphStructure` treats them as entities and never reuses them: every presence and car
+ * subscriber re-ran on every event. They are few and small, so compare them by value.
+ */
+function sameZones(prev: HAZone[] | undefined, next: HAZone[]): boolean {
+  return prev !== undefined && prev.length === next.length && JSON.stringify(prev) === JSON.stringify(next);
+}
+
+/**
+ * The resolved graph for a store state, keeping the references of everything the change didn't
+ * touch (so components subscribed to other slices or entities don't re-render). A single light
+ * changing only replaces that entity, its area/domain arrays and the summaries it affects.
+ */
+function graphPatch(prev: AutoLayoutStoreState): Partial<AutoLayoutStoreState> {
+  const { areas, devices, entityRegistry, floors, labels, states, showDiagnosticEntities, entityCustomizations } = prev;
+  const result = resolveHAGraph(areas, devices, entityRegistry, floors, states, labels, {
+    includeDiagnostics: showDiagnosticEntities,
+    entityOverrides: entityCustomizations,
+    previousEntities: prev.resolvedEntities
+  });
+  return {
+    resolvedEntities: shareGraphStructure(prev.resolvedEntities, result.resolvedEntities),
+    resolvedAreas: shareGraphStructure(prev.resolvedAreas, result.resolvedAreas),
+    areasMap: shareGraphStructure(prev.areasMap, result.areasMap),
+    resolvedFloors: shareGraphStructure(prev.resolvedFloors, result.resolvedFloors),
+    resolvedZones: sameZones(prev.resolvedZones, result.resolvedZones) ? prev.resolvedZones : result.resolvedZones,
+    labels: shareGraphStructure(prev.labels, result.labels),
+    unassignedEntities: shareGraphStructure(prev.unassignedEntities, result.unassignedEntities),
+    domainGroups: shareGraphStructure(prev.domainGroups, result.domainGroups),
+    securityOverview: shareGraphStructure(prev.securityOverview, result.securityOverview),
+    overviewSummary: shareGraphStructure(prev.overviewSummary, result.overviewSummary),
+    metrics: shareGraphStructure(prev.metrics, result.metrics)
+  };
+}
+
+/**
+ * New states and the graph built from them in one store write (Overview perf, 2026-11-21).
+ * Writing the states first and the graph a frame later ran every subscriber twice per batch.
+ * If building the graph fails, fall back to that two-step path so the states still land.
+ */
+function applyStates(map: Record<string, HAState>): void {
+  try {
+    useAutoLayoutStore.setState((prev) => {
+      const states = { ...prev.states, ...map };
+      return { states, rawStates: { ...prev.rawStates, ...map }, ...graphPatch({ ...prev, states }) };
+    });
+  } catch (error) {
+    console.warn('[Store] Graph rebuild failed; applying states first and rebuilding next frame', error);
+    useAutoLayoutStore.setState((prev) => ({
+      states: { ...prev.states, ...map },
+      rawStates: { ...prev.rawStates, ...map }
+    }));
+    scheduleRecompute(useAutoLayoutStore.getState);
+  }
+  scheduleSnapshotSave(useAutoLayoutStore.getState);
+}
+
 // Coalesces bursts of state_changed events into one store update per window (see stateBatcher.ts).
 const STATE_EVENT_WINDOW_MS = 250;
-const stateBatcher = createStateBatcher<HAState>((batch) => {
-  const map: Record<string, HAState> = Object.fromEntries(batch);
-  useAutoLayoutStore.setState((prev) => ({
-    states: { ...prev.states, ...map },
-    rawStates: { ...prev.rawStates, ...map }
-  }));
-  scheduleRecompute(useAutoLayoutStore.getState);
-  scheduleSnapshotSave(useAutoLayoutStore.getState);
-}, STATE_EVENT_WINDOW_MS);
+const stateBatcher = createStateBatcher<HAState>((batch) => applyStates(Object.fromEntries(batch)), STATE_EVENT_WINDOW_MS);
 
 /**
  * haWebSocket -> alertService -> this store is an import cycle: when haWebSocket is loaded first
@@ -220,12 +270,7 @@ export const useAutoLayoutStore = create<AutoLayoutStoreState>((set, get) => ({
         for (const s of statesList) {
           if (s?.entity_id) map[s.entity_id] = s;
         }
-        set(prev => ({
-          states: { ...prev.states, ...map },
-          rawStates: { ...prev.rawStates, ...map }
-        }));
-        scheduleRecompute(get);
-        scheduleSnapshotSave(get);
+        applyStates(map);
       },
       onStateChanged: (entityId, newState) => {
         confirmedStates.set(entityId, newState);
@@ -310,30 +355,7 @@ export const useAutoLayoutStore = create<AutoLayoutStoreState>((set, get) => ({
   },
 
   recomputeGraph: () => {
-    const prev = get();
-    const { areas, devices, entityRegistry, floors, labels, states, showDiagnosticEntities, entityCustomizations } = prev;
-    const result = resolveHAGraph(areas, devices, entityRegistry, floors, states, labels, {
-      includeDiagnostics: showDiagnosticEntities,
-      entityOverrides: entityCustomizations,
-      previousEntities: prev.resolvedEntities
-    });
-
-    // Keep references for everything a state event didn't change, so components subscribed to
-    // other slices (or other entities) don't re-render. A single light changing only replaces
-    // that entity, its area/domain arrays and the summaries it affects.
-    set({
-      resolvedEntities: shareGraphStructure(prev.resolvedEntities, result.resolvedEntities),
-      resolvedAreas: shareGraphStructure(prev.resolvedAreas, result.resolvedAreas),
-      areasMap: shareGraphStructure(prev.areasMap, result.areasMap),
-      resolvedFloors: shareGraphStructure(prev.resolvedFloors, result.resolvedFloors),
-      resolvedZones: shareGraphStructure(prev.resolvedZones, result.resolvedZones),
-      labels: shareGraphStructure(prev.labels, result.labels),
-      unassignedEntities: shareGraphStructure(prev.unassignedEntities, result.unassignedEntities),
-      domainGroups: shareGraphStructure(prev.domainGroups, result.domainGroups),
-      securityOverview: shareGraphStructure(prev.securityOverview, result.securityOverview),
-      overviewSummary: shareGraphStructure(prev.overviewSummary, result.overviewSummary),
-      metrics: shareGraphStructure(prev.metrics, result.metrics)
-    });
+    set(graphPatch(get()));
   },
 
   setLiveMode: (live: boolean, url?: string, token?: string) => {

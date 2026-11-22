@@ -47,6 +47,8 @@ export interface DeviceLayout {
   collapsed: OverviewSectionId[];
   hidden: string[];
   items: Partial<Record<OverviewSectionId, LayoutPlacement[]>>;
+  /** Chosen style per widget id, for widgets that offer several (absent = the widget's default). */
+  styles?: Record<string, string>;
 }
 
 export interface ProOverviewLayoutConfig {
@@ -62,6 +64,8 @@ export interface LayoutWidgetInfo {
   section: OverviewSectionId;
   sizes: readonly WidgetSize[];
   defaultSize: WidgetSize;
+  /** Style ids the widget offers (WIDGET_DESIGN.md); none = one fixed look. */
+  designIds?: readonly string[];
 }
 
 /** Grid cells of a size, clamped to the column count (a Wide card is full width on a 1-col grid). */
@@ -88,10 +92,12 @@ export function snapToAllowedSize(w: number, h: number, allowed: readonly Widget
 
 /** The size whose cells match exactly, if any. */
 export function sizeForCells(w: number, h: number, allowed: readonly WidgetSize[], cols: number): WidgetSize | null {
-  return allowed.find((size) => {
-    const c = cellsFor(size, cols);
-    return c.w === w && c.h === h;
-  }) ?? null;
+  return (
+    allowed.find((size) => {
+      const c = cellsFor(size, cols);
+      return c.w === w && c.h === h;
+    }) ?? null
+  );
 }
 
 /**
@@ -164,7 +170,10 @@ export function flowCells(items: readonly { i: string; w: number; h: number }[],
 
 /** Flow placement for sized widgets, in the given order. */
 export function flowPlacements(items: readonly { i: string; size: WidgetSize }[], cols: number): LayoutPlacement[] {
-  const cells = flowCells(items.map((it) => ({ i: it.i, ...cellsFor(it.size, cols) })), cols);
+  const cells = flowCells(
+    items.map((it) => ({ i: it.i, ...cellsFor(it.size, cols) })),
+    cols
+  );
   return items.map((it, idx) => ({ i: it.i, x: cells[idx].x, y: cells[idx].y, size: it.size }));
 }
 
@@ -173,25 +182,88 @@ export function readingOrder<T extends { x: number; y: number }>(items: readonly
   return [...items].sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
-/** Moves one widget a step earlier (-1) or later (+1) in the flow and re-flows. */
+/**
+ * Free placement (owner, 2026-11-20, replaces strict Flow for edits): a widget stays in the cell it
+ * was put in, so a row can be left part empty and a widget can start a new row. Widgets keep their
+ * x and y; one that would overlap moves straight down to the first free spot (`firstId`, the one
+ * being dragged, resized or added, is placed first, so the others make room for it). Rows with
+ * nothing in them close up, so the page never shows a blank row.
+ */
+export function settleCells<T extends { i: string; x: number; y: number; w: number; h: number }>(items: readonly T[], cols: number, firstId?: string): T[] {
+  const taken: boolean[][] = [];
+  const free = (x: number, y: number, w: number, h: number) => {
+    for (let r = y; r < y + h; r++) for (let c = x; c < x + w; c++) if (taken[r]?.[c]) return false;
+    return true;
+  };
+  const order = readingOrder(items);
+  const first = order.findIndex((it) => it.i === firstId);
+  if (first > 0) order.unshift(...order.splice(first, 1));
+  const placed = new Map<string, { x: number; y: number }>();
+  for (const it of order) {
+    const w = Math.max(1, Math.min(it.w, cols));
+    const x = Math.max(0, Math.min(Number.isFinite(it.x) ? Math.round(it.x) : 0, cols - w));
+    let y = Math.max(0, Number.isFinite(it.y) ? Math.round(it.y) : 0);
+    while (!free(x, y, w, it.h)) y += 1;
+    for (let r = y; r < y + it.h; r++) {
+      taken[r] = taken[r] ?? [];
+      for (let c = x; c < x + w; c++) taken[r][c] = true;
+    }
+    placed.set(it.i, { x, y });
+  }
+  // Close up empty rows: each widget moves up by the empty rows above it.
+  const emptyAbove: number[] = [];
+  let empty = 0;
+  for (let r = 0; r < taken.length; r++) {
+    emptyAbove[r] = empty;
+    if (!taken[r]?.some(Boolean)) empty += 1;
+  }
+  return items.map((it) => {
+    const p = placed.get(it.i) ?? { x: 0, y: 0 };
+    return { ...it, x: p.x, y: p.y - (emptyAbove[p.y] ?? 0) };
+  });
+}
+
+/** Free placement for sized widgets (see `settleCells`). */
+export function settlePlacements(items: readonly LayoutPlacement[], cols: number, firstId?: string): LayoutPlacement[] {
+  const cells = settleCells(
+    items.map((p) => ({ ...p, ...cellsFor(p.size, cols) })),
+    cols,
+    firstId
+  );
+  return cells.map(({ i, x, y, size }) => ({ i, x, y, size }));
+}
+
+/** The first row below every widget. */
+const bottomRow = (placements: readonly LayoutPlacement[], cols: number) => placements.reduce((max, p) => Math.max(max, p.y + cellsFor(p.size, cols).h), 0);
+
+/**
+ * Moves one widget a step earlier (-1) or later (+1) in reading order (the card menu, for touch
+ * and keyboard): it trades places with its neighbour, and the rest make room.
+ */
 export function moveInFlow(placements: readonly LayoutPlacement[], id: string, dir: -1 | 1, cols: number): LayoutPlacement[] {
   const order = readingOrder(placements);
   const from = order.findIndex((p) => p.i === id);
   const to = from + dir;
   if (from < 0 || to < 0 || to >= order.length) return [...placements];
-  const [moved] = order.splice(from, 1);
-  order.splice(to, 0, moved);
-  return flowPlacements(order, cols);
+  const a = order[from];
+  const b = order[to];
+  const swapped = placements.map((p) => (p.i === a.i ? { ...p, x: b.x, y: b.y } : p.i === b.i ? { ...p, x: a.x, y: a.y } : p));
+  return settlePlacements(swapped, cols, id);
 }
 
-/** Changes one widget's size and re-flows (sizes change what fits where). */
+/** Changes one widget's size where it is; widgets it now covers move down. */
 export function resizeInFlow(placements: readonly LayoutPlacement[], id: string, size: WidgetSize, cols: number): LayoutPlacement[] {
-  return flowPlacements(readingOrder(placements).map((p) => (p.i === id ? { ...p, size } : p)), cols);
+  return settlePlacements(
+    placements.map((p) => (p.i === id ? { ...p, size } : p)),
+    cols,
+    id
+  );
 }
 
-/** Adds a widget at the end of a section's flow. */
+/** Adds a widget on a new row at the bottom of a section. */
 export function appendToFlow(placements: readonly LayoutPlacement[], id: string, size: WidgetSize, cols: number): LayoutPlacement[] {
-  return flowPlacements([...readingOrder(placements).filter((p) => p.i !== id), { i: id, x: 0, y: 0, size }], cols);
+  const rest = placements.filter((p) => p.i !== id);
+  return settlePlacements([...rest, { i: id, x: 0, y: bottomRow(rest, cols), size }], cols);
 }
 
 /** Registry defaults for one device type: default sizes, widgets in registry order per section. */
@@ -207,8 +279,8 @@ export function buildDefaultDeviceLayout(widgets: readonly LayoutWidgetInfo[], d
 
 /**
  * Makes a stored layout safe to use with the current registry: drops unknown widgets and sizes a
- * widget no longer allows, adds new widgets at the end of their section, and fills the section
- * order. Stored config is user data, so nothing in it is trusted.
+ * widget no longer allows, adds new widgets on a new row at the end of their section, and fills
+ * the section order. Stored config is user data, so nothing in it is trusted.
  */
 export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutWidgetInfo[], device: DeviceType): DeviceLayout {
   const fallback = buildDefaultDeviceLayout(widgets, device);
@@ -217,11 +289,14 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
   const cols = DEVICE_COLUMNS[device];
   const byId = new Map(widgets.map((w) => [w.id, w]));
   const sectionIds = new Set<string>(DEFAULT_OVERVIEW_SECTION_ORDER);
-  const asSections = (v: unknown): OverviewSectionId[] =>
-    Array.isArray(v) ? (v.filter((s, idx) => typeof s === 'string' && sectionIds.has(s) && v.indexOf(s) === idx) as OverviewSectionId[]) : [];
+  const asSections = (v: unknown): OverviewSectionId[] => (Array.isArray(v) ? (v.filter((s, idx) => typeof s === 'string' && sectionIds.has(s) && v.indexOf(s) === idx) as OverviewSectionId[]) : []);
 
   const sectionOrder = asSections(raw.sectionOrder);
+  // Sections a saved order lacks go at the end, except Rooms (added 2026-11-20), which goes first
+  // like on a new layout.
+  const hadRooms = sectionOrder.includes('rooms');
   for (const s of DEFAULT_OVERVIEW_SECTION_ORDER) if (!sectionOrder.includes(s)) sectionOrder.push(s);
+  if (!hadRooms) sectionOrder.unshift(...sectionOrder.splice(sectionOrder.indexOf('rooms'), 1));
   const collapsed = asSections(raw.collapsed);
   const hidden = Array.isArray(raw.hidden) ? raw.hidden.filter((id): id is string => typeof id === 'string' && byId.has(id)) : [];
 
@@ -246,12 +321,27 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
     }
     const missing = widgets.filter((w) => w.section === section && !seen.has(w.id));
     for (const w of missing) seen.add(w.id);
-    // Re-flow in reading order: positions follow the order, and a tampered or stale layout can
-    // never overlap. New widgets go at the end.
-    const ordered = [...readingOrder(kept), ...missing.map((w) => ({ i: w.id, x: 0, y: 0, size: w.defaultSize }))];
-    if (ordered.length > 0) items[section] = flowPlacements(ordered, cols);
+    // Widgets keep their cells (free placement); a tampered or stale layout is settled so it can
+    // never overlap. New widgets go on a new row at the end.
+    const settled = settlePlacements(kept, cols);
+    const added = flowPlacements(
+      missing.map((w) => ({ i: w.id, size: w.defaultSize })),
+      cols
+    ).map((p) => ({ ...p, y: p.y + bottomRow(settled, cols) }));
+    if (settled.length + added.length > 0) items[section] = [...settled, ...added];
   }
-  return { sectionOrder, collapsed, hidden, items };
+  const styles = normalizeStyles(raw.styles, byId);
+  return styles ? { sectionOrder, collapsed, hidden, items, styles } : { sectionOrder, collapsed, hidden, items };
+}
+
+/** Keeps only styles a known widget still offers. */
+function normalizeStyles(stored: unknown, byId: ReadonlyMap<string, LayoutWidgetInfo>): Record<string, string> | undefined {
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [id, style] of Object.entries(stored as Record<string, unknown>)) {
+    if (typeof style === 'string' && byId.get(id)?.designIds?.includes(style)) out[id] = style;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** Old pro tile sizes → new sizes. */
@@ -262,12 +352,7 @@ const LEGACY_SIZE: Record<string, WidgetSize> = { '1x': 's', '2x': 'w', '2x2': '
  * `hiddenTiles`, `preferences.proOverviewSectionOrder`). `legacyIdMap` maps old widget ids to new
  * ones (merged widgets map several old ids to one; the first one in the old order wins).
  */
-export function migrateLegacyOverview(
-  config: UserDashboardConfig,
-  widgets: readonly LayoutWidgetInfo[],
-  device: DeviceType,
-  legacyIdMap: Readonly<Record<string, string>> = {}
-): DeviceLayout {
+export function migrateLegacyOverview(config: UserDashboardConfig, widgets: readonly LayoutWidgetInfo[], device: DeviceType, legacyIdMap: Readonly<Record<string, string>> = {}): DeviceLayout {
   const overview = config.overview ?? {};
   const toNew = (id: string) => legacyIdMap[id] ?? id;
   const byId = new Map(widgets.map((w) => [w.id, w]));
@@ -295,7 +380,11 @@ export function migrateLegacyOverview(
     if (list.length > 0) items[section] = flowPlacements(list, cols);
   }
 
-  const hidden = [...new Set((overview.hiddenTiles ?? []).map(toNew))].filter((id) => byId.has(id));
+  // A merged widget stays visible while any of the widgets it replaces was visible.
+  const oldHidden = new Set(overview.hiddenTiles ?? []);
+  const known = new Set([...(overview.tileOrder ?? []), ...oldHidden]);
+  const sourcesOf = (id: string) => [...Object.keys(legacyIdMap).filter((k) => legacyIdMap[k] === id), ...(known.has(id) ? [id] : [])];
+  const hidden = [...new Set([...oldHidden].map(toNew))].filter((id) => byId.has(id) && sourcesOf(id).every((src) => oldHidden.has(src)));
   const prefs = (config.preferences ?? {}) as { proOverviewSectionOrder?: unknown };
   return normalizeDeviceLayout({ sectionOrder: prefs.proOverviewSectionOrder, collapsed: [], hidden, items }, widgets, device);
 }
@@ -306,12 +395,7 @@ function readStored(config: UserDashboardConfig): Partial<ProOverviewLayoutConfi
 }
 
 /** The layout for a device type: stored one if present, else migrated from the old keys. */
-export function getDeviceLayout(
-  config: UserDashboardConfig,
-  widgets: readonly LayoutWidgetInfo[],
-  device: DeviceType,
-  legacyIdMap?: Readonly<Record<string, string>>
-): DeviceLayout {
+export function getDeviceLayout(config: UserDashboardConfig, widgets: readonly LayoutWidgetInfo[], device: DeviceType, legacyIdMap?: Readonly<Record<string, string>>): DeviceLayout {
   const stored = readStored(config)?.[device];
   if (stored) return normalizeDeviceLayout(stored, widgets, device);
   return migrateLegacyOverview(config, widgets, device, legacyIdMap);
@@ -325,6 +409,11 @@ export function withDeviceLayout(prev: UserDashboardConfig, device: DeviceType, 
     ...prev,
     preferences: { ...(prev.preferences || {}), proOverviewLayout: next } as UserDashboardConfig['preferences']
   };
+}
+
+/** Sets one widget's style on this device type's layout (the page saves it with the rest). */
+export function withWidgetStyle(layout: DeviceLayout, widgetId: string, style: string): DeviceLayout {
+  return { ...layout, styles: { ...(layout.styles ?? {}), [widgetId]: style } };
 }
 
 /** Drops one device type's layout so it falls back to the defaults. */
@@ -348,25 +437,23 @@ export interface VisibleSection {
 
 /** Sections in the user's order that have at least one widget on the page. */
 export function visibleSections(layout: DeviceLayout): VisibleSection[] {
-  return layout.sectionOrder
-    .map((section) => ({ section, items: (layout.items[section] ?? []).filter((p) => !layout.hidden.includes(p.i)) }))
-    .filter((s) => s.items.length > 0);
+  return layout.sectionOrder.map((section) => ({ section, items: (layout.items[section] ?? []).filter((p) => !layout.hidden.includes(p.i)) })).filter((s) => s.items.length > 0);
 }
 
 export function withSectionItems(layout: DeviceLayout, section: OverviewSectionId, items: LayoutPlacement[]): DeviceLayout {
   return { ...layout, items: { ...layout.items, [section]: items } };
 }
 
-/** Takes a widget off the page (its section re-flows). */
+/** Takes a widget off the page (the others stay put; a row left empty closes up). */
 export function hideWidget(layout: DeviceLayout, widget: LayoutWidgetInfo, cols: number): DeviceLayout {
-  const rest = readingOrder((layout.items[widget.section] ?? []).filter((p) => p.i !== widget.id));
+  const rest = (layout.items[widget.section] ?? []).filter((p) => p.i !== widget.id);
   return {
-    ...withSectionItems(layout, widget.section, flowPlacements(rest, cols)),
+    ...withSectionItems(layout, widget.section, settlePlacements(rest, cols)),
     hidden: layout.hidden.includes(widget.id) ? layout.hidden : [...layout.hidden, widget.id]
   };
 }
 
-/** Puts a hidden widget back at the end of its section, at its default size. */
+/** Puts a hidden widget back on a new row at the end of its section, at its default size. */
 export function showWidget(layout: DeviceLayout, widget: LayoutWidgetInfo, cols: number): DeviceLayout {
   const items = appendToFlow(layout.items[widget.section] ?? [], widget.id, widget.defaultSize, cols);
   return { ...withSectionItems(layout, widget.section, items), hidden: layout.hidden.filter((id) => id !== widget.id) };

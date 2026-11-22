@@ -5,7 +5,7 @@
 
 import { CarEvMetrics, isCarCharging, isCarPluggedIn } from '../../types/mobility';
 import type { HAZone } from '../../types';
-import { findEntity, parseNum, parseNumOptional, resolveZone } from './entityLookup';
+import { findEntity as findEntityIn, parseNum, parseNumOptional, resolveZone } from './entityLookup';
 import { generateSpeedTimeseries, type SpeedPoint } from './speedHistory';
 
 export interface CarMetricsInput {
@@ -16,11 +16,24 @@ export interface CarMetricsInput {
   customBrandLogo?: string;
   customVehicleImage?: string;
   speedHistory: SpeedPoint[];
+  /**
+   * Optional: filled with the entity ids the derivation picked. Callers use it to recompute only
+   * when one of those entities changes (or the set of entities does), not on every state event.
+   */
+  usedEntityIds?: Set<string>;
 }
 
 /** Pure derivation of car EV metrics from the HA entity map (no React, no side effects). */
 export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
-  const { states, resolvedZones, isDemo, speedHistory } = input;
+  const { resolvedZones, isDemo, speedHistory } = input;
+  const states = input.states;
+  const used = input.usedEntityIds;
+  // Every lookup goes through here, so the caller learns which entities the car reads.
+  const findEntity = (map: Record<string, any>, domain: string, patterns: string[]) => {
+    const found = findEntityIn(map, domain, patterns);
+    if (used && typeof found?.entity_id === 'string') used.add(found.entity_id);
+    return found;
+  };
   const effectiveCarLogo = input.customBrandLogo;
   const effectiveCarImage = input.customVehicleImage;
   const trackerEntity = findEntity(states, 'device_tracker', [

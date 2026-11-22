@@ -1,6 +1,6 @@
 /**
  * Pure view-model, brightness, search filtering, and room grouping helpers for pro Overview
- * Lighting & Switches widgets and shared ControlDetailSheet (docs/pro-ui/DESIGN.md 7.6).
+ * Lighting & Switches widgets and their shared sheet (widgets/controls/ControlSheet.tsx, DESIGN.md 7.6).
  */
 import type { ResolvedEntity } from '@/types';
 import type { PillTone } from './overviewPills';

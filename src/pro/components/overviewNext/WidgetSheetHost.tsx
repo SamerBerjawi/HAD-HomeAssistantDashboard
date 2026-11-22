@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { useSheetParam } from '../../hooks/useSheetParam';
 import { WIDGET_BY_ID } from '../../widgets/registry';
 import type { WidgetDefinition } from '../../widgets/types';
@@ -22,5 +23,10 @@ export function WidgetSheetHost() {
   const { sheet, itemId, close } = useSheetParam();
   const widget = sheet ? WIDGET_BY_ID.get(sheet) : undefined;
   if (!widget?.Sheet) return null;
-  return <SheetMount key={widget.id} widget={widget} itemId={itemId} onClose={close} />;
+  // A sheet that fails (e.g. its chunk is gone after a deploy) closes quietly, the page stays.
+  return (
+    <ErrorBoundary variant="silent" label={`${widget.title} sheet`} resetKeys={[widget.id, itemId]}>
+      <SheetMount key={widget.id} widget={widget} itemId={itemId} onClose={close} />
+    </ErrorBoundary>
+  );
 }

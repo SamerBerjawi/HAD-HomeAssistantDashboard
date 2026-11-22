@@ -1,19 +1,25 @@
 import type { Compactor, Layout } from 'react-grid-layout/core';
-import { flowCells } from '../../lib/overviewLayout';
+import { settleCells } from '../../lib/overviewLayout';
 
 /**
- * Flow compaction for react-grid-layout (owner decision: Flow). While a card is dragged, its
- * placeholder takes a place in the reading order and every card re-flows around it. Unlike the
- * built-in wrapCompactor it never overlaps mixed sizes.
+ * Free-placement compaction for react-grid-layout (owner, 2026-11-20; replaces strict Flow). The
+ * card being dragged or resized goes where the pointer puts it, even on a new row with room left
+ * on the row above; the other cards start from where they were before the drag (so a card that
+ * stepped aside comes back when the dragged one moves on) and only move down to make room.
+ * `getActive` names the card in hand and `getBase` gives the positions before the drag.
  */
-export const flowCompactor: Compactor = {
-  type: 'wrap',
-  allowOverlap: false,
-  compact(layout: Layout, cols: number): Layout {
-    // Reading order; on a tie the card being dragged (react-grid-layout marks it `moved`) goes
-    // first, so dropping a card on another card's spot takes that place.
-    const order = [...layout].sort((a, b) => a.y - b.y || a.x - b.x || Number(Boolean(b.moved)) - Number(Boolean(a.moved)));
-    const cells = flowCells(order, cols);
-    return order.map((item, k) => ({ ...item, x: cells[k].x, y: cells[k].y }));
-  }
-};
+export function makeSettleCompactor(getActive: () => string | null, getBase: () => ReadonlyMap<string, { x: number; y: number }>): Compactor {
+  return {
+    type: null,
+    allowOverlap: false,
+    compact(layout: Layout, cols: number): Layout {
+      const active = getActive();
+      const base = getBase();
+      const start = layout.map((item) => {
+        const was = active && item.i !== active ? base.get(item.i) : undefined;
+        return was ? { ...item, x: was.x, y: was.y } : { ...item };
+      });
+      return settleCells(start, cols, active ?? undefined);
+    }
+  };
+}

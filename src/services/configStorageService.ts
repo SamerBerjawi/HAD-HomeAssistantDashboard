@@ -16,7 +16,7 @@ import {
 import { AuthState } from '../types/auth';
 import type { SyncStatusEventDetail } from './configSyncRules';
 import { haWebSocketService } from './haWebSocket';
-import { getStoredHAAuth, getActiveHAToken, refreshHAOAuthToken } from './haAuth';
+import { getStoredHAAuth, getUsableHAToken, refreshHAOAuthToken } from './haAuth';
 import { getStoredAuthConfig } from './authStorage';
 
 const STORAGE_KEY_CONFIG = 'had_dashboard_config';
@@ -50,7 +50,9 @@ export function getAuthHeaders(): Record<string, string> {
     'Accept': 'application/json'
   };
   if (typeof window !== 'undefined') {
-    const token = getActiveHAToken();
+    // An expired OAuth token is left out: the server would check it with Home Assistant, which
+    // logs it as a failed login. Callers that can wait use getAuthHeadersAsync (refreshes first).
+    const token = getUsableHAToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -464,7 +466,7 @@ export class RemoteStorageDriver implements IConfigStorageDriver {
               try {
                 const fetchLatest = await fetch('/api/config', {
                   method: 'GET',
-                  headers: getAuthHeaders(),
+                  headers: await getAuthHeadersAsync(),
                   signal: AbortSignal.timeout(4000)
                 });
                 if (fetchLatest.ok) {
@@ -639,7 +641,7 @@ export class RemoteStorageDriver implements IConfigStorageDriver {
       try {
         const response = await fetch('/api/assets', {
           method: 'POST',
-          headers: getAuthHeaders(),
+          headers: await getAuthHeadersAsync(),
           body: JSON.stringify({
             dataUrl: uploadDataUrl,
             key,

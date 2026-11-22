@@ -1,7 +1,10 @@
 /**
- * Pro-UI PowerSourcesAreaChart: bklit UI AreaChart adapted for bidirectional power flow
- * inside a calm HeroUI soft surface well, using HeroUI semantic tokens (--warning Solar,
- * --success Battery, --accent Grid, dashed --foreground Consumption) and airy gradient depth.
+ * Pro-UI PowerSourcesAreaChart: bklit UI AreaChart adapted for bidirectional power flow, drawn
+ * like Home Assistant's "Power sources" graph: what comes in (solar, battery discharge, grid
+ * import) stacks above zero, what goes out (battery charge, grid export) below, and consumption
+ * is the dashed line. Home Assistant's own energy colours (HA_ENERGY_COLORS), round axis steps,
+ * and a midnight-to-midnight axis when the
+ * series covers a day (its `future` slots stay empty).
  */
 import { area as d3Area, curveMonotoneX, line as d3Line } from 'd3-shape';
 import { Button } from '@heroui/react';
@@ -14,10 +17,23 @@ import {
   SolarPanel01Icon
 } from '@hugeicons/core-free-icons';
 import { motion } from 'motion/react';
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState, type CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import { formatPower } from '../../lib/pageSentences';
+import { niceTicks, tickLabel } from './chartTicks';
 import { evenlySpacedIndices, useBklitChartBox } from './useBklitChartBox';
+
+/**
+ * Home Assistant's energy colours (frontend: --energy-solar-color, --energy-grid-consumption-color,
+ * --energy-grid-return-color, --energy-battery-out-color), so this chart reads like HA's
+ * "Power sources" graph. The battery is one colour both ways, as HA draws it.
+ */
+const HA_ENERGY_COLORS = {
+  '--ps-solar': '#ff9800',
+  '--ps-grid': '#488fc2',
+  '--ps-return': '#8353d1',
+  '--ps-battery': '#4db6ac'
+} as CSSProperties;
 
 export interface PowerSourcesDatum {
   label: string;
@@ -27,13 +43,20 @@ export interface PowerSourcesDatum {
   batteryCharge: number;
   gridExport: number;
   home: number;
+  /** Slot start (ms) when the series is a whole day; the axis then marks every few hours. */
+  t?: number;
+  /** A slot after the latest data (later today): part of the axis, not drawn. */
+  future?: boolean;
 }
+
 
 interface PowerSourcesAreaChartProps {
   data: PowerSourcesDatum[];
   height?: number;
   showAxes?: boolean;
   showLegend?: boolean;
+  /** Cards: leave out the rest of today instead of drawing the whole day's axis. */
+  trimFuture?: boolean;
   liveWatts?: {
     solarKW: number;
     gridKW: number;
@@ -70,9 +93,13 @@ export function PowerSourcesAreaChart({
   showAxes = true,
   showLegend = true,
   liveWatts,
+  trimFuture = false,
   className,
   ariaLabel = 'Power sources bidirectional chart'
 }: PowerSourcesAreaChartProps) {
+  // The axis may run past the data (rest of today); paths stop at the last real point.
+  const axisData = useMemo(() => (trimFuture ? data.filter((d) => !d.future) : data), [data, trimFuture]);
+  const drawn = useMemo(() => data.filter((d) => !d.future), [data]);
   const [showSolar, setShowSolar] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
   const [showBattery, setShowBattery] = useState(true);
@@ -94,7 +121,7 @@ export function PowerSourcesAreaChart({
     handlePointerLeave,
     consumeClickIfScrubbed
   } = useBklitChartBox({
-    itemCount: data.length,
+    itemCount: axisData.length,
     marginLeft,
     marginRight,
     defaultWidth: 260
@@ -103,11 +130,11 @@ export function PowerSourcesAreaChart({
   const innerHeight = Math.max(44, height - marginTop - marginBottom);
 
   const computed = useMemo(() => {
-    if (data.length === 0) return null;
+    if (drawn.length === 0) return null;
 
     const maxPos = Math.max(
-      0.5,
-      ...data.map((d) => {
+      0.1,
+      ...drawn.map((d) => {
         const s = showSolar ? d.solar : 0;
         const bd = showBattery ? d.batteryDischarge : 0;
         const gi = showGrid ? d.gridImport : 0;
@@ -118,26 +145,28 @@ export function PowerSourcesAreaChart({
 
     const maxNeg = Math.max(
       0,
-      ...data.map((d) => (showBattery ? d.batteryCharge : 0) + (showGrid ? d.gridExport : 0))
+      ...drawn.map((d) => (showBattery ? d.batteryCharge : 0) + (showGrid ? d.gridExport : 0))
     );
 
     const hasNeg = maxNeg > 0.04;
-    const domainMax = maxPos * 1.12;
-    const domainMin = hasNeg ? -maxNeg * 1.15 : 0;
-    const span = Math.max(0.5, domainMax - domainMin);
+    const tickVals = niceTicks(hasNeg ? -maxNeg : 0, maxPos);
+    const domainMax = tickVals[tickVals.length - 1];
+    const domainMin = tickVals[0];
+    const tickStep = tickVals.length > 1 ? tickVals[1] - tickVals[0] : 1;
+    const span = Math.max(1e-6, domainMax - domainMin);
     const valToY = (v: number) => innerHeight - ((v - domainMin) / span) * innerHeight;
     const zeroY = valToY(0);
-    const stepX = data.length === 1 ? 0 : innerWidth / (data.length - 1);
+    const stepX = axisData.length <= 1 ? 0 : innerWidth / (axisData.length - 1);
 
-    const solarPts: Pt[] = data.map((d, i) => ({
+    const solarPts: Pt[] = drawn.map((d, i) => ({
       x: i * stepX,
       y: valToY(showSolar ? d.solar : 0)
     }));
-    const batDisPts: Pt[] = data.map((d, i) => ({
+    const batDisPts: Pt[] = drawn.map((d, i) => ({
       x: i * stepX,
       y: valToY((showSolar ? d.solar : 0) + (showBattery ? d.batteryDischarge : 0))
     }));
-    const gridImpPts: Pt[] = data.map((d, i) => ({
+    const gridImpPts: Pt[] = drawn.map((d, i) => ({
       x: i * stepX,
       y: valToY(
         (showSolar ? d.solar : 0) +
@@ -145,15 +174,15 @@ export function PowerSourcesAreaChart({
           (showGrid ? d.gridImport : 0)
       )
     }));
-    const batChgPts: Pt[] = data.map((d, i) => ({
+    const batChgPts: Pt[] = drawn.map((d, i) => ({
       x: i * stepX,
       y: valToY(-(showBattery ? d.batteryCharge : 0))
     }));
-    const gridExpPts: Pt[] = data.map((d, i) => ({
+    const gridExpPts: Pt[] = drawn.map((d, i) => ({
       x: i * stepX,
       y: valToY(-((showBattery ? d.batteryCharge : 0) + (showGrid ? d.gridExport : 0)))
     }));
-    const homePts: Pt[] = data.map((d, i) => ({
+    const homePts: Pt[] = drawn.map((d, i) => ({
       x: i * stepX,
       y: valToY(d.home)
     }));
@@ -170,10 +199,18 @@ export function PowerSourcesAreaChart({
         .y1((p) => p.y)
         .curve(curveMonotoneX)(solarPts) || '';
 
-    const yTicks = hasNeg ? [domainMax, domainMax / 2, 0, domainMin] : [domainMax, domainMax / 2, 0];
-    const xCount = Math.min(data.length, innerWidth < 260 ? 3 : 5);
-    const xIdxSet = new Set(evenlySpacedIndices(data.length, xCount));
-    const xTicks = data
+    // A whole day: midnight, then every 4 hours (6 on narrow charts), like HA. Otherwise evenly spaced.
+    const isDay = axisData.length >= 100 && axisData.every((d) => typeof d.t === 'number');
+    const everyHours = innerWidth < 300 ? 6 : 4;
+    const xIdxSet = isDay
+      ? new Set(
+          axisData
+            .map((d, i) => ({ i, at: new Date(d.t as number) }))
+            .filter(({ at }) => at.getMinutes() === 0 && at.getHours() % everyHours === 0)
+            .map(({ i }) => i)
+        )
+      : new Set(evenlySpacedIndices(axisData.length, Math.min(axisData.length, innerWidth < 260 ? 3 : 5)));
+    const xTicks = axisData
       .map((d, i) => ({ index: i, x: i * stepX, label: d.label }))
       .filter((t) => xIdxSet.has(t.index));
 
@@ -196,16 +233,17 @@ export function PowerSourcesAreaChart({
       gridExpStroke: lineGen(gridExpPts) || '',
       homeStroke: lineGen(homePts) || '',
       homePts,
-      yTicks: yTicks.map((val) => ({ val, y: valToY(val) })),
+      yTicks: [...tickVals].reverse().map((val) => ({ val, y: valToY(val), label: tickLabel(val, tickStep) })),
       xTicks,
-      anySolar: showSolar && data.some((d) => d.solar > 0.02),
-      anyBatDis: showBattery && data.some((d) => d.batteryDischarge > 0.02),
-      anyGridImp: showGrid && data.some((d) => d.gridImport > 0.02),
-      anyBatChg: showBattery && data.some((d) => d.batteryCharge > 0.02),
-      anyGridExp: showGrid && data.some((d) => d.gridExport > 0.02),
+      isDay,
+      anySolar: showSolar && drawn.some((d) => d.solar > 0.02),
+      anyBatDis: showBattery && drawn.some((d) => d.batteryDischarge > 0.02),
+      anyGridImp: showGrid && drawn.some((d) => d.gridImport > 0.02),
+      anyBatChg: showBattery && drawn.some((d) => d.batteryCharge > 0.02),
+      anyGridExp: showGrid && drawn.some((d) => d.gridExport > 0.02),
       stepX
     };
-  }, [data, innerHeight, innerWidth, showSolar, showGrid, showBattery, showHome]);
+  }, [drawn, axisData, innerHeight, innerWidth, showSolar, showGrid, showBattery, showHome]);
 
   if (!computed) {
     return (
@@ -222,12 +260,13 @@ export function PowerSourcesAreaChart({
     );
   }
 
-  const activeDatum = activeIndex !== null ? data[activeIndex] : null;
+  const hovered = activeIndex !== null ? axisData[activeIndex] : null;
+  const activeDatum = hovered && !hovered.future ? hovered : null;
   const activeX = activeIndex !== null ? activeIndex * computed.stepX : 0;
   const activeLeftPct = ((marginLeft + activeX) / width) * 100;
 
   return (
-    <div className={cn('flex min-w-0 w-full flex-col gap-2', className)}>
+    <div className={cn('flex min-w-0 w-full flex-col gap-2', className)} style={HA_ENERGY_COLORS}>
       <div className="min-w-0 w-full overflow-hidden">
         <div
           ref={containerRef}
@@ -251,12 +290,12 @@ export function PowerSourcesAreaChart({
                 {formatPower(activeDatum.home)}
               </span>
               {activeDatum.solar > 0.02 ? (
-                <span className="font-mono text-warning">PV {formatPower(activeDatum.solar)}</span>
+                <span className="font-mono text-[var(--ps-solar)]">PV {formatPower(activeDatum.solar)}</span>
               ) : null}
               {activeDatum.gridExport > 0.02 ? (
-                <span className="font-mono text-[var(--energy-export)]">-{formatPower(activeDatum.gridExport)}</span>
+                <span className="font-mono text-[var(--ps-return)]">-{formatPower(activeDatum.gridExport)}</span>
               ) : activeDatum.gridImport > 0.02 ? (
-                <span className="font-mono text-[var(--accent)]">+{formatPower(activeDatum.gridImport)}</span>
+                <span className="font-mono text-[var(--ps-grid)]">+{formatPower(activeDatum.gridImport)}</span>
               ) : null}
             </div>
           ) : null}
@@ -264,24 +303,24 @@ export function PowerSourcesAreaChart({
           <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="block max-w-full overflow-visible">
             <defs>
               <linearGradient id={`ps-solar-${uid}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--warning)" stopOpacity={0.42} />
-                <stop offset="100%" stopColor="var(--warning)" stopOpacity={0.03} />
+                <stop offset="0%" stopColor="var(--ps-solar)" stopOpacity={0.55} />
+                <stop offset="100%" stopColor="var(--ps-solar)" stopOpacity={0.3} />
               </linearGradient>
               <linearGradient id={`ps-batd-${uid}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--success)" stopOpacity={0.38} />
-                <stop offset="100%" stopColor="var(--success)" stopOpacity={0.03} />
+                <stop offset="0%" stopColor="var(--ps-battery)" stopOpacity={0.55} />
+                <stop offset="100%" stopColor="var(--ps-battery)" stopOpacity={0.3} />
               </linearGradient>
               <linearGradient id={`ps-gridi-${uid}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.38} />
-                <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.03} />
+                <stop offset="0%" stopColor="var(--ps-grid)" stopOpacity={0.55} />
+                <stop offset="100%" stopColor="var(--ps-grid)" stopOpacity={0.3} />
               </linearGradient>
               <linearGradient id={`ps-batc-${uid}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--success)" stopOpacity={0.04} />
-                <stop offset="100%" stopColor="var(--success)" stopOpacity={0.38} />
+                <stop offset="0%" stopColor="var(--ps-battery)" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="var(--ps-battery)" stopOpacity={0.55} />
               </linearGradient>
               <linearGradient id={`ps-gride-${uid}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--energy-export)" stopOpacity={0.04} />
-                <stop offset="100%" stopColor="var(--energy-export)" stopOpacity={0.4} />
+                <stop offset="0%" stopColor="var(--ps-return)" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="var(--ps-return)" stopOpacity={0.55} />
               </linearGradient>
               <clipPath id={`ps-clip-${uid}`}>
                 <motion.rect
@@ -310,8 +349,8 @@ export function PowerSourcesAreaChart({
                     y1={tick.y}
                     y2={tick.y}
                     stroke="var(--separator)"
-                    strokeOpacity={Math.abs(tick.val) < 0.01 ? 0.65 : 0.35}
-                    strokeDasharray={Math.abs(tick.val) < 0.01 ? undefined : '3 4'}
+                    strokeOpacity={tick.val === 0 ? 0.65 : 0.35}
+                    strokeDasharray={tick.val === 0 ? undefined : '3 4'}
                     strokeWidth={1}
                   />
                   {showAxes ? (
@@ -323,7 +362,7 @@ export function PowerSourcesAreaChart({
                       fill="var(--muted)"
                       className="font-mono text-[9px]"
                     >
-                      {Math.abs(tick.val) < 0.05 ? '0' : tick.val.toFixed(1)}
+                      {tick.label}
                     </text>
                   ) : null}
                 </g>
@@ -337,19 +376,19 @@ export function PowerSourcesAreaChart({
                 {computed.anyGridImp ? <path d={computed.gridImpArea} fill={`url(#ps-gridi-${uid})`} /> : null}
 
                 {computed.anySolar ? (
-                  <path d={computed.solarStroke} fill="none" stroke="var(--warning)" strokeWidth={1.6} />
+                  <path d={computed.solarStroke} fill="none" stroke="var(--ps-solar)" strokeWidth={1.6} />
                 ) : null}
                 {computed.anyBatDis ? (
-                  <path d={computed.batDisStroke} fill="none" stroke="var(--success)" strokeWidth={1.6} />
+                  <path d={computed.batDisStroke} fill="none" stroke="var(--ps-battery)" strokeWidth={1.6} />
                 ) : null}
                 {computed.anyGridImp ? (
-                  <path d={computed.gridImpStroke} fill="none" stroke="var(--accent)" strokeWidth={1.6} />
+                  <path d={computed.gridImpStroke} fill="none" stroke="var(--ps-grid)" strokeWidth={1.6} />
                 ) : null}
                 {computed.anyBatChg ? (
-                  <path d={computed.batChgStroke} fill="none" stroke="var(--success)" strokeOpacity={0.75} strokeWidth={1.4} />
+                  <path d={computed.batChgStroke} fill="none" stroke="var(--ps-battery)" strokeWidth={1.4} />
                 ) : null}
                 {computed.anyGridExp ? (
-                  <path d={computed.gridExpStroke} fill="none" stroke="var(--energy-export)" strokeWidth={1.4} />
+                  <path d={computed.gridExpStroke} fill="none" stroke="var(--ps-return)" strokeWidth={1.4} />
                 ) : null}
 
                 {showHome && computed.homeStroke ? (
@@ -396,7 +435,7 @@ export function PowerSourcesAreaChart({
                       x={t.x}
                       y={innerHeight + 15}
                       textAnchor={
-                        t.index === 0 ? 'start' : t.index === data.length - 1 ? 'end' : 'middle'
+                        t.index === 0 ? 'start' : t.index === axisData.length - 1 ? 'end' : 'middle'
                       }
                       fill="var(--muted)"
                       className="font-mono text-[9px]"
@@ -419,7 +458,7 @@ export function PowerSourcesAreaChart({
             onClick={(e) => e.stopPropagation()}
             onPress={() => setShowSolar((v) => !v)}
           >
-            <HugeiconsIcon icon={SolarPanel01Icon} size={11} className="text-warning" />
+            <HugeiconsIcon icon={SolarPanel01Icon} size={11} className="text-[var(--ps-solar)]" />
             <span>Solar{liveWatts ? ` ${formatPower(liveWatts.solarKW)}` : ''}</span>
           </Button>
           <Button
@@ -429,7 +468,7 @@ export function PowerSourcesAreaChart({
             onClick={(e) => e.stopPropagation()}
             onPress={() => setShowGrid((v) => !v)}
           >
-            <HugeiconsIcon icon={PlugSocketIcon} size={11} className="text-[var(--accent)]" />
+            <HugeiconsIcon icon={PlugSocketIcon} size={11} className="text-[var(--ps-grid)]" />
             <span>Grid{liveWatts ? ` ${formatPower(Math.abs(liveWatts.gridKW))}` : ''}</span>
           </Button>
           <Button
@@ -439,7 +478,7 @@ export function PowerSourcesAreaChart({
             onClick={(e) => e.stopPropagation()}
             onPress={() => setShowBattery((v) => !v)}
           >
-            <HugeiconsIcon icon={BatteryCharging01Icon} size={11} className="text-success" />
+            <HugeiconsIcon icon={BatteryCharging01Icon} size={11} className="text-[var(--ps-battery)]" />
             <span>Battery{liveWatts ? ` ${formatPower(Math.abs(liveWatts.batteryKW))}` : ''}</span>
           </Button>
           <Button

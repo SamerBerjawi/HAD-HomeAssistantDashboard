@@ -16,7 +16,7 @@ import {
   UserGroupIcon
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
-import { useHAImage } from '@/services/haImageService';
+import { useHaPicture } from '../../widgets/shared/useHaPicture';
 import type {
   ProBatteryBadgeTone,
   ProOverviewPresenceModel,
@@ -57,7 +57,8 @@ export function PersonAvatarBadge({
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
-  const { imageUrl } = useHAImage(member.entityPicture, serverUrl);
+  // Session token, like the classic avatar (photos stayed blank on real servers otherwise).
+  const imageUrl = useHaPicture(member.entityPicture, serverUrl);
   return (
     <Badge.Anchor className="shrink-0">
       <Avatar size={size} variant="soft" color={member.statusTone} className={className}>

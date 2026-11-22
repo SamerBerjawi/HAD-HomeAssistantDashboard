@@ -1,6 +1,6 @@
 /**
  * HA "Grid energy balance" + 4 semicircular ArcGauge cards widget (energy_gauges)
- * across 1x, 2x, 2x2 sizes (reused in EnergyDetailSheet).
+ * across 1x, 2x, 2x2 sizes (reused in widgets/energy/EnergySheet).
  */
 import {
   Leaf01Icon,

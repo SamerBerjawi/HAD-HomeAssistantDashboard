@@ -10,7 +10,7 @@
 
 import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import { haWebSocketService } from './haWebSocket';
-import { getActiveHAToken } from './haAuth';
+import { getFreshHAToken } from './haAuth';
 import { getHAHttpBaseUrl } from './haImageService';
 
 export interface HAHistoryPoint {
@@ -148,7 +148,7 @@ export async function fetchLiveEntityHistory(
   // 2. Secondary Fallback: Home Assistant REST API
   try {
     const baseUrl = getHAHttpBaseUrl();
-    const token = getActiveHAToken();
+    const token = await getFreshHAToken();
     if (baseUrl && token) {
       const url = `${baseUrl}/api/history/period/${encodeURIComponent(startTimeISO)}?filter_entity_id=${encodeURIComponent(entityId)}&minimal_response=1&no_attributes=1`;
       const response = await fetchWithTimeout(url, {

@@ -10,7 +10,7 @@
  *  - Cross-tab BroadcastChannel and custom event dispatching
  */
 
-import { getStoredHAAuth, getActiveHAToken } from './haAuth';
+import { getStoredHAAuth, getFreshHAToken } from './haAuth';
 import { getStoredAuthConfig } from './authStorage';
 import { SseParser } from '../lib/sseParser';
 import type { UserDashboardConfig } from '../types/userConfig';
@@ -144,12 +144,10 @@ class ConfigSyncService {
     this.streamAbort = controller;
     this.lastActivityTimestamp = Date.now();
 
-    const token = getActiveHAToken();
     const auth = getStoredHAAuth();
     const storedConfig = getStoredAuthConfig();
     const serverUrl = auth?.server_url || storedConfig?.httpUrl || storedConfig?.serverUrl;
     const headers: Record<string, string> = { Accept: 'text/event-stream' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     if (serverUrl) headers['X-HA-URL'] = serverUrl;
 
     const fail = (err: unknown) => {
@@ -162,6 +160,12 @@ class ConfigSyncService {
 
     void (async () => {
       try {
+        // Reconnects can come long after sign-in: an expired token would make the server check it
+        // with Home Assistant, which logs that as a failed login. Refresh it first.
+        const token = await getFreshHAToken();
+        if (!token) throw new Error('No usable Home Assistant token yet');
+        if (controller.signal.aborted) return;
+        headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch('/api/config/stream', { headers, signal: controller.signal, cache: 'no-store' });
         if (!res.ok || !res.body) throw new Error(`SSE responded with HTTP ${res.status}`);
         this.retryCount = 0;

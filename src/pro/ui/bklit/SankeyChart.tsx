@@ -89,7 +89,11 @@ export function SankeyChart({
 
     const nodeW = isNarrow ? 8 : 10;
     const padL = isNarrow ? 6 : 8;
-    const padR = isNarrow ? 104 : 138;
+    // Room on the right for the last column's labels: as wide as the longest one needs (at an
+    // average glyph width), up to a third of the chart, so names aren't cut while there is space.
+    const charW = isNarrow ? 5.6 : 6.2;
+    const longestRight = Math.max(0, ...(columnsMap.get(highestCol) || []).map((n) => n.label.length));
+    const padR = Math.round(Math.min(width / 3, Math.max(isNarrow ? 64 : 80, longestRight * charW + 14)));
     const padY = 14;
     const plotW = Math.max(80, width - padL - padR - nodeW);
     const plotH = Math.max(60, height - padY * 2);
@@ -195,9 +199,20 @@ export function SankeyChart({
 
   if (nodes.length === 0) return null;
 
-  const outboundNodeIds = new Set(positionedLinks.map((l) => l.source));
   const maxInnerChars = Math.max(4, Math.floor((colGapPx - 14) / (isNarrow ? 5.6 : 6.2)));
   const maxRightChars = Math.max(10, Math.floor((rightPadPx - 10) / (isNarrow ? 5.6 : 6.2)));
+  // Every node gets a label (thin ones too, as in HA) unless it would overlap the one above it.
+  const labelGap = isNarrow ? 11 : 12;
+  const labelled = new Set<string>();
+  const lastLabelY = new Map<number, number>();
+  for (const node of [...positionedNodes].sort((a, b) => a.column - b.column || a.y - b.y)) {
+    const cy = node.y + node.h / 2;
+    const prev = lastLabelY.get(node.column);
+    if (prev === undefined || cy - prev >= labelGap) {
+      labelled.add(node.id);
+      lastLabelY.set(node.column, cy);
+    }
+  }
 
   const activeLink = hoveredLinkId ? positionedLinks.find((l) => l.id === hoveredLinkId) : null;
   const activeNode = hoveredNodeId ? positionedNodes.find((n) => n.id === hoveredNodeId) : null;
@@ -277,10 +292,7 @@ export function SankeyChart({
                 ));
             const isDimmed = (hoveredLinkId !== null || hoveredNodeId !== null) && !isHighlighted;
             const isRightEdge = node.column === maxCol;
-            const isMiddleTerminalSink =
-              node.column > 0 && node.column < maxCol && !outboundNodeIds.has(node.id);
-            const placeLeft = isMiddleTerminalSink;
-            const labelX = placeLeft ? node.x - 5 : node.x + node.w + 5;
+            const labelX = node.x + node.w + 5;
             const labelY = node.y + node.h / 2;
             const maxChars = isRightEdge ? maxRightChars : maxInnerChars;
             const displayLabel =
@@ -303,11 +315,11 @@ export function SankeyChart({
                   rx={4}
                   fill={node.color}
                 />
-                {node.h >= 7 || isRightEdge || node.column === 0 || node.column === 1 ? (
+                {labelled.has(node.id) ? (
                   <text
                     x={labelX}
                     y={labelY}
-                    textAnchor={placeLeft ? 'end' : 'start'}
+                    textAnchor="start"
                     dominantBaseline="central"
                     fill="var(--foreground)"
                     className={cn('font-medium', isNarrow ? 'text-[10px]' : 'text-[11px]')}

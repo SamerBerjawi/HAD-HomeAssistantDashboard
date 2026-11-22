@@ -166,27 +166,48 @@ describe('overviewEnergy', () => {
     expect(model.energyFlowCompact.nodes.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('aggregates 5-minute powerBuckets in pairs into 10-minute points (up to 72 over 12h)', () => {
-    const powerBuckets = Array.from({ length: 144 }, (_, i) =>
-      makeBucket(`${String(Math.floor(i / 12)).padStart(2, '0')}:${String((i % 12) * 5).padStart(2, '0')}`, 1.2, 0.4, 0.4)
-    );
+  it('draws the whole local day from 5-minute buckets: 10-minute points, midnight to midnight', () => {
+    const midnight = new Date(2026, 10, 18).getTime();
+    // Data until 11:55; later buckets of the day are empty (not yet happened).
+    const powerBuckets = Array.from({ length: 288 }, (_, i) => {
+      const b = makeBucket(`${i}`, i < 144 ? 0.1 : 0, i < 144 ? 0.05 : 0, i < 144 ? 0.05 : 0);
+      return { ...b, startMs: midnight + i * 5 * 60 * 1000, endMs: midnight + (i + 1) * 5 * 60 * 1000 };
+    });
     const model = buildOverviewEnergyModel({
       period: 'day',
-      realtime: {
-        homeConsumptionKW: 1.2,
-        solarPowerKW: 0.4,
-        gridImportPowerKW: 0.8,
-        gridExportPowerKW: 0,
-        batteryChargePowerKW: 0,
-        batteryDischargePowerKW: 0,
-        batterySoC: null
-      },
+      realtime: { homeConsumptionKW: 1.2, solarPowerKW: 0.4, gridImportPowerKW: 0.8, gridExportPowerKW: 0, batteryChargePowerKW: 0, batteryDischargePowerKW: 0, batterySoC: null },
       buckets: [],
       powerBuckets
     });
+    const series = model.powerSourcesSeries;
+    expect(series).toHaveLength(144);
+    expect(series[0].label).toBe('00:00');
+    expect(series[1].label).toBe('00:10');
+    expect(series[143].label).toBe('23:50');
+    expect(series[0].home).toBeCloseTo(1.2, 2); // 0.1 kWh per 5 minutes = 1.2 kW
+    expect(series[71].future).toBeUndefined();
+    expect(series[72].future).toBe(true);
+  });
 
-    expect(model.powerSourcesSeries).toHaveLength(72);
-    expect(model.powerSourcesSeries[0].label).toBe('00:00');
-    expect(model.powerSourcesSeries[1].label).toBe('00:10');
+  it('stacks all the solar produced above zero, and what charged the battery below (as HA does)', () => {
+    const midnight = new Date(2026, 10, 18).getTime();
+    const powerBuckets = [0, 1].map((i) => ({
+      ...makeBucket(`${i}`, 0.05, 0.13, 0.05),
+      gridExport: 0,
+      solarToGrid: 0,
+      batteryCharge: 0.08,
+      solarToBattery: 0.08,
+      startMs: midnight + 12 * 3600 * 1000 + i * 5 * 60 * 1000
+    }));
+    const model = buildOverviewEnergyModel({
+      period: 'day',
+      realtime: { homeConsumptionKW: 0.6, solarPowerKW: 1.56, gridImportPowerKW: 0, gridExportPowerKW: 0, batteryChargePowerKW: 0.96, batteryDischargePowerKW: 0, batterySoC: null },
+      buckets: [],
+      powerBuckets
+    });
+    const noon = model.powerSourcesSeries.find((d) => d.label === '12:00')!;
+    expect(noon.solar).toBeCloseTo(1.56, 2); // all of it, not just the 0.6 kW the home used
+    expect(noon.batteryCharge).toBeCloseTo(0.96, 2);
+    expect(noon.solar + noon.batteryDischarge + noon.gridImport - noon.batteryCharge - noon.gridExport).toBeCloseTo(noon.home, 2);
   });
 });

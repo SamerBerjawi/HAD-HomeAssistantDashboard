@@ -1,6 +1,6 @@
 # Overview rebuild plan
 
-Status: **Phase 2 layout engine built** (2026-11-19). Phase 0 approved by the owner: Flow reorder, one "⋯" edit menu, sections side by side on desktop.
+Status: **Phase 5 (cutover) done (2026-11-20): `/overview` is the rebuilt page. Next: Phase 6, verification [review].** Phase 3 done; Energy (3e) approved by the owner (2026-11-19). Phase 0 approved by the owner: Flow reorder, one "⋯" edit menu, sections side by side on desktop.
 Scope: `src/pro/` only. The classic UI (`src/components/*`) and its config keys stay untouched.
 
 ## Owner decisions (2026-11-19)
@@ -223,6 +223,11 @@ Built (`src/pro/components/overviewNext/`):
   (a 2×1 landed on a 2×2 in a test), so Flow is `flowCells` in `lib/overviewLayout.ts`: reading
   order, each card in the first free spot after the previous one (CSS grid without `dense`).
   The dragged card wins a tie, so dropping on a card's spot takes it.
+  **Revised 2026-11-20 (owner): free placement for edits.** `makeSettleCompactor` uses
+  `settleCells`: the card in hand stays where it is dropped (a row may be left part empty), the
+  others start from their pre-drag cells and only step down to make room, empty rows close up.
+  Move earlier/later trades places with the neighbour; resize keeps the cell; Add and new
+  widgets go on a new row. Defaults and migration still use Flow.
 - `WidgetCard` + `WidgetCardMenu`: the header opens the sheet; in edit mode a drag handle
   (pointer only), the "⋯" menu (Size with a check, Move earlier / later, Hide) and the title on
   its own line; the body is `inert` while arranging. The menu is the keyboard and screen-reader
@@ -247,6 +252,167 @@ Checked in the browser (demo, tablet width, then phone in light mode):
 
 Not verified: a real touch drag (still the open Phase 0 risk), the leave-page prompt for
 unsaved edits, and a full keyboard-only pass through the menu.
+
+## Phase 3a/3b results (2026-11-19)
+
+Real widgets in `src/pro/widgets/<id>/` (registry order: weather, fans, users, lights, switches):
+- **Lights**, **Switches** (s/w/t/l; Switches shows live power "1.4 kW now") and **Fans** (s/w/t/l;
+  speed, oscillate, direction, preset) share `controls/ControlParts.tsx` (toggle, rows, footer).
+- **Weather** merges `weather` and `weather_hourly` (legacy id mapped). s = now, w = now + 3 days,
+  t = now + hourly rows, l = 6-hour grid + 3 days + now.
+- **Family presence** (id `users`, People section): avatars open `?sheet=users&id=<person>`.
+- Sheets are the existing detail sheets wrapped (`ControlDetailSheet`, `FansDetailSheet`,
+  `WeatherDetailSheet`, presence sheet), lazy loaded.
+- Tests: `tests/overviewWidgetsPhase3.test.ts`.
+
+Checked in the browser (demo, tablet): all five render at default and larger sizes (Weather
+Large, Fans Tall, Presence Large) without overflow; a person deep link opens the sheet and Back
+closes it. Test layouts removed afterwards with "Forget saved layouts".
+
+For cutover (Phase 5): move `weatherConditionIcon` and `PersonAvatarBadge` out of the old
+`components/overview/*` widgets into `src/pro/widgets/`.
+
+## Phase 3c results (2026-11-19)
+
+- **Doors & windows** (`openings`), **Safety** (`safety`, leak + smoke) and **Motion** (`motion`)
+  share one model and body in `src/pro/widgets/sensors/`. Small: headline. Wide: + badge.
+  Tall/Large: three rows, active first; Openings and Safety get an All / Doors / Windows (or
+  Leak / Smoke) view switch. Tall rows show the state as an icon only. Safety gets a moving
+  border on an alert. Binary sensors are classified once per array (shared by all of them).
+- **Alarm** (Security section): Small = state + Arm home / Disarm; Wide = mode switch;
+  Tall = quick button + "N open" + "Lock N"; Large = lock rows + mode switch. Code and "arm
+  anyway" dialogs are the shared ones. "N open" opens the Doors & windows sheet.
+- **Cameras** (sizes s / w / l): the picture fills the card; Wide adds previous/next, Large
+  streams live with camera chips, snapshot and full screen. `?sheet=cameras&id=<camera>` opens
+  the sheet on that camera.
+- Legacy ids: `doors`, `windows` → `openings`; `leak`, `smoke` → `safety`. A merged widget
+  migrates as hidden only when every widget it replaces was hidden.
+- `attention` is filled for Openings (open), Safety (alert) and Alarm (triggered), for the Phase 4
+  attention pills.
+- Tests: `tests/overviewWidgetsPhase3c.test.ts`.
+
+Checked in the browser (demo, tablet): all five render; Alarm Large, Motion Tall and Doors &
+windows Large fit after capping rows at three; the view switch filters; Alarm "2 open" opens
+`?sheet=openings` and Back closes it. Cameras showed its empty state only: the demo has no
+camera stream sources, so the snapshot/live bodies are not checked in the browser yet. Test
+layouts removed afterwards with "Forget saved layouts".
+
+## Phase 3d results (2026-11-19)
+
+- **Media**: Small = cover, title, play/pause; Wide = + artist, player, previous/next; Tall = big
+  cover; Large = + waveform scrubber and volume. Album-art colours, cover, transport and volume
+  are the shared pieces. The chosen player lives in a small store shared by card and sheet;
+  `?sheet=media&id=<player>` picks it.
+- **Vacuums** (busiest first): Small = status, battery, Clean/Pause; Wide = name, room, battery,
+  Clean/Pause and Dock on one row; Tall = stacked; Large = + suction, session and other vacuums.
+- Both need the whole store (device classification, battery and room sensors). New
+  `useDerivedModel` rebuilds the model on each store change but renders only when its
+  fingerprint changes, so sensor ticks elsewhere don't re-render these cards.
+- Widget cards are now positioned (`relative`): the media album-art wash and the alert border
+  stay inside their card instead of covering the page.
+- Error boundaries: each card (and its body) has its own, and the sheet host closes a sheet that
+  fails to load (e.g. a chunk gone after a deploy) instead of showing the root error screen.
+- Tests: `tests/overviewWidgetsPhase3d.test.ts`.
+
+Checked in the browser (demo, tablet): all four sizes of both fit after three fixes (Wide
+vacuum controls on one row; Tall vacuum status under the name; Small vacuum without the status
+line; Tall media cover capped at 96px). Both sheets open from the header, Back closes them, and
+choosing a player in the media sheet updates the card. In demo mode a saved layout lives in the
+browser for that origin, not in the server config.
+
+## Phase 3e results (2026-11-19) — approved
+
+Eight energy widgets become three (`src/pro/widgets/energy/`):
+
+| Old | New |
+|---|---|
+| Power flow, Power flow (12h) | **Energy now** (w, l; default l) |
+| Energy usage (+ hourly), Solar production (+ forecast), Grid balance & gauges | **Energy today** (s, w, l; default w) |
+| Energy flow | **Energy flow** (l only) |
+
+- **Energy now**: live home load and a "clean / exporting" badge. Wide: one row of solar /
+  grid / battery now. Large: the animated distribution diagram in its live (kW) mode.
+- **Energy today**: Usage / Solar / Grid switch (views a home lacks are left out). Small: kWh
+  used. Wide: the view's numbers (Grid adds the import/return bar). Large: the view's chart
+  (usage bars, solar vs forecast, or self-sufficiency and solar self-use gauges).
+- **Energy flow**: the full Sankey (sources → home → areas → devices), filling the card.
+- One fetch: `EnergyDataBridge` runs `useEnergyData` once and publishes the model to a small
+  store, only when it changes. The page mounts it (`EnergyDataMount`) only while the layout
+  places an energy widget or an energy sheet is open. Loading / not set up / error show a
+  one-line state instead of zeros.
+- Sheet: the existing energy sheet, opened on the widget's view (`&id=solar_production` etc.).
+- Legacy ids: `power_flow`, `power_flow_chart` → `energy_now`; `energy_usage(_chart)`,
+  `solar_production(_chart)`, `energy_gauges` → `energy_today`.
+- Tests: `tests/overviewWidgetsPhase3e.test.ts`.
+
+Checked in the browser (demo, tablet): all sizes fit after two changes (Wide Energy now uses
+one row of chips; Energy flow dropped Wide, where a Sankey is unreadable). The sheet opens on
+the right view, changing its period updates the cards, Back closes it.
+
+**Owner decisions (2026-11-19):**
+1. ~~The period chosen in the sheet is shared, so "Energy today" could show a week.~~
+   **Decided (owner, 2026-11-19): reset to Day when the sheet closes** (X, Back or Escape). Done
+   and checked in the browser: Week while open, back to today after Back.
+2. Energy flow stays Large only. **Kept as built.**
+3. The card keeps two gauges (self-sufficiency, solar self-use); net grid and clean share stay
+   in the sheet's Gauges view. **Kept as built.**
+4. The 12-hour power chart lives only in the sheet (Power view). **Kept as built.**
+
+Seen while checking, not from this work: React logs "Expected static flag was missing" twice on
+every page (also on `/rooms`, which has no energy code).
+
+## Phase 4 results (2026-11-20)
+
+- **Shell** (`components/overviewNext/OverviewShell.tsx`) around the engine. The dev panel on top
+  of `/overview?next` stays until cutover.
+- **Counts and pills come from the widgets.** `WidgetDefinition.count(model)` (new) and
+  `attention(model)`. `WidgetProbes` mounts one invisible probe per widget on the page that runs
+  its model hook and reports to `hooks/useWidgetStatus` (zustand), so tabs and pills are right
+  for sections on other tabs or collapsed. Pure logic in `lib/overviewShell.ts`.
+- **Tabs**: "All", then one per section on the page, in the user's order (Rooms and People are
+  tabs of their own now). A tab's number is the sum of its widgets' counts (lights on, switches
+  on, fans running, thermostats active, people home, doors/windows open, leaks/smoke, motion,
+  locks unlocked or jammed, media playing, vacuums cleaning); it turns warning/danger when
+  something in the section needs attention. "All" carries nothing (the pills say it). Kokonut
+  `SmoothTab` with a new `badges="always"` option. The tab is in the URL (`?tab=security`,
+  replaced, not pushed); an emptied tab falls back to All; editing is always on All. A tab shows
+  its section full width and expanded. Section headers lose counts and get a "show only" arrow.
+- **Attention pills**: only problems, worst first: alarm triggered (danger) or arming/pending,
+  doors/windows open, leak/smoke, jammed lock (danger) or low lock battery, car danger alerts,
+  vacuum error or low battery away from the dock. A pill opens the widget's sheet (or its tab
+  when it has none). No problems: one quiet "Nothing needs attention" line.
+- **Empty state**: no widgets on the page says so, with Add widgets and Restore default layout
+  (both go through the draft: Save to keep).
+- **Demo mode**: HA service calls are no-ops in demo, so `useServiceCall` now applies the state
+  a real HA would report (`lib/demoServices.ts`: on/off/toggle, lock, alarm modes, covers, media
+  play/pause, vacuum, climate mode/target, scenes). A quiet "Demo home: changes stay on this
+  screen" note sits beside the pills.
+- Tests: `tests/overviewShell.test.ts`.
+
+Checked in the browser (demo, desktop and phone): tabs with counts, Security tab alone with
+`?tab=security`, the "2 open" pill opens the Doors & windows sheet, locking a demo lock turns the
+card to "All locked" and the Security count from 2 to 1. Not checked in the browser: the empty
+state (needs every widget hidden) and light mode (the theme toggle writes the shared config).
+
+## Phase 5 results (2026-11-20)
+
+- `/overview` renders the rebuilt page (`pages/ProOverview.tsx`); `ProOverviewNext` and the
+  `?next` dev route are gone. The dev panel went with it: Customize sits beside the tabs, and
+  the per-screen device-type pin moved into the Customize bar (switching it cancels the draft,
+  since a draft belongs to one device type). Escape cancels editing when no sheet is open.
+- Removed (nothing reached them any more; checked with an esbuild metafile from `src/pro/main.tsx`
+  plus an import grep over `src`, `tests` and `scripts`): `components/overview/`
+  `OverviewWidgetGrid`, `OverviewGroupedGrid`, `SortableWidgetCard`, `StatusPillsBar`,
+  `ProOverviewSheets`, `memoWidgetBodies`, `AddWidgetsSheet`, `widgetIcons`, `EnergyWidgets`,
+  `MediaWidget`, `SecurityAlarmCameraWidgets`; `hooks/useProOverviewModels`, `useProOverviewActions`,
+  `useProOverviewLayout`; `lib/overviewSheets`, `lib/overviewWidgetSummaries`;
+  `widgets/devPlaceholders`; the grouped-grid helpers in `lib/overviewSections` (and their tests).
+- Kept on purpose: `useMasonryRowSpan` (BentoGrid on the Security page), `lib/overviewTabs` (the
+  classic `useOverviewHeaderState` imports it), `lib/overviewWidgets` and the old widget bodies
+  that the new widgets and sheets still reuse (`ControlWidgets`, `WeatherWidgets`, … and the
+  detail sheets; they go when the sheets are redesigned), `pageHeaderContext` (shell menu slot).
+- DESIGN.md 7.6 rewritten for the rebuilt page; decision-log row added; HANDOFF.md updated.
+
 
 ## Phases
 

@@ -1,6 +1,9 @@
 /**
- * Pure Sankey graph builder for Home Assistant "Energy flow" widget & detail view:
- * resolves Sources -> Home (+ returns) -> Floors -> Areas -> Tracked devices + Untracked consumption.
+ * Pure Sankey graph builder for Home Assistant "Energy flow" widget & detail view, laid out like
+ * HA's energy Sankey (2026-11-21): sources (battery, grid, solar) in the first column; Home, the
+ * battery being charged and the grid being exported to in the second; then floors, areas and
+ * tracked devices, with untracked consumption last. Small flows stay (as thin lines), so floors
+ * and areas with low use still show; devices are named like HA (the device name, not "Desk Energy").
  */
 import type { HAArea, HAFloor, ResolvedEntity } from '@/types';
 import type { ProSankeyLinkInput, ProSankeyNodeInput } from '../ui/bklit/SankeyChart';
@@ -17,11 +20,31 @@ export interface EnergySankeySourceInput {
   solarToGridKwh: number;
   gridToHomeKwh: number;
   batteryToHomeKwh: number;
+  /** Grid power that charged the battery (HA draws Grid → Battery). */
+  gridToBatteryKwh?: number;
+  /** Battery power sent to the grid (HA draws Battery → Grid). */
+  batteryToGridKwh?: number;
   devices: Array<{ id: string; name: string; kwh: number }>;
   untrackedKwh: number;
   resolvedEntities?: Record<string, ResolvedEntity>;
   areas?: HAArea[];
   floors?: HAFloor[];
+}
+
+/** Below this a flow is treated as none (kWh). HA draws any flow above zero; this only drops rounding noise. */
+const EPS = 0.001;
+
+/**
+ * HA names a device's energy by its device when the sensor is the device's own ("Desk", not
+ * "Desk Energy"). A name the user set in the energy settings is kept as it is.
+ */
+export function energyDeviceLabel(name: string, entity: ResolvedEntity | undefined): string {
+  const device = entity?.device;
+  const deviceName = (device?.name_by_user || device?.name || '').trim();
+  const friendly = String(entity?.attributes?.friendly_name ?? entity?.name ?? '');
+  if (!deviceName || name !== friendly) return name;
+  const startsWithDevice = name.toLowerCase().startsWith(deviceName.toLowerCase()) && name.length > deviceName.length;
+  return startsWithDevice ? deviceName : name;
 }
 
 const DEVICE_COLORS = ['var(--chart-1)', 'var(--success)', 'var(--energy-solar)', 'var(--energy-export)', 'var(--energy-battery)', 'var(--energy-untracked)'];
@@ -40,51 +63,57 @@ export function buildEnergySankeyGraph(
     input.solarToHomeKwh + input.gridToHomeKwh + input.batteryToHomeKwh
   );
 
+  const gridToBattery = Math.max(0, input.gridToBatteryKwh ?? 0);
+  const batteryToGrid = Math.max(0, input.batteryToGridKwh ?? 0);
   const solarOut = input.solarToHomeKwh + input.solarToBatteryKwh + input.solarToGridKwh;
   const gridIn = input.gridToHomeKwh;
   const batIn = input.batteryToHomeKwh;
 
   // Fallback balanced split if live totals are still 0
-  const fallbackGrid = solarOut <= 0.01 && gridIn <= 0.01 && batIn <= 0.01 ? homeTotal : gridIn;
+  const fallbackGrid = solarOut <= EPS && gridIn <= EPS && batIn <= EPS ? homeTotal : gridIn;
 
-  // Column 0: Sources
-  if (batIn > 0.01) {
+  // Column 0: Sources (HA order: battery, grid, solar)
+  if (batIn + batteryToGrid > EPS) {
     nodes.push({
       id: 'src_battery',
       label: 'Battery',
-      value: batIn,
+      value: batIn + batteryToGrid,
       column: 0,
       color: 'var(--energy-battery)'
     });
-    links.push({
-      id: 'lk_srcbat_home',
-      source: 'src_battery',
-      target: 'node_home',
-      value: batIn,
-      sourceColor: 'var(--energy-battery)',
-      targetColor: 'var(--energy-solar)'
-    });
+    if (batIn > EPS) {
+      links.push({
+        id: 'lk_srcbat_home',
+        source: 'src_battery',
+        target: 'node_home',
+        value: batIn,
+        sourceColor: 'var(--energy-battery)',
+        targetColor: 'var(--energy-solar)'
+      });
+    }
   }
 
-  if (fallbackGrid > 0.01) {
+  if (fallbackGrid + gridToBattery > EPS) {
     nodes.push({
       id: 'src_grid',
       label: 'Grid',
-      value: fallbackGrid,
+      value: fallbackGrid + gridToBattery,
       column: 0,
       color: 'var(--energy-grid)'
     });
-    links.push({
-      id: 'lk_srcgrid_home',
-      source: 'src_grid',
-      target: 'node_home',
-      value: fallbackGrid,
-      sourceColor: 'var(--energy-grid)',
-      targetColor: 'var(--energy-solar)'
-    });
+    if (fallbackGrid > EPS) {
+      links.push({
+        id: 'lk_srcgrid_home',
+        source: 'src_grid',
+        target: 'node_home',
+        value: fallbackGrid,
+        sourceColor: 'var(--energy-grid)',
+        targetColor: 'var(--energy-solar)'
+      });
+    }
   }
 
-  if (solarOut > 0.01) {
+  if (solarOut > EPS) {
     nodes.push({
       id: 'src_solar',
       label: 'Solar',
@@ -92,7 +121,7 @@ export function buildEnergySankeyGraph(
       column: 0,
       color: 'var(--energy-solar)'
     });
-    if (input.solarToHomeKwh > 0.01) {
+    if (input.solarToHomeKwh > EPS) {
       links.push({
         id: 'lk_srcsolar_home',
         source: 'src_solar',
@@ -113,9 +142,60 @@ export function buildEnergySankeyGraph(
     color: 'var(--energy-solar)'
   });
 
+  // Column 1 under Home (as HA): the battery being charged and the grid being exported to.
+  const chargedKwh = input.solarToBatteryKwh + gridToBattery;
+  if (chargedKwh > EPS) {
+    // HA draws the battery being charged in a lighter purple than the battery as a source.
+    nodes.push({ id: 'sink_battery', label: 'Battery', value: chargedKwh, column: 1, color: 'var(--energy-gas)' });
+    if (input.solarToBatteryKwh > EPS) {
+      links.push({
+        id: 'lk_srcsolar_sinkbat',
+        source: 'src_solar',
+        target: 'sink_battery',
+        value: input.solarToBatteryKwh,
+        sourceColor: 'var(--energy-solar)',
+        targetColor: 'var(--energy-gas)'
+      });
+    }
+    if (gridToBattery > EPS) {
+      links.push({
+        id: 'lk_srcgrid_sinkbat',
+        source: 'src_grid',
+        target: 'sink_battery',
+        value: gridToBattery,
+        sourceColor: 'var(--energy-grid)',
+        targetColor: 'var(--energy-gas)'
+      });
+    }
+  }
+  const exportedKwh = input.solarToGridKwh + batteryToGrid;
+  if (exportedKwh > EPS) {
+    nodes.push({ id: 'sink_grid', label: 'Grid', value: exportedKwh, column: 1, color: 'var(--energy-export)' });
+    if (input.solarToGridKwh > EPS) {
+      links.push({
+        id: 'lk_srcsolar_sinkgrid',
+        source: 'src_solar',
+        target: 'sink_grid',
+        value: input.solarToGridKwh,
+        sourceColor: 'var(--energy-solar)',
+        targetColor: 'var(--energy-export)'
+      });
+    }
+    if (batteryToGrid > EPS) {
+      links.push({
+        id: 'lk_srcbat_sinkgrid',
+        source: 'src_battery',
+        target: 'sink_grid',
+        value: batteryToGrid,
+        sourceColor: 'var(--energy-battery)',
+        targetColor: 'var(--energy-export)'
+      });
+    }
+  }
+
   // Sort & cap tracked devices
   const activeDevices = [...input.devices]
-    .filter((d) => d.kwh > 0.02)
+    .filter((d) => d.kwh > EPS)
     .sort((a, b) => b.kwh - a.kwh);
   const visibleDevices = activeDevices.slice(0, maxDevices);
   const overflowKwh = activeDevices.slice(maxDevices).reduce((s, d) => s + d.kwh, 0);
@@ -134,6 +214,7 @@ export function buildEnergySankeyGraph(
       : undefined;
     return {
       ...dev,
+      name: energyDeviceLabel(dev.name, entity),
       color: DEVICE_COLORS[idx % DEVICE_COLORS.length],
       areaId: area?.area_id ?? null,
       areaName: area?.name ?? null,
@@ -251,7 +332,7 @@ export function buildEnergySankeyGraph(
     }
   }
 
-  if (overflowKwh > 0.05) {
+  if (overflowKwh > EPS) {
     nodes.push({
       id: 'dev_other',
       label: 'Other devices',
@@ -270,8 +351,8 @@ export function buildEnergySankeyGraph(
   }
 
   const untracked = Math.max(0, input.untrackedKwh);
-  if (untracked > 0.05 || (deviceEntries.length === 0 && homeTotal > 0.05)) {
-    const val = untracked > 0.05 ? untracked : homeTotal;
+  if (untracked > EPS || (deviceEntries.length === 0 && homeTotal > EPS)) {
+    const val = untracked > EPS ? untracked : homeTotal;
     nodes.push({
       id: 'dev_untracked',
       label: 'Untracked consumption',
@@ -287,45 +368,6 @@ export function buildEnergySankeyGraph(
       sourceColor: 'var(--energy-solar)',
       targetColor: 'var(--energy-untracked)'
     });
-  }
-
-  // Place surplus solar returns in the rightmost column below home destinations to prevent
-  // mid-column label collisions on compact/mobile viewports.
-  if (solarOut > 0.01) {
-    if (input.solarToBatteryKwh > 0.01) {
-      nodes.push({
-        id: 'sink_battery',
-        label: 'Battery charge',
-        value: input.solarToBatteryKwh,
-        column: leafCol,
-        color: 'var(--energy-gas)'
-      });
-      links.push({
-        id: 'lk_srcsolar_sinkbat',
-        source: 'src_solar',
-        target: 'sink_battery',
-        value: input.solarToBatteryKwh,
-        sourceColor: 'var(--energy-solar)',
-        targetColor: 'var(--energy-gas)'
-      });
-    }
-    if (input.solarToGridKwh > 0.01) {
-      nodes.push({
-        id: 'sink_grid',
-        label: 'Grid export',
-        value: input.solarToGridKwh,
-        column: leafCol,
-        color: 'var(--energy-export)'
-      });
-      links.push({
-        id: 'lk_srcsolar_sinkgrid',
-        source: 'src_solar',
-        target: 'sink_grid',
-        value: input.solarToGridKwh,
-        sourceColor: 'var(--energy-solar)',
-        targetColor: 'var(--energy-export)'
-      });
-    }
   }
 
   return { nodes, links };

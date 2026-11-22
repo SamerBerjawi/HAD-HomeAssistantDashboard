@@ -34,6 +34,8 @@ export interface ProOverviewSensorItem {
   stateLabel: string;
   badgeTone: PillTone;
   lastChangedText: string;
+  /** When the state last changed (ms since epoch), or null when unknown. */
+  lastChangedAt: number | null;
 }
 
 export interface ProSensorRoomGroup {
@@ -71,6 +73,28 @@ export interface ProOverviewAlarmLockItem {
   stateLabel: string;
   badgeTone: PillTone;
 }
+
+/** One lock entity as the alarm and Locks widgets show it. */
+export function buildLockItem(entity: ResolvedEntity): ProOverviewAlarmLockItem {
+  const dev = deviceItem(entity, 'lock');
+  const name = entity.name || entity.attributes?.friendly_name || entity.entity_id;
+  const roomName = resolveControlRoomName(entity);
+  return {
+    entityId: entity.entity_id,
+    name,
+    shortName: deriveShortName(name, roomName),
+    roomName,
+    state: entity.state,
+    isUnlocked: dev.stateLabel === 'Unlocked',
+    isJammed: dev.stateLabel === 'Jammed',
+    isOffline: dev.stateLabel === 'Offline',
+    stateLabel: dev.stateLabel,
+    badgeTone: dev.tone
+  };
+}
+
+/** Problems first (jammed or unlocked), then by name. */
+export const sortLocks = (a: ProOverviewAlarmLockItem, b: ProOverviewAlarmLockItem) => Number(b.isJammed || b.isUnlocked) - Number(a.isJammed || a.isUnlocked) || a.name.localeCompare(b.name);
 
 export interface ProOverviewAlarmModel {
   panel: ResolvedEntity | null;
@@ -117,10 +141,7 @@ export interface ProOverviewCamerasModel {
   subtitleText: string;
 }
 
-const DOMAIN_META: Record<
-  ProOverviewSensorDomain,
-  { deviceKind: DeviceKind; title: string; unitLabel: string }
-> = {
+const DOMAIN_META: Record<ProOverviewSensorDomain, { deviceKind: DeviceKind; title: string; unitLabel: string }> = {
   doors: { deviceKind: 'door', title: 'Entry doors', unitLabel: 'door' },
   windows: { deviceKind: 'window', title: 'Windows', unitLabel: 'window' },
   motion: { deviceKind: 'motion', title: 'Motion zones', unitLabel: 'motion zone' },
@@ -128,10 +149,14 @@ const DOMAIN_META: Record<
   smoke: { deviceKind: 'smoke', title: 'Smoke & fire', unitLabel: 'smoke detector' }
 };
 
+function entityChangedAt(entity: ResolvedEntity): number | null {
+  const raw = entity.last_changed || (typeof entity.attributes?.last_changed === 'string' ? entity.attributes.last_changed : undefined);
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 function formatEntityLastChanged(entity: ResolvedEntity): string {
-  const raw =
-    entity.last_changed ||
-    (typeof entity.attributes?.last_changed === 'string' ? entity.attributes.last_changed : undefined);
+  const raw = entity.last_changed || (typeof entity.attributes?.last_changed === 'string' ? entity.attributes.last_changed : undefined);
   if (!raw) return 'Recently';
   const parsed = Date.parse(raw);
   if (Number.isNaN(parsed)) return 'Recently';
@@ -139,10 +164,7 @@ function formatEntityLastChanged(entity: ResolvedEntity): string {
   return timeAgo(diffMinutes);
 }
 
-export function buildOverviewSensorDomainModel(
-  domain: ProOverviewSensorDomain,
-  entities: ResolvedEntity[]
-): ProOverviewSensorDomainModel {
+export function buildOverviewSensorDomainModel(domain: ProOverviewSensorDomain, entities: ResolvedEntity[]): ProOverviewSensorDomainModel {
   const meta = DOMAIN_META[domain];
 
   const mapped: ProOverviewSensorItem[] = entities.map((entity) => {
@@ -150,10 +172,7 @@ export function buildOverviewSensorDomainModel(
     const name = entity.name || entity.attributes?.friendly_name || entity.entity_id;
     const roomName = resolveControlRoomName(entity);
     const isOffline = dev.stateLabel === 'Offline';
-    const isActive =
-      domain === 'motion'
-        ? dev.stateLabel === 'Detected' || dev.stateLabel === 'Motion'
-        : dev.problem;
+    const isActive = domain === 'motion' ? dev.stateLabel === 'Detected' || dev.stateLabel === 'Motion' : dev.problem;
 
     return {
       entityId: entity.entity_id,
@@ -165,16 +184,12 @@ export function buildOverviewSensorDomainModel(
       isOffline,
       stateLabel: dev.stateLabel,
       badgeTone: dev.tone,
-      lastChangedText: formatEntityLastChanged(entity)
+      lastChangedText: formatEntityLastChanged(entity),
+      lastChangedAt: entityChangedAt(entity)
     };
   });
 
-  const items = [...mapped].sort(
-    (a, b) =>
-      Number(b.isActive) - Number(a.isActive) ||
-      Number(b.isOffline) - Number(a.isOffline) ||
-      a.name.localeCompare(b.name)
-  );
+  const items = [...mapped].sort((a, b) => Number(b.isActive) - Number(a.isActive) || Number(b.isOffline) - Number(a.isOffline) || a.name.localeCompare(b.name));
   const activeItems = items.filter((item) => item.isActive);
   const activeCount = activeItems.length;
   const totalCount = items.length;
@@ -212,7 +227,7 @@ export function buildOverviewSensorDomainModel(
   } else if (activeCount > 0) {
     const names = activeItems
       .slice(0, 2)
-      .map((i) => i.roomName !== 'General' ? i.roomName : i.shortName)
+      .map((i) => (i.roomName !== 'General' ? i.roomName : i.shortName))
       .join(', ');
     subtitleText = `${names}${activeCount > 2 ? ` +${activeCount - 2}` : ''}`;
   } else {
@@ -236,21 +251,14 @@ export function buildOverviewSensorDomainModel(
   };
 }
 
-export function filterAndGroupSensorItems(
-  items: ProOverviewSensorItem[],
-  opts: { query?: string; onlyActive?: boolean } = {}
-): ProSensorRoomGroup[] {
+export function filterAndGroupSensorItems(items: ProOverviewSensorItem[], opts: { query?: string; onlyActive?: boolean } = {}): ProSensorRoomGroup[] {
   const q = (opts.query || '').trim().toLowerCase();
   const onlyActive = Boolean(opts.onlyActive);
 
   const filtered = items.filter((item) => {
     if (onlyActive && !item.isActive) return false;
     if (!q) return true;
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.roomName.toLowerCase().includes(q) ||
-      item.entityId.toLowerCase().includes(q)
-    );
+    return item.name.toLowerCase().includes(q) || item.roomName.toLowerCase().includes(q) || item.entityId.toLowerCase().includes(q);
   });
 
   const byRoom = new Map<string, ProOverviewSensorItem[]>();
@@ -278,41 +286,24 @@ export function buildOverviewAlarmModel(params: {
   locks: ResolvedEntity[];
 }): ProOverviewAlarmModel {
   const { alarms, selectedAlarmEntityId, openDoors, openWindows, locks } = params;
-  const visibleAlarms = [...alarms]
-    .filter((a) => !a.disabled_by)
-    .sort((a, b) => Number(Boolean(a.hidden)) - Number(Boolean(b.hidden)));
+  const visibleAlarms = [...alarms].filter((a) => !a.disabled_by).sort((a, b) => Number(Boolean(a.hidden)) - Number(Boolean(b.hidden)));
 
   const panel =
-    (selectedAlarmEntityId
-      ? visibleAlarms.find((a) => a.entity_id === selectedAlarmEntityId)
-      : undefined) ||
-    visibleAlarms.find(
-      (a) =>
-        a.state &&
-        (a.state.startsWith('armed_') ||
-          ['triggered', 'arming', 'pending', 'disarming'].includes(a.state))
-    ) ||
+    (selectedAlarmEntityId ? visibleAlarms.find((a) => a.entity_id === selectedAlarmEntityId) : undefined) ||
+    visibleAlarms.find((a) => a.state && (a.state.startsWith('armed_') || ['triggered', 'arming', 'pending', 'disarming'].includes(a.state))) ||
     visibleAlarms[0] ||
     null;
 
   const state = panel?.state || 'disarmed';
-  const rawPanelName =
-    panel?.name ||
-    (typeof panel?.attributes?.friendly_name === 'string' ? panel.attributes.friendly_name : '') ||
-    'Security alarm';
+  const rawPanelName = panel?.name || (typeof panel?.attributes?.friendly_name === 'string' ? panel.attributes.friendly_name : '') || 'Security alarm';
   const panelName = rawPanelName.replace(/Homz/gi, 'HAD');
 
   const modes = panel ? alarmModes(panel) : [];
   const currentMode = modes.find((m) => m.id === state)?.id ?? null;
 
-  const changedBy =
-    typeof panel?.attributes?.changed_by === 'string' && panel.attributes.changed_by.trim()
-      ? panel.attributes.changed_by.trim()
-      : null;
+  const changedBy = typeof panel?.attributes?.changed_by === 'string' && panel.attributes.changed_by.trim() ? panel.attributes.changed_by.trim() : null;
 
-  const rawChangedAt =
-    panel?.last_changed ||
-    (typeof panel?.attributes?.last_changed === 'string' ? panel.attributes.last_changed : undefined);
+  const rawChangedAt = panel?.last_changed || (typeof panel?.attributes?.last_changed === 'string' ? panel.attributes.last_changed : undefined);
   let changedAgoText: string | null = null;
   if (rawChangedAt) {
     const mins = (Date.now() - Date.parse(rawChangedAt)) / 60000;
@@ -323,28 +314,8 @@ export function buildOverviewAlarmModel(params: {
 
   const mappedLocks: ProOverviewAlarmLockItem[] = locks
     .filter((l) => !l.disabled_by)
-    .map((entity) => {
-      const dev = deviceItem(entity, 'lock');
-      const name = entity.name || entity.attributes?.friendly_name || entity.entity_id;
-      const roomName = resolveControlRoomName(entity);
-      return {
-        entityId: entity.entity_id,
-        name,
-        shortName: deriveShortName(name, roomName),
-        roomName,
-        state: entity.state,
-        isUnlocked: dev.stateLabel === 'Unlocked',
-        isJammed: dev.stateLabel === 'Jammed',
-        isOffline: dev.stateLabel === 'Offline',
-        stateLabel: dev.stateLabel,
-        badgeTone: dev.tone
-      };
-    })
-    .sort(
-      (a, b) =>
-        Number(b.isJammed || b.isUnlocked) - Number(a.isJammed || a.isUnlocked) ||
-        a.name.localeCompare(b.name)
-    );
+    .map(buildLockItem)
+    .sort(sortLocks);
 
   const openings = [...openDoors, ...openWindows];
 
@@ -372,11 +343,7 @@ export function buildOverviewAlarmModel(params: {
   };
 }
 
-export function buildOverviewCamerasModel(params: {
-  cameras: ResolvedEntity[];
-  binarySensors: ResolvedEntity[];
-  selectedCameraId?: string | null;
-}): ProOverviewCamerasModel {
+export function buildOverviewCamerasModel(params: { cameras: ResolvedEntity[]; binarySensors: ResolvedEntity[]; selectedCameraId?: string | null }): ProOverviewCamerasModel {
   const { cameras, binarySensors, selectedCameraId } = params;
 
   const mapped: ProOverviewCameraItem[] = cameras.map((camera) => {
@@ -397,17 +364,9 @@ export function buildOverviewCamerasModel(params: {
     };
   });
 
-  const sorted = [...mapped].sort(
-    (a, b) =>
-      Number(b.hasMotion) - Number(a.hasMotion) ||
-      Number(a.isOffline) - Number(b.isOffline) ||
-      a.name.localeCompare(b.name)
-  );
+  const sorted = [...mapped].sort((a, b) => Number(b.hasMotion) - Number(a.hasMotion) || Number(a.isOffline) - Number(b.isOffline) || a.name.localeCompare(b.name));
 
-  const featuredCamera =
-    (selectedCameraId ? sorted.find((c) => c.entityId === selectedCameraId) : undefined) ||
-    sorted[0] ||
-    null;
+  const featuredCamera = (selectedCameraId ? sorted.find((c) => c.entityId === selectedCameraId) : undefined) || sorted[0] || null;
 
   const motionCount = sorted.filter((c) => c.hasMotion).length;
   const offlineCount = sorted.filter((c) => c.isOffline).length;

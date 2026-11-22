@@ -35,7 +35,6 @@ import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
 import { errorMessageField } from '@/lib/errors';
 import { cn } from '@/lib/utils';
 import type { ResolvedEntity } from '@/types';
-import { resolveAssetUrl } from '@/utils/assetUrl';
 import { timeAgo } from '../../lib/pageSentences';
 import { resolveAlarmTriggerDiagnostic } from '../../lib/securityCameras';
 import {
@@ -50,6 +49,7 @@ import {
   type Tone
 } from '../../lib/securityLogic';
 import { useMinuteTick } from '../../hooks/useMinuteTick';
+import { useHaPicture } from '../../widgets/shared/useHaPicture';
 import { entityName } from '../../hooks/useSecurityData';
 import { BorderBeam } from '../../ui/magicui/BorderBeam';
 import { AlarmCodeSheet } from './AlarmCodeSheet';
@@ -406,7 +406,6 @@ export function AlarmHero({
                 {(homePeople.length > 0 ? homePeople : people).slice(0, 4).map((p) => {
                   const pName = entityName(p);
                   const pic = p.attributes?.entity_picture as string | undefined;
-                  const src = pic ? resolveAssetUrl(pic, serverUrl || undefined) : undefined;
                   return (
                     <Avatar
                       key={p.entity_id}
@@ -416,7 +415,7 @@ export function AlarmHero({
                         p.state !== 'home' && 'opacity-55 grayscale'
                       )}
                     >
-                      {src ? <Avatar.Image src={src} alt={pName} /> : null}
+                      <PersonPhoto picture={pic} name={pName} serverUrl={serverUrl} />
                       <Avatar.Fallback>{initials(pName)}</Avatar.Fallback>
                     </Avatar>
                   );
@@ -591,4 +590,14 @@ export function AlarmHero({
       />
     </section>
   );
+}
+
+/**
+ * A person's photo, fetched with the session token (HA serves `/api/image/serve/...` to signed-in
+ * clients only). It used to be put straight into <img>, which asked the dashboard's own server
+ * (the server URL was passed as the cache-buster) and showed a broken image.
+ */
+function PersonPhoto({ picture, name, serverUrl }: { picture?: string; name: string; serverUrl?: string | null }) {
+  const src = useHaPicture(picture ?? null, serverUrl);
+  return src ? <Avatar.Image src={src} alt={name} /> : null;
 }

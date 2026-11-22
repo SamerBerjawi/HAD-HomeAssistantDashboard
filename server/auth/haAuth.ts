@@ -39,6 +39,13 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
   const TOKEN_CACHE_MAX_ENTRIES = 500;
   // SEC-010: a revoked HA token must stop working here quickly, so cache successes briefly
   const VALID_TOKEN_CACHE_MS = 60 * 1000;
+  // A token Home Assistant rejected (401/403) never becomes valid again, and every check of it
+  // makes HA log "Login attempt failed" for this server's IP. Remember the rejection for longer,
+  // so a client still holding an expired token can't cause one log entry every 30 seconds.
+  const REJECTED_TOKEN_CACHE_MS = 10 * 60 * 1000;
+  // Any other answer (a proxy's 502, HA starting up) may change soon.
+  const UNCERTAIN_TOKEN_CACHE_MS = 30 * 1000;
+  const invalidCacheMs = (status: number) => (status === 401 || status === 403 ? REJECTED_TOKEN_CACHE_MS : UNCERTAIN_TOKEN_CACHE_MS);
   // Entries are keyed by token, so without a bound every refreshed OAuth token stays forever
   setInterval(() => {
     const now = Date.now();
@@ -178,7 +185,7 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
 
       tokenValidationCache.set(cacheKey, {
         valid: isValid,
-        expiresAt: Date.now() + (isValid ? VALID_TOKEN_CACHE_MS : 30 * 1000)
+        expiresAt: Date.now() + (isValid ? VALID_TOKEN_CACHE_MS : invalidCacheMs(haRes.status))
       });
 
       if (!isValid) {
@@ -208,7 +215,7 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
           const isValid = retryRes.status === 200;
           tokenValidationCache.set(cacheKey, {
             valid: isValid,
-            expiresAt: Date.now() + (isValid ? VALID_TOKEN_CACHE_MS : 30 * 1000)
+            expiresAt: Date.now() + (isValid ? VALID_TOKEN_CACHE_MS : invalidCacheMs(retryRes.status))
           });
           return isValid;
         } catch {

@@ -63,3 +63,8 @@ if (typeof window !== 'undefined') {
 export function useSheetParam(): SheetStore {
   return useSheetStore();
 }
+
+/** Just the stable `open` action: no re-render when a sheet opens or closes. */
+export function useOpenSheet(): SheetStore['open'] {
+  return useSheetStore((s) => s.open);
+}

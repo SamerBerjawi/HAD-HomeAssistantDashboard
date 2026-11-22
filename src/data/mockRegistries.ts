@@ -1092,7 +1092,7 @@ export const MOCK_STATES: Record<string, HAState> = {
       temperature: 21.0,
       target_temp: 21.0,
       current_humidity: 48,
-      hvac_action: 'cooling',
+      hvac_action: 'cooling', hvac_modes: ['off', 'heat', 'cool', 'heat_cool', 'auto', 'fan_only'],
       fan_mode: 'auto',
       power: 320
     }
@@ -1271,7 +1271,7 @@ export const MOCK_STATES: Record<string, HAState> = {
       current_temperature: 20.5,
       temperature: 21.0,
       target_temp: 21.0,
-      hvac_action: 'idle',
+      hvac_action: 'idle', hvac_modes: ['off', 'cool', 'heat', 'dry', 'fan_only'],
       fan_mode: 'quiet',
       power: 180,
       current_humidity: 50

@@ -1,11 +1,11 @@
-import { useMemo, type CSSProperties, type ReactNode, type Ref } from 'react';
+import { useMemo, useRef, type CSSProperties, type ReactNode, type Ref } from 'react';
 import GridLayout, { useContainerWidth, type Layout, type LayoutItem } from 'react-grid-layout';
 import { gridBounds, minMaxSize, type LayoutConstraint } from 'react-grid-layout/core';
 import { GridBackground } from 'react-grid-layout/extras';
 import 'react-grid-layout/css/styles.css';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { cellsFor, readingOrder, resizeInFlow, sizeForCells, snapToAllowedSize, type LayoutPlacement, type WidgetSize } from '../../lib/overviewLayout';
-import { flowCompactor } from './flowCompactor';
+import { makeSettleCompactor } from './flowCompactor';
 
 export const ROW_PX = 148;
 export const GAP_PX = 12;
@@ -23,8 +23,9 @@ const rowsOf = (placements: LayoutPlacement[], cols: number) => placements.reduc
 
 /**
  * One section's grid (Overview rebuild, Phase 2). View mode: a plain CSS grid with fixed cells, so
- * nothing measures or moves. Edit mode: react-grid-layout with Flow, a drag handle, and a corner
- * (fine pointers only) that snaps to the sizes a widget allows.
+ * nothing measures or moves. Edit mode: react-grid-layout with free placement (a card stays in the
+ * cell it is dropped in, a row may be left part empty), a drag handle, and a corner (fine pointers
+ * only) that snaps to the sizes a widget allows.
  */
 export function SectionGrid(props: SectionGridProps) {
   const { placements, cols, isEditing, renderCard } = props;
@@ -52,6 +53,24 @@ export function SectionGrid(props: SectionGridProps) {
 function EditGrid({ placements, cols, allowedSizes, onChange, renderCard }: SectionGridProps) {
   const finePointer = useMediaQuery('(pointer: fine)');
   const { width, containerRef, mounted } = useContainerWidth({ measureBeforeMount: true });
+  // The card in hand and where every card was before the drag, read by the compactor.
+  const active = useRef<string | null>(null);
+  const base = useRef(new Map<string, { x: number; y: number }>());
+  base.current = new Map(placements.map((p) => [p.i, { x: p.x, y: p.y }]));
+  const compactor = useMemo(
+    () =>
+      makeSettleCompactor(
+        () => active.current,
+        () => base.current
+      ),
+    []
+  );
+  const grab = (_l: Layout, _old: LayoutItem | null, item: LayoutItem | null) => {
+    active.current = item?.i ?? null;
+  };
+  const release = () => {
+    active.current = null;
+  };
 
   const constraints = useMemo<LayoutConstraint[]>(
     () => [
@@ -118,7 +137,11 @@ function EditGrid({ placements, cols, allowedSizes, onChange, renderCard }: Sect
               handleComponent: (_axis, ref) => <span ref={ref as Ref<HTMLSpanElement>} className="pro-rgl-handle" aria-hidden="true" />
             }}
             constraints={constraints}
-            compactor={flowCompactor}
+            compactor={compactor}
+            onDragStart={grab}
+            onDragStop={release}
+            onResizeStart={grab}
+            onResizeStop={release}
             onLayoutChange={handleLayoutChange}
           >
             {placements.map((p) => (

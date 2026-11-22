@@ -13,11 +13,14 @@ import FullScreenLoadingPage from '@/components/ui/FullScreenLoadingPage';
 import ProShell from './components/ProShell';
 import ProOverview from './pages/ProOverview';
 import ProSecurity from './pages/ProSecurity';
+import ProRooms from './pages/ProRooms';
 import ProToaster from './components/toasts/ProToaster';
 
-// Overview rebuild in progress (docs/pro-ui/OVERVIEW_REBUILD.md): dev builds only, /overview?next.
-const ProOverviewNext = import.meta.env.DEV ? lazy(() => import('./pages/ProOverviewNext')) : null;
-const showNext = () => ProOverviewNext !== null && new URLSearchParams(window.location.search).has('next');
+// Widget Design Studio (docs/pro-ui/WIDGET_DESIGN.md): dev builds only, /overview?studio.
+const WidgetStudio = import.meta.env.DEV ? lazy(() => import('./studio/WidgetStudio')) : null;
+// Area Tiles Studio (docs/pro-ui/AREA_TILES.md): dev builds only, /?studio=areas.
+const AreaStudio = import.meta.env.DEV ? lazy(() => import('./areas/studio/AreaStudio')) : null;
+const showStudio = () => WidgetStudio !== null && new URLSearchParams(window.location.search).has('studio');
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
 const ProNotificationCenter = lazy(() => import('./components/notifications/ProNotificationCenter'));
@@ -59,6 +62,22 @@ export default function ProApp() {
     addToast: overlays.addToast
   });
 
+  // The studio renders fixtures only, outside the shell, so each preview can own its theme.
+  if (AreaStudio && new URLSearchParams(window.location.search).get('studio') === 'areas') {
+    return (
+      <Suspense fallback={null}>
+        <AreaStudio />
+      </Suspense>
+    );
+  }
+  if (WidgetStudio && showStudio()) {
+    return (
+      <Suspense fallback={null}>
+        <WidgetStudio />
+      </Suspense>
+    );
+  }
+
   if (startup.isAppLoading && snapshotStatus === 'pending') {
     return <div className="fixed inset-0 bg-background" aria-busy="true" />;
   }
@@ -85,21 +104,13 @@ export default function ProApp() {
 
   return (
     <>
-      <ProShell
-        page={activeTab}
-        darkMode={darkMode}
-        onNavigate={setActiveTab}
-        onToggleTheme={() => handleToggleDarkMode()}
-        onOpenNotifications={overlays.handleOpenNotifications}
-      >
-        {activeTab === 'overview' && ProOverviewNext && showNext() ? (
-          <Suspense fallback={null}>
-            <ProOverviewNext />
-          </Suspense>
-        ) : activeTab === 'overview' ? (
+      <ProShell page={activeTab} darkMode={darkMode} onNavigate={setActiveTab} onToggleTheme={() => handleToggleDarkMode()} onOpenNotifications={overlays.handleOpenNotifications}>
+        {activeTab === 'overview' ? (
           <ProOverview />
         ) : activeTab === 'security' ? (
           <ProSecurity />
+        ) : activeTab === 'rooms' ? (
+          <ProRooms />
         ) : (
           <div className="pro-surface p-8 flex flex-col gap-2">
             <p className="text-muted">This page has not been rebuilt in the pro design yet. Security and Overview are in progress.</p>

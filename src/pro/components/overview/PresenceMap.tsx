@@ -90,17 +90,25 @@ function buildMemberDivIcon(
 function MapViewportSync({
   center,
   zoom,
-  containerEl
+  containerEl,
+  bounds
 }: {
   center: [number, number];
   zoom: number;
   containerEl: HTMLDivElement | null;
+  /** When set (2+ points), frame them all instead of centring on one (sheet, owner 2026-11-20). */
+  bounds?: [number, number][];
 }) {
   const map = useMap();
+  const boundsKey = bounds && bounds.length > 1 ? JSON.stringify(bounds) : '';
 
   useEffect(() => {
+    if (bounds && bounds.length > 1) {
+      map.fitBounds(L.latLngBounds(bounds), { padding: [36, 36], maxZoom: zoom, animate: true });
+      return;
+    }
     map.setView(center, zoom, { animate: true });
-  }, [map, center[0], center[1], zoom]);
+  }, [map, center[0], center[1], zoom, boundsKey]);
 
   useEffect(() => {
     if (!containerEl) return;
@@ -132,6 +140,8 @@ export interface PresenceMapProps {
   variant: 'widget' | 'sheet';
   height?: number;
   zoom?: number;
+  /** Frame everyone with a location instead of centring on the active person. */
+  fitAll?: boolean;
   className?: string;
 }
 
@@ -142,6 +152,7 @@ export default function PresenceMap({
   variant,
   height = 176,
   zoom = 15,
+  fitAll = false,
   className
 }: PresenceMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -238,7 +249,12 @@ export default function PresenceMap({
             className={basemap.tileClassName}
           />
 
-          <MapViewportSync center={center} zoom={zoom} containerEl={containerRef.current} />
+          <MapViewportSync
+            center={center}
+            zoom={zoom}
+            containerEl={containerRef.current}
+            bounds={fitAll ? pinnedMembers.map((m) => [m.latitude!, m.longitude!] as [number, number]) : undefined}
+          />
 
           {pinnedMembers.map((member) => {
             const selected = member.entityId === activeMember?.entityId;

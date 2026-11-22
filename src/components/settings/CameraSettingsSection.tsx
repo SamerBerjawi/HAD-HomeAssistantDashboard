@@ -24,7 +24,7 @@ import {
 import { HAEntity, ToastNotification } from '../../types';
 import { useUserConfig } from '../../contexts/ConfigContext';
 import { CameraSourceConfig } from '../../types/userConfig';
-import { getAuthHeaders } from '../../services/configStorageService';
+import { getAuthHeadersAsync } from '../../services/configStorageService';
 import { fetchWithTimeout } from '../../lib/fetchWithTimeout';
 import CameraFeed from '../camera/CameraFeed';
 
@@ -61,7 +61,7 @@ export default function CameraSettingsSection({
     try {
       // The route requires a valid HA token (REL-007); an unauthorized response is not "offline"
       const res = await fetch('/api/cameras/status', {
-        headers: getAuthHeaders(),
+        headers: await getAuthHeadersAsync(),
         signal: AbortSignal.timeout(8000)
       });
       if (res.ok) {
@@ -170,7 +170,7 @@ export default function CameraSettingsSection({
     try {
       await fetchWithTimeout(`/api/cameras/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: getAuthHeaders()
+        headers: await getAuthHeadersAsync()
       });
     } catch (err) {
       console.warn('[CameraSettings] Could not notify backend of camera deletion:', err);

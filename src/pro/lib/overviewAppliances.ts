@@ -67,6 +67,8 @@ export interface ProVacuumItem {
   isReturning: boolean;
   isDocked: boolean;
   isError: boolean;
+  /** The vacuum's maps (camera / image entities, newest first as discovered); the first is the latest. */
+  maps?: { id: string; name: string; picture: string | null }[];
 }
 
 export interface ProVacuumsModel {
@@ -272,7 +274,8 @@ export function buildVacuumsOverviewModel(
             isPaused: state === 'paused',
             isReturning: state === 'returning',
             isDocked: state === 'docked',
-            isError: state === 'error'
+            isError: state === 'error',
+            maps: vac.availableMaps.map((mp) => ({ id: mp.id, name: mp.name, picture: mp.imageUrl ?? null }))
           };
         })
       : vacuumEntities.map((entity) => {

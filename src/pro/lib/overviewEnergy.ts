@@ -205,35 +205,74 @@ function resolvePeriodLabel(period: EnergyHistoryPeriod, dateLabel?: string): st
   return 'Today';
 }
 
+const SLOT_MS = 10 * 60 * 1000;
+const DAY_SLOTS = 144;
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * The "Power sources" series, drawn like Home Assistant's: everything that came in above zero
+ * (all the solar produced, battery discharge, grid import) and everything that went out below
+ * zero (battery charge, grid export); consumption is the line where the two balance. Total flows,
+ * not the "to home" share: clipping solar to what the home used dropped the solar that charged
+ * the battery or went to the grid, so the chart didn't add up.
+ *
+ * From 5-minute statistics: one point per 10 minutes over the whole local day of the latest data,
+ * midnight to midnight; slots after the latest data are `future` (the chart leaves them empty).
+ */
 function buildPowerSourcesSeries(p: {
   powerBuckets: TransformedEnergyBucket[];
   buckets: TransformedEnergyBucket[];
   period: EnergyHistoryPeriod;
 }): PowerSourcesDatum[] {
   const { powerBuckets, buckets, period } = p;
+  const flows = (b: TransformedEnergyBucket) => ({
+    solar: Math.max(0, cleanNum(b.solar)),
+    batteryDischarge: Math.max(0, cleanNum(b.batteryDischarge)),
+    gridImport: Math.max(0, cleanNum(b.gridImport)),
+    batteryCharge: Math.max(0, cleanNum(b.batteryCharge)),
+    gridExport: Math.max(0, cleanNum(b.gridExport)),
+    home: Math.max(0, cleanNum(b.homeConsumption))
+  });
+  type Flows = ReturnType<typeof flows>;
+  const KEYS = ['solar', 'batteryDischarge', 'gridImport', 'batteryCharge', 'gridExport', 'home'] as const;
+
   if (powerBuckets.length >= 2) {
-    const active = powerBuckets.filter(
-      (b) => cleanNum(b.homeConsumption) > 0.0005 || cleanNum(b.solar) > 0.0005
-    );
-    const pool = active.length >= 6 ? active.slice(-144) : powerBuckets.slice(-144);
-    // 5-minute buckets grouped in pairs -> 10-minute aggregation (~72 points / 12h).
-    const step = pool.length >= 4 ? 2 : 1;
-    const out: PowerSourcesDatum[] = [];
-    for (let i = 0; i < pool.length; i += step) {
-      const slice = pool.slice(i, i + step);
-      const avg = (fn: (b: TransformedEnergyBucket) => number) =>
-        round2((slice.reduce((sum, b) => sum + Math.max(0, fn(b)), 0) / slice.length) * 12);
-      out.push({
-        label: slice[0]?.label || `${i}`,
-        solar: avg((b) => cleanNum(b.solarToHome) || cleanNum(b.solar)),
-        batteryDischarge: avg((b) => cleanNum(b.batteryToHome) || cleanNum(b.batteryDischarge)),
-        gridImport: avg((b) => cleanNum(b.gridToHome) || cleanNum(b.gridImport)),
-        batteryCharge: avg((b) => cleanNum(b.batteryCharge)),
-        gridExport: avg((b) => cleanNum(b.gridExport)),
-        home: avg((b) => cleanNum(b.homeConsumption))
+    const isActive = (b: TransformedEnergyBucket) => KEYS.some((k) => flows(b)[k] > 0.0005);
+    let last: TransformedEnergyBucket | undefined;
+    for (let i = powerBuckets.length - 1; i >= 0 && !last; i--) if (isActive(powerBuckets[i]) && Number.isFinite(powerBuckets[i].startMs)) last = powerBuckets[i];
+    if (last) {
+      const day = new Date(last.startMs);
+      day.setHours(0, 0, 0, 0);
+      const d0 = day.getTime();
+      const lastSlot = Math.min(DAY_SLOTS - 1, Math.floor((last.startMs - d0) / SLOT_MS));
+      const sums = Array.from({ length: DAY_SLOTS }, () => ({ n: 0, solar: 0, batteryDischarge: 0, gridImport: 0, batteryCharge: 0, gridExport: 0, home: 0 }));
+      for (const b of powerBuckets) {
+        const i = Math.floor((b.startMs - d0) / SLOT_MS);
+        if (i < 0 || i > lastSlot || b.startMs > last.startMs) continue;
+        const f = flows(b);
+        const slot = sums[i];
+        slot.n += 1;
+        for (const k of KEYS) slot[k] += f[k];
+      }
+      return sums.map((slot, i) => {
+        const t = d0 + i * SLOT_MS;
+        const at = new Date(t);
+        const label = `${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
+        // kWh per 5-minute bucket → average kW over the slot.
+        const kw = (k: keyof Flows) => (slot.n > 0 ? round2((slot[k] / slot.n) * 12) : 0);
+        return {
+          label,
+          t,
+          ...(i > lastSlot ? { future: true } : {}),
+          solar: kw('solar'),
+          batteryDischarge: kw('batteryDischarge'),
+          gridImport: kw('gridImport'),
+          batteryCharge: kw('batteryCharge'),
+          gridExport: kw('gridExport'),
+          home: kw('home')
+        };
       });
     }
-    if (out.length >= 2) return out;
   }
 
   if (buckets.length >= 2) {
@@ -243,16 +282,15 @@ function buildPowerSourcesSeries(p: {
     const out: PowerSourcesDatum[] = [];
     for (let i = 0; i < buckets.length; i += step) {
       const slice = buckets.slice(i, i + step);
-      const avg = (fn: (b: TransformedEnergyBucket) => number) =>
-        round2((slice.reduce((sum, b) => sum + Math.max(0, fn(b)), 0) / slice.length) * scale);
+      const avg = (k: keyof Flows) => round2((slice.reduce((sum, b) => sum + flows(b)[k], 0) / slice.length) * scale);
       out.push({
         label: slice[0]?.label || `${i}`,
-        solar: avg((b) => cleanNum(b.solarToHome) || cleanNum(b.solar)),
-        batteryDischarge: avg((b) => cleanNum(b.batteryToHome) || cleanNum(b.batteryDischarge)),
-        gridImport: avg((b) => cleanNum(b.gridToHome) || cleanNum(b.gridImport)),
-        batteryCharge: avg((b) => cleanNum(b.batteryCharge)),
-        gridExport: avg((b) => cleanNum(b.gridExport)),
-        home: avg((b) => cleanNum(b.homeConsumption))
+        solar: avg('solar'),
+        batteryDischarge: avg('batteryDischarge'),
+        gridImport: avg('gridImport'),
+        batteryCharge: avg('batteryCharge'),
+        gridExport: avg('gridExport'),
+        home: avg('home')
       });
     }
     return out;
@@ -447,7 +485,10 @@ export function buildOverviewEnergyModel(input: OverviewEnergyInput): ProOvervie
   const batteryDischargeKwh = Math.max(0, cleanNum(totals.batteryDischarge));
   const solarToHomeKwh = Math.max(0, cleanNum(totals.solarToHome));
   const solarToBatteryKwh = Math.max(0, cleanNum(totals.solarToBattery));
-  const solarToGridKwh = Math.max(0, cleanNum(totals.solarToGrid) || gridExportKwh);
+  const batteryToGridKwh = Math.max(0, cleanNum(totals.batteryToGrid));
+  const gridToBatteryKwh = Math.max(0, cleanNum(totals.gridToBattery));
+  // Older totals without the split: count all export as solar (unless the battery's share is known).
+  const solarToGridKwh = Math.max(0, cleanNum(totals.solarToGrid) || (batteryToGridKwh > 0 ? 0 : gridExportKwh));
   const batteryToHomeKwh = Math.max(0, cleanNum(totals.batteryToHome));
   const gridToHomeKwh = Math.max(0, cleanNum(totals.gridToHome) || Math.max(0, homeKwh - solarToHomeKwh - batteryToHomeKwh));
   const solarSelfUseKwh = solarToHomeKwh + solarToBatteryKwh;
@@ -530,6 +571,8 @@ export function buildOverviewEnergyModel(input: OverviewEnergyInput): ProOvervie
     solarToGridKwh,
     gridToHomeKwh,
     batteryToHomeKwh,
+    gridToBatteryKwh,
+    batteryToGridKwh,
     devices: (input.devices || []).map((d) => ({
       id: d.statId,
       name: d.name,
@@ -632,9 +675,10 @@ export function buildOverviewEnergyModel(input: OverviewEnergyInput): ProOvervie
       includeAreaHierarchy: false,
       maxDevices: 4
     }),
+    // HA shows every device; 12 keeps the card readable, the rest join "Other devices".
     energyFlowFull: buildEnergySankeyGraph(sankeyInput, {
       includeAreaHierarchy: true,
-      maxDevices: 6
+      maxDevices: 12
     }),
     topConsumers,
     untrackedKwh: Math.max(0, cleanNum(input.untrackedKwh)),

@@ -15,6 +15,7 @@ import {
 } from '@hugeicons/core-free-icons';
 import { normalizeIntegrationDomain } from '@/components/notifications/IntegrationIcon';
 import { cn } from '@/lib/utils';
+import { useHaPicture } from '../../widgets/shared/useHaPicture';
 import type { HANotificationItem } from '@/types/notifications';
 import { notificationTone, type NotificationTone, type StackKind } from '../../lib/notificationLogic';
 
@@ -54,12 +55,29 @@ export function categoryIcon(item: Pick<HANotificationItem, 'category' | 'sensor
   }
 }
 
-function imageUrl(item: HANotificationItem, serverUrl?: string): string | null {
-  const pic = item.image;
-  if (pic) {
-    if (/^(https?:|data:|blob:)/.test(pic)) return pic;
-    if (pic.startsWith('/') && serverUrl) return `${serverUrl.replace(/\/+$/, '')}${pic}`;
+const sameHost = (url: string, base?: string) => {
+  if (!base) return false;
+  try {
+    return new URL(url).host === new URL(base.replace(/^ws/i, 'http')).host;
+  } catch {
+    return false;
   }
+};
+
+/**
+ * A Home Assistant path (a camera snapshot, a person's photo) in a notification. It is fetched
+ * with the token (useHaPicture): put straight into <img>, the browser would ask HA without it
+ * and HA would log a "Login attempt failed".
+ */
+function haImagePath(item: HANotificationItem, serverUrl?: string): string | null {
+  const pic = item.image;
+  if (!pic) return null;
+  return pic.startsWith('/') || sameHost(pic, serverUrl) ? pic : null;
+}
+
+function imageUrl(item: HANotificationItem): string | null {
+  const pic = item.image;
+  if (pic && /^(https?:|data:|blob:)/.test(pic)) return pic;
   // Brand icons only where they say something: updates and repairs come from an integration.
   if (item.category === 'update' || item.category === 'repair') {
     const d = normalizeIntegrationDomain(item.domain, undefined, item.title);
@@ -70,7 +88,9 @@ function imageUrl(item: HANotificationItem, serverUrl?: string): string | null {
 
 /** Integration brand icon when known, else a Hugeicons category icon in a tone tile. */
 export function NotificationIcon({ item, serverUrl, className }: { item: HANotificationItem; serverUrl?: string; className?: string }) {
-  const url = imageUrl(item, serverUrl);
+  const haPath = haImagePath(item, serverUrl);
+  const haUrl = useHaPicture(haPath, serverUrl);
+  const url = haPath ? haUrl || null : imageUrl(item);
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [url]);
   const tone = notificationTone(item);

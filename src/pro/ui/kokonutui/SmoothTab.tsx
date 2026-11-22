@@ -48,6 +48,11 @@ export interface SmoothTabProps {
   label?: string;
   /** When true, inactive tabs collapse to icon-only below md (768 px). */
   mobileIconOnlyInactive?: boolean;
+  /**
+   * 'selected-mobile' (default): the badge shows on the selected tab below md only.
+   * 'always': every tab shows its badge at every width (Overview tab counts, Phase 4).
+   */
+  badges?: 'selected-mobile' | 'always';
 }
 
 const RUBBER_BAND = 0.35;
@@ -107,20 +112,22 @@ function renderTabInner(
   item: SwipeTabItem,
   isSelected: boolean,
   mobileIconOnlyInactive: boolean,
-  inOverlay: boolean
+  inOverlay: boolean,
+  badgesAlways = false
 ) {
   const showMobileLabel = !mobileIconOnlyInactive || isSelected;
   return (
     <>
       {item.icon ? <HugeiconsIcon icon={item.icon} size={16} className="shrink-0" /> : null}
       <span className={cn('whitespace-nowrap', !showMobileLabel && 'hidden md:inline')}>{item.title}</span>
-      {isSelected && item.badge ? (
+      {(badgesAlways || isSelected) && item.badge ? (
         <Badge
           size="sm"
           variant="soft"
           color={inOverlay ? 'default' : (item.badgeTone ?? 'default')}
           className={cn(
-            'static transform-none! min-h-4.5 min-w-0 rounded-full border-0 px-1.5 py-0 text-[10px] font-semibold md:hidden',
+            'static transform-none! min-h-4.5 min-w-0 rounded-full border-0 px-1.5 py-0 text-[10px] font-semibold tabular-nums',
+            !badgesAlways && 'md:hidden',
             inOverlay && 'bg-black/20 text-[var(--accent-foreground)]'
           )}
         >
@@ -140,8 +147,10 @@ export function SmoothTab({
   activeColor = 'pro-accent',
   activeTextColor = 'text-[var(--accent-foreground)]',
   label = 'Sections',
-  mobileIconOnlyInactive = false
+  mobileIconOnlyInactive = false,
+  badges = 'selected-mobile'
 }: SmoothTabProps) {
+  const badgesAlways = badges === 'always';
   const count = items.length;
   const hasPanels = items.some((item) => item.content !== undefined);
   const indexOf = (id: string | undefined) => Math.max(items.findIndex((item) => item.id === id), 0);
@@ -405,7 +414,7 @@ export function SmoothTab({
                     showExpanded ? 'px-3!' : 'px-2.5! md:px-3!'
                   )}
                 >
-                  {renderTabInner(item, isSelected, mobileIconOnlyInactive, false)}
+                  {renderTabInner(item, isSelected, mobileIconOnlyInactive, false, badgesAlways)}
                 </Button>
               </div>
             );
@@ -429,7 +438,7 @@ export function SmoothTab({
                     activeTextColor
                   )}
                 >
-                  {renderTabInner(item, isSelected, mobileIconOnlyInactive, true)}
+                  {renderTabInner(item, isSelected, mobileIconOnlyInactive, true, badgesAlways)}
                 </span>
               );
             })}

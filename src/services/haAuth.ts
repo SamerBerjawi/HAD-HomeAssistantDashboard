@@ -433,3 +433,56 @@ export function getActiveHAToken(): string | null {
   }
   return null;
 }
+
+/** Refresh an OAuth access token this long before it runs out (HA issues them for 30 minutes). */
+const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
+
+function isOAuthTokens(tokens: HAAuthTokens): boolean {
+  return tokens.auth_type === 'oauth' || (!tokens.auth_type && Boolean(tokens.refresh_token));
+}
+
+/** True when an OAuth access token's expiry time is known and is within `marginMs` of now. */
+function isAccessTokenExpired(tokens: HAAuthTokens, marginMs: number): boolean {
+  return isOAuthTokens(tokens) && typeof tokens.expires_at === 'number' && tokens.expires_at > 0 && Date.now() >= tokens.expires_at - marginMs;
+}
+
+/**
+ * The stored token only while Home Assistant will still accept it. HA answers an expired access
+ * token with 401 and records it as "Login attempt failed" (with the sender's IP), so an expired
+ * OAuth token is never returned here: the caller skips its request, or uses `getFreshHAToken`.
+ * Long-lived access tokens don't expire.
+ */
+export function getUsableHAToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const stored = getStoredHAAuth();
+  if (stored?.access_token) {
+    return isAccessTokenExpired(stored, 0) ? null : stored.access_token;
+  }
+  return getLegacyHaToken() || null;
+}
+
+/**
+ * A token Home Assistant will accept: refreshes the OAuth access token first when it has expired
+ * or is about to (a wall tablet that slept past its refresh timer wakes up with an expired one).
+ * Returns null rather than an expired token when the refresh fails.
+ */
+export async function getFreshHAToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  const stored = getStoredHAAuth();
+  if (stored?.access_token && stored.refresh_token && isAccessTokenExpired(stored, TOKEN_REFRESH_MARGIN_MS)) {
+    const refreshed = await refreshHAOAuthToken(stored);
+    if (refreshed?.access_token) return refreshed.access_token;
+  }
+  return getUsableHAToken();
+}
+
+/**
+ * For the WebSocket's auth reply: when `token` is the stored OAuth token and it has expired (a
+ * tablet waking after its refresh was due, a reconnect much later), the refreshed one. HA records
+ * an expired token as "Login attempt failed", even though auth_invalid recovery would then work.
+ * Any other token (a long-lived one, one passed in directly) comes back as it is.
+ */
+export async function freshTokenFor(token: string): Promise<string> {
+  if (!token || getStoredHAAuth()?.access_token !== token) return token;
+  return (await getFreshHAToken()) || token;
+}

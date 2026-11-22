@@ -1,6 +1,8 @@
 # Pro UI handoff: brief for the next agent
 
-Written 2026-11-18 at the end of the Security page work. Paste the prompt below into the next
+Written 2026-11-18 at the end of the Security page work. Updated 2026-11-20: the Overview is
+rebuilt and live at `/overview` (DESIGN.md 7.6, `docs/pro-ui/OVERVIEW_REBUILD.md`, widget looks
+in `docs/pro-ui/WIDGET_DESIGN.md`). Paste the prompt below into the next
 agent (Claude Code, Gemini on Antigravity, ...). Everything after the prompt is reference it can
 read from this file.
 
@@ -26,8 +28,10 @@ read from this file.
 > copy on the owner's behalf; when the owner says "your call", decide, and mark it as the agent's
 > call in DESIGN.md. Commit and push only when the owner asks.
 >
-> Your next job is roadmap item 6: the **Overview** page, then Rooms, then Energy. Start with
-> Overview: do not write code yet. First study the classic Overview (`src/components/overview/`,
+> The **Overview** is done (rebuilt 2026-11-20; remaining: rebuild Phase 6 verification on a
+> real touch device and live HA, and the details sheets redesign in WIDGET_DESIGN.md). Your next
+> job is roadmap item 6b, **Rooms**, then Energy. (Original Overview brief, kept for reference:)
+> Start with Overview: do not write code yet. First study the classic Overview (`src/components/overview/`,
 > tiles in `src/components/overview/tiles/`, state in `useOverviewHeaderState.ts`) and the data
 > hooks it uses, then come back to the owner with a proposed **section list and layout for the pro
 > Overview** (phone and desktop) as your first question, the way the Security page was decided
@@ -74,6 +78,7 @@ read from this file.
 | Page ⋮ menu | `useProPageHeader({ menu })` from `src/pro/components/pageHeaderContext.ts`. |
 | Header sentence | Already built for all 13 pages: `src/pro/lib/pageSentences.ts` + `PageSentence.tsx`. |
 | Bottom sheet on phone / modal on desktop | `src/pro/components/ProSheet.tsx`. |
+| Widget details sheet | `src/pro/widgets/shared/sheet/SheetKit.tsx` (`DetailSheet`, `SheetHero`, `SheetSection`/`SheetRow`, `SheetFilter`, `SheetSearch`, `SheetSlider`, `SheetTiles`); list helpers in `src/pro/lib/sheetLists.ts`; `RecentEvents` (logbook, 24 h) next to it. Slide to confirm: `widgets/shared/useSlideToConfirm.ts`. Rules: WIDGET_DESIGN.md §8. |
 | Bento / masonry grid | `src/pro/ui/magicui/BentoGrid.tsx` (`BentoGrid`, `BentoCard`; cards measure their height; `packOrder` in `securityLogic.ts`). |
 | Status pill / device row | `StatusChip`, `DeviceRow`, `LockAction` in `src/pro/components/security/DeviceRow.tsx`; tones from `deviceItem()` in `src/pro/lib/securityLogic.ts`. |
 | Hold-to-confirm | `src/pro/components/security/HoldToConfirmButton.tsx`. |
@@ -122,12 +127,14 @@ If a piece becomes shared by a second page, move it out of `components/security/
 
 ## 5. What to build next
 
-1. **Overview (roadmap 6a).** First decision: the section list and layout. Inputs to study: the
+1. **Overview (roadmap 6a).** Done: rebuilt and live (2026-11-20). Details sheets redesigned on a shared kit
+   (2026-11-20, WIDGET_DESIGN.md §8; owner-reviewed the same day, changes built).
+   Left: Phase 6 verification (OVERVIEW_REBUILD.md). Original note: first decision: the section list and layout. Inputs to study: the
    classic tiles (alarm, cameras, doors, windows, locks, motion, leak, smoke, lights, fans,
    switches, media, vacuums, users/presence, weather + hourly, energy usage, power flow, solar).
    The header already shows the greeting and a weather + presence sentence, so don't repeat that
    in the body. Expect to reuse the Security pieces for any security summary.
-2. **Rooms (6b).** Room cards, then the room detail view. Room detail is the first page with a
+2. **Rooms (6b).** Rooms page built: the owner picked B · Gallery (2026-11-20); see [ROOMS.md](ROOMS.md). Next: the room detail view (concepts first). Room detail is the first page with a
    sub-view, which triggers the planned **breadcrumbs decision** (DESIGN.md 7.4: library, HeroUI
    `Breadcrumbs` is free; placement; back affordance on phones).
 3. **Energy (6c).** Charts and KPIs from bklit UI (check licence per chart), data from
