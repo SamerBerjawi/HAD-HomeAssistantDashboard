@@ -1,60 +1,74 @@
 # Pro UI handoff: brief for the next agent
 
-Written 2026-11-18 at the end of the Security page work. Updated 2026-11-20: the Overview is
-rebuilt and live at `/overview` (DESIGN.md 7.6, `docs/pro-ui/OVERVIEW_REBUILD.md`, widget looks
-in `docs/pro-ui/WIDGET_DESIGN.md`). Paste the prompt below into the next
-agent (Claude Code, Gemini on Antigravity, ...). Everything after the prompt is reference it can
-read from this file.
+Written 2026-11-18 at the end of the Security page work. Updated 2026-11-20 (Overview rebuilt)
+and 2026-11-23 (Rooms page, room/area page and the studio pattern; Energy next). Paste the prompt
+below into the next agent (Claude Code, Gemini on Antigravity, ...). Everything after the prompt
+is reference it can read from this file.
 
 ---
 
 ## Prompt to paste
 
-> You are continuing the **pro UI redesign** of HAD – Home Assistant Dashboard (always "HAD" /
-> "Home Assistant Dashboard", never "HOMZ"). The repo is checked out on branch `feature/pro-ui`,
-> which has an open pull request
-> (https://github.com/SamerBerjawi/HAD-HomeAssistantDashboard/pull/21) against `main`.
->
-> Before anything else, read in this order: `docs/pro-ui/DESIGN.md` (single source of truth, read
-> all of it), `docs/pro-ui/HANDOFF.md` (this brief: state, patterns, gotchas, next steps),
-> `CLAUDE.md`, `docs/AI_RULES.md`, `.agents/rules/pro_ui.md`.
->
-> How we work (non-negotiable, from DESIGN.md section 1): one component at a time. For each
-> component: research the options in the library roster (HeroUI v3 free core first, Hugeicons,
-> bklit UI, BoardUI free, Magic UI, React Bits, Untitled UI free; never Origin UI, never HeroUI
-> Pro), present 2–4 options to the owner with your recommendation first and the trade-offs, wait
-> for the answer, record it in DESIGN.md (component spec + decision log) **before** coding, build
-> only that, verify, then stop and report. Never choose a library, layout, colour, animation or
-> copy on the owner's behalf; when the owner says "your call", decide, and mark it as the agent's
-> call in DESIGN.md. Commit and push only when the owner asks.
->
-> The **Overview** is done (rebuilt 2026-11-20; remaining: rebuild Phase 6 verification on a
-> real touch device and live HA, and the details sheets redesign in WIDGET_DESIGN.md). Your next
-> job is roadmap item 6b, **Rooms**, then Energy. (Original Overview brief, kept for reference:)
-> Start with Overview: do not write code yet. First study the classic Overview (`src/components/overview/`,
-> tiles in `src/components/overview/tiles/`, state in `useOverviewHeaderState.ts`) and the data
-> hooks it uses, then come back to the owner with a proposed **section list and layout for the pro
-> Overview** (phone and desktop) as your first question, the way the Security page was decided
-> (see DESIGN.md 7.5 for the pattern). After the structure is agreed, decide each section's look
-> and components one by one.
->
-> Verification for every change: `npm run lint`, `npm test`, `npm run build:pro`, then check in a
-> browser at 375 px, ~768 px and ≥1280 px, light and dark, with demo data and, when the owner has
-> connected it, their live Home Assistant. Report plainly what you could not verify.
+```text
+You are continuing the PRO UI redesign of HAD – Home Assistant Dashboard (always "HAD" /
+"Home Assistant Dashboard", never "HOMZ"). Repo checked out on branch `feature/pro-ui`
+(open PR #21 against `main`). The classic UI (src/App.tsx, src/components/**) must stay
+untouched; all pro work lives in `src/pro/`.
+
+Read first, in this order: `docs/pro-ui/DESIGN.md` (single source of truth, read all of it),
+`docs/pro-ui/HANDOFF.md` (this brief: state, reusable pieces, studio pattern, gotchas, next
+steps), `docs/pro-ui/ROOMS.md`, `docs/pro-ui/AREA_TILES.md`, `docs/pro-ui/WIDGET_DESIGN.md`,
+`CLAUDE.md`, `docs/AI_RULES.md`, `.agents/rules/pro_ui.md`.
+
+How we work (non-negotiable, DESIGN.md §1): one component at a time. Research the options in
+the library roster (HeroUI v3 free core first, Hugeicons only, bklit for charts/KPIs (check per
+chart that it is free), BoardUI free, Magic UI, React Bits, Untitled UI free, Kokonut UI; never
+Origin UI, never HeroUI Pro), present 2–4 options to the owner with your recommendation first and
+the trade-offs, wait for the answer, record it in DESIGN.md (component spec + decision log)
+BEFORE coding, build only that, verify, then stop and report. Never choose a library, layout,
+colour, animation or copy on the owner's behalf; when the owner says "your call", decide and mark
+it as the agent's call in DESIGN.md. Never run Prettier. Commit only when the owner asks; push only
+when explicitly asked.
+
+Looks are decided in dev-only design studios, not in production. Follow the studio pattern in
+HANDOFF.md §5 for every new page (the Rooms Studio, `/?studio=rooms`, is the template).
+
+Your next job is roadmap item 6c, Energy (accent already set: orange hue 52, dark foreground).
+Do not write code yet. Study the classic Energy view and its data (`useEnergyData`,
+`useEnergyComparison`, `src/services/energy/`, `/api/statistics/*`) and the Overview's energy
+widgets (`src/pro/widgets/energy/`), then propose a section list and layout (phone and desktop)
+to the owner as your first question. Once agreed, build an Energy Studio (`/?studio=energy`) with
+concepts per section and decide each one with the owner. After Energy, the remaining pages one at
+a time in the owner's order.
+
+Verification for every change: `npm run lint`, `npm test`, `npm run build:pro` (plus
+`npm run check:bundle` if the bundle could grow), then check in a browser (`npm run dev:pro`,
+port 3000) at 375 px, ~768 px and ≥1280 px, light and dark, with demo data and, when the owner
+has connected it, their live Home Assistant. Report plainly what you could not verify.
+```
 
 ---
 
-## 1. Where things stand
+## 1. Where things stand (2026-11-23)
 
-- Branch `feature/pro-ui`, PR #21 against `main`, Auto-fix watching CI. Latest commits:
-  - `2c15dbe` shell (sign-in, sidebar, mobile nav, page headers, DESIGN.md).
-  - `34eb944` Security page redesign + owner's review rounds.
-  - `8b7d799` CI fix: `@vitejs/plugin-react` and `@tailwindcss/vite` moved to devDependencies
-    (production `npm audit` gate, picomatch advisory with no patch). Confirm CI went green.
-- Built (DESIGN.md sections 7.1–7.5): sign-in, sidebar, mobile nav, page headers with a live
-  sentence on all 13 pages, Security page.
-- Every page except Security renders a placeholder in `src/pro/ProApp.tsx` (`activeTab ===
-  'security' ? <ProSecurity /> : placeholder`). Add new pages there.
+- Branch `feature/pro-ui`, PR #21 against `main`. Latest commit `901c562` (Rooms page + Rooms
+  Studio). `scratch/room-page-mockups/` is untracked on purpose (old A–D room mockups kept
+  outside the build): do not commit or delete it.
+- Built: sign-in, sidebar, mobile nav, page headers with a live sentence on every page, Security
+  (7.5), Overview (7.6; widget registry `src/pro/widgets/`, chosen looks in
+  `widgets/designRegistry.ts`, details sheets on a shared kit), notification center (7.7), toasts
+  and emergency alert (7.8).
+- **Rooms page** (ROOMS.md §1–3, §5): floor-grouped explorer with Design D "Soft blend" tiles:
+  `src/pro/pages/rooms/RoomsExplorer.tsx`, `RoomTileBlend.tsx`, `RoomQuickActions.tsx`,
+  `tileParts.ts`, pure sizing/packing in `src/pro/lib/roomTiles.ts`, styles `.pro-rb*` in
+  `pro.css`. Per-room sizes and options in Customize (`preferences.proRooms`).
+- **Room / area page** (AREA_TILES.md): the B + C page (Rail with All / Now views) is in
+  production at `src/pro/pages/room/RoomPage.tsx`. HA → tile mappers in `src/pro/areas/ha/`,
+  actions in `haTileActions.ts` + `useTileActions.ts`, chosen tile per kind in
+  `src/pro/areas/tiles/chosenTiles.tsx`, saved layouts in `preferences.proAreaLayouts`, page kit
+  shared with the studio in `src/pro/areas/page/`.
+- Not started: Energy (6c) and the remaining pages (roadmap 7). Pages without a pro version still
+  render a placeholder in `src/pro/ProApp.tsx`; add new pages there.
 - Run it: `npm run dev:pro` (port 3000, `.claude/launch.json` config "dev-pro"). Demo mode works
   without Home Assistant; the owner sometimes connects their live instance in the same browser.
 
@@ -125,26 +139,52 @@ If a piece becomes shared by a second page, move it out of `components/security/
 - bklit UI: the chart section is marked "Included with Pro" on their site. Verify per component
   which charts are free before proposing any for Energy.
 
-## 5. What to build next
+## 5. Design studios (use the same pattern for every new page)
 
-1. **Overview (roadmap 6a).** Done: rebuilt and live (2026-11-20). Details sheets redesigned on a shared kit
-   (2026-11-20, WIDGET_DESIGN.md §8; owner-reviewed the same day, changes built).
-   Left: Phase 6 verification (OVERVIEW_REBUILD.md). Original note: first decision: the section list and layout. Inputs to study: the
-   classic tiles (alarm, cameras, doors, windows, locks, motion, leak, smoke, lights, fans,
-   switches, media, vacuums, users/presence, weather + hourly, energy usage, power flow, solar).
-   The header already shows the greeting and a weather + presence sentence, so don't repeat that
-   in the body. Expect to reuse the Security pieces for any security summary.
-2. **Rooms (6b).** Rooms page built: the owner picked B · Gallery (2026-11-20); see [ROOMS.md](ROOMS.md). Next: the room detail view (concepts first). Room detail is the first page with a
-   sub-view, which triggers the planned **breadcrumbs decision** (DESIGN.md 7.4: library, HeroUI
-   `Breadcrumbs` is free; placement; back affordance on phones).
-3. **Energy (6c).** Charts and KPIs from bklit UI (check licence per chart), data from
-   `useEnergyData`, `useEnergyComparison`, `services/energy/`.
-4. Then the remaining pages (roadmap 7), one at a time, in the order the owner chooses.
+Looks are decided in dev-only studios, on sample data, before production changes. Existing ones:
 
-For each page: pick its accent hue with the owner (pro.css `data-page`), decide sections, then
-each section's components, then build.
+| Studio | Route | Code |
+|---|---|---|
+| Widget Design Studio | `/overview?studio` | `src/pro/studio/WidgetStudio.tsx`, concepts in `src/pro/widgets/<id>/concepts/`, picks in `widgets/designRegistry.ts` (WIDGET_DESIGN.md §4) |
+| Area Tiles Studio | `/?studio=areas` | `src/pro/areas/studio/AreaStudio.tsx`, one catalog per batch in `areas/studio/catalog/`, simulated Area page, picks via `useAreaPicks.ts` (AREA_TILES.md) |
+| Rooms Studio (the template) | `/?studio=rooms` | `src/pro/pages/rooms/studio/RoomsStudio.tsx`, sample home `studioRooms.ts` (ROOMS.md §5) |
 
-## 6. Open follow-ups (not blocking, tell the owner when relevant)
+The pattern for a new page (for example `/?studio=energy`):
+
+- Lazy loaded behind `import.meta.env.DEV` in `src/pro/ProApp.tsx` (next to the `RoomsStudio` and
+  `AreaStudio` lines), rendered outside the shell, left out of the production bundle (confirm
+  with `npm run build:pro`).
+- A realistic sample dataset with named states (busy, quiet, edge cases). No calls to Home
+  Assistant: actions go through a stand-in service (like `RoomServiceContext` +
+  `applyStudioService`) and change local state only.
+- Concepts A, B, C (and D when the owner mixes) side by side on the same data, with a
+  light / dark / both switch local to the studio (never the shared theme setting) and page widths
+  for 375, 768, 1024, 1440 and 1920 px screens.
+- Concepts share their "what it says" helpers (like `tileParts.ts`) so they differ only in
+  composition; styles namespaced per concept in `pro.css`.
+- "Approve" stores the pick in localStorage (`had.pro.<page>Studio.pick`) with notes and a
+  "Copy for the chat" button. Production changes only after the owner approves; the decision goes
+  into DESIGN.md §9 and the page's own doc (`docs/pro-ui/<PAGE>.md`, structured like ROOMS.md).
+- Keep the studio after the page ships so concepts can be revisited.
+
+## 6. What to build next
+
+1. **Energy (6c).** First question to the owner: the section list and layout (phone and
+   desktop). Inputs: the classic Energy view, `useEnergyData`, `useEnergyComparison`,
+   `src/services/energy/`, `/api/statistics/*`, and the Overview's energy widgets
+   (`src/pro/widgets/energy/`: Energy now, Energy today, Energy flow). Charts and KPIs from bklit
+   UI (check the licence per chart). Then an Energy Studio and section-by-section decisions.
+2. **Remaining pages (roadmap 7)**, one at a time, in the order the owner chooses. For each: pick
+   its accent hue with the owner (`data-page` in `pro.css`), decide sections, then each section's
+   components through a studio, then build.
+3. **Open room-page items** (raise when relevant, ask before starting): history for trends,
+   events and open spells (the Door & window tile says "Not opened in 24 h" until then); the
+   Rooms page header still shows above the room page; the breadcrumbs decision (DESIGN.md 7.4) is
+   due now that Rooms has a sub-view.
+4. Overview leftovers: rebuild Phase 6 verification on a real touch device and live HA
+   (OVERVIEW_REBUILD.md).
+
+## 7. Open follow-ups (not blocking, tell the owner when relevant)
 
 - Not yet verified against a real setup: live WebRTC streaming via go2rtc (needs the Docker/prod
   build), native full screen in Chrome/Safari and the iPhone system player, the PIN sheet with an
@@ -154,9 +194,11 @@ each section's components, then build.
   classification affects classic too: ask first.
 - DESIGN.md section 1 says "Commit only when the owner asks. Never push." The owner has since
   asked for pushes explicitly; push only when asked, never on your own.
+- Never run Prettier: it reformats files into a foreign style.
+- Not checked on the room page: a real car in an area (the demo has none), `test:integration`.
 - Keep the "Last updated" line at the top of DESIGN.md current.
 
-## 7. Definition of done for a component
+## 8. Definition of done for a component
 
 - Decision recorded (spec section + decision log), agent's own calls marked as such.
 - Lint, tests (add unit tests for any new pure logic in `src/pro/lib/`), `build:pro` green.
