@@ -143,11 +143,17 @@ export function AreaChart({
       .y1((p) => p.y)
       .curve(curveMonotoneX);
 
-    const ticksCount = Math.min(data.length, innerWidth < 260 ? 4 : 6);
+    const ticksCount = Math.min(data.length, Math.max(2, Math.min(6, Math.floor(innerWidth / 64))));
     const tickIndices = new Set(evenlySpacedLabelIndices(data.length, ticksCount));
-    const computedTicks = ptCoords
+    const rawTicks = ptCoords
       .filter((p) => tickIndices.has(p.index))
       .map((p) => ({ index: p.index, x: p.x, label: p.datum.label }));
+    const computedTicks = rawTicks.filter((t, i) => {
+      if (i === 0 || i === rawTicks.length - 1) return true;
+      const prevX = rawTicks[i - 1].x;
+      const lastX = rawTicks[rawTicks.length - 1].x;
+      return t.x - prevX >= 48 && lastX - t.x >= 48;
+    });
 
     const labels = showValueLabels
       ? placeValueLabels(

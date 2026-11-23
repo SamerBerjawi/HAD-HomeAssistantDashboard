@@ -34,6 +34,15 @@
   --pro-c: 0.17;
   --pro-l: 0.72;
   --accent-foreground: oklch(0.21 0.006 285.89);
+  --accent-soft: color-mix(in oklab, var(--accent) 16%, transparent);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 22%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--accent) 70%, black);
+}
+.dark .pro[data-page='energy'],
+.pro.dark[data-page='energy'] {
+  --accent-soft: color-mix(in oklab, var(--accent) 22%, transparent);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 28%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--accent) 78%, white);
 }
 .pro[data-page='security'] { --pro-h: 300; --pro-c: 0.2; }
 
@@ -131,6 +140,7 @@
   --energy-grid: oklch(0.588 0.158 241.97);
   --energy-export: oklch(0.511 0.262 276.97);
   --energy-gas: oklch(0.558 0.252 302.32);
+  --energy-water: oklch(0.56 0.14 218);
   --energy-untracked: oklch(0.554 0.046 257.42);
 }
 .dark .pro,
@@ -139,6 +149,7 @@
   --energy-grid: oklch(0.746 0.16 232.66);
   --energy-export: oklch(0.673 0.182 276.94);
   --energy-gas: oklch(0.714 0.203 305.5);
+  --energy-water: oklch(0.75 0.14 212);
   --energy-untracked: oklch(0.704 0.04 256.79);
 }
 .pro .text-chart-label {
@@ -960,3 +971,80 @@
 @keyframes had-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 /* Area tiles · vacuum: the robot drifts a little while it works. */
 @keyframes had-wander { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 33% { transform: translate(2px, -1px) rotate(8deg); } 66% { transform: translate(-2px, 1px) rotate(-6deg); } }
+
+/* Energy Studio concept styles (docs/pro-ui/ENERGY.md §2): A Calm Editorial (.pro-ea),
+ * B Adaptive Ambient (.pro-eb, flat radial tint, no glass/blur), C Precision Telemetry (.pro-ec). */
+.pro .pro-ea {
+  transition: box-shadow 180ms ease;
+}
+.pro .pro-ea-rule {
+  border-top: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.pro .pro-eb {
+  --eb-tint: 245, 168, 56;
+  --eb-alpha: 0.11;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse 85% 90% at 92% -10%, rgba(var(--eb-tint), var(--eb-alpha)) 0%, rgba(var(--eb-tint), calc(var(--eb-alpha) * 0.35)) 42%, transparent 74%),
+    var(--surface);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.05), 0 0 1px rgba(0, 0, 0, 0.06);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.dark .pro .pro-eb,
+.pro.dark .pro-eb {
+  --eb-alpha: 0.16;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 12px 28px -24px rgba(var(--eb-tint), 0.75);
+}
+.pro .pro-eb-live {
+  --eb-alpha: 0.24;
+  background:
+    radial-gradient(ellipse 85% 95% at 88% 0%, rgba(var(--eb-tint), var(--eb-alpha)) 0%, rgba(var(--eb-tint), calc(var(--eb-alpha) * 0.35)) 48%, transparent 78%),
+    radial-gradient(ellipse 65% 85% at 8% 105%, rgba(var(--eb-tint), calc(var(--eb-alpha) * 0.6)) 0%, transparent 72%),
+    var(--surface);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 12px 30px -20px rgba(var(--eb-tint), 0.55), inset 0 0 0 1px rgba(var(--eb-tint), 0.14);
+}
+.dark .pro .pro-eb-live,
+.pro.dark .pro-eb-live {
+  --eb-alpha: 0.3;
+  box-shadow: 0 0 0 1px rgba(var(--eb-tint), 0.2), 0 16px 36px -22px rgba(var(--eb-tint), 0.65);
+}
+.pro .pro-ec {
+  --ec-accent: var(--accent);
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, transparent 4%, color-mix(in oklab, var(--ec-accent) 75%, transparent) 50%, transparent 96%) top / 100% 1.5px no-repeat,
+    var(--surface);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.dark .pro .pro-ec,
+.pro.dark .pro-ec {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.pro .pro-ec-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pro .pro-ec-mono {
+  font-family: 'JetBrains Mono Variable', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.pro .pro-ec-sep {
+  border-color: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.pro .pro-e-hatch {
+  background: repeating-linear-gradient(135deg, var(--default) 0 6px, transparent 6px 12px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pro .pro-ea,
+  .pro .pro-eb {
+    transition: none;
+  }
+}

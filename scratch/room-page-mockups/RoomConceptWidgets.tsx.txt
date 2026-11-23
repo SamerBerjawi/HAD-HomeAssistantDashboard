@@ -1,0 +1,197 @@
+/**
+ * Room page mockup D · "Rows of widgets and tiles" (docs/pro-ui/ROOM_PAGE.md §2, owner 2026-11-21).
+ * B's slim hero card, then one row per kind of device, as B's sections, with **one widget per
+ * entity** (Lighting B; Door locks, Doors & windows, Car A; the rest C · Innovative), on the
+ * Overview's grid (Small 1×1, Wide 2×1, Tall 1×2, Large 2×2; 148 px rows; 2 / 4 / 6 columns).
+ * Kinds with no widget (blinds, readings) show a tile per entity instead.
+ * **Edit** lets people resize each widget (saved per room). Today's changes close the page.
+ */
+import { useState } from 'react';
+import { Button, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { PencilEdit02Icon, Tick02Icon } from '@hugeicons/core-free-icons';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
+import { useUserConfig } from '@/contexts/ConfigContext';
+import { cn } from '@/lib/utils';
+import type { WidgetSize } from '../../lib/overviewLayout';
+import { agoText, type RoomDevice, type RoomGroupId } from '../../lib/roomPage';
+import { ROW_PX } from '../../components/overviewNext/SectionGrid';
+import { SheetRow, SheetSection } from '../../widgets/shared/sheet/SheetKit';
+import { RoomHeaderCard } from './RoomConceptList';
+import { canToggle, GROUP_META, useRoomDeviceActions, type RoomPageData } from './shared';
+import { ROOM_WIDGETS_PREF_KEY, useRoomWidgets, type RoomRowId, type RoomWidget, type RoomWidgetSizes } from './useRoomWidgets';
+
+const SPAN: Record<WidgetSize, string> = {
+  s: 'col-span-1 row-span-1',
+  w: 'col-span-2 row-span-1',
+  t: 'col-span-1 row-span-2',
+  l: 'col-span-2 row-span-2'
+};
+const SIZE_LABEL: Record<WidgetSize, string> = { s: 'Small', w: 'Wide', t: 'Tall', l: 'Large' };
+
+/** Row order on the page. */
+const ROWS: readonly RoomRowId[] = ['cameras', 'lights', 'climate', 'media', 'scenes', 'covers', 'fans', 'switches', 'openings', 'locks', 'motion', 'safety', 'vacuums', 'car', 'readings'];
+const ROW_TITLE: Partial<Record<RoomRowId, string>> = { safety: 'Safety', car: 'Car' };
+
+const READING_LABEL: Record<string, string> = { temperature: 'Temperature', humidity: 'Humidity', illuminance: 'Light level', power: 'Power', energy: 'Energy', carbon_dioxide: 'CO₂', pm25: 'PM2.5', aqi: 'Air quality', volatile_organic_compounds: 'VOC' };
+
+/** Status kinds: amber when "on" (open, motion, unlocked), never switched from a tile. */
+const STATUS = new Set<RoomGroupId>(['openings', 'motion', 'locks']);
+
+/** One entity as a 1×1 tile: icon, name, state; lights glow in their colour, the rest in the accent. */
+function EntityTile({ d, group, onPress }: { d: RoomDevice; group: RoomGroupId; onPress: () => void }) {
+  const icon = GROUP_META[group].icon;
+  const toggles = canToggle(d) && !STATUS.has(group);
+  const light = group === 'lights';
+  const warn = STATUS.has(group) && d.isOn;
+  const reading = group === 'readings';
+  const name = reading ? (READING_LABEL[d.deviceClass ?? ''] ?? d.name) : d.name;
+  const state = reading ? d.detail : STATUS.has(group) && d.lastChanged ? `${d.detail} · ${agoText(d.lastChanged)}` : d.detail;
+  const tint = d.isOn && light ? `color-mix(in srgb, ${d.color || 'hsl(44 100% 70%)'} 60%, white)` : undefined;
+  const body = (
+    <>
+      <span
+        className={cn(
+          'grid size-9 place-items-center rounded-full',
+          d.isOn
+            ? light
+              ? 'bg-white/60 text-black'
+              : warn
+                ? 'bg-[hsl(42_100%_92%)] text-[hsl(30_80%_35%)] dark:bg-[hsl(38_55%_20%)] dark:text-[hsl(42_100%_70%)]'
+                : 'bg-[var(--accent)] text-white'
+            : 'bg-default text-muted'
+        )}
+      >
+        <HugeiconsIcon icon={icon} size={17} />
+      </span>
+      <span className="mt-auto block w-full min-w-0 text-left">
+        <span className={cn('line-clamp-2 break-words text-sm font-semibold leading-tight', reading && 'text-xs font-medium text-muted')}>{name}</span>
+        <span className={cn('mt-0.5 block truncate leading-tight', reading ? 'text-xl font-semibold tabular-nums' : 'text-xs', !d.isOn && !reading && 'text-muted', light && d.isOn && 'text-black/70')}>
+          {state}
+        </span>
+      </span>
+    </>
+  );
+  const shape = cn('flex h-full min-w-0 flex-col items-start gap-2 rounded-[22px] p-3.5 whitespace-normal', d.isOn && light ? 'text-black' : '');
+  if (!toggles) {
+    return (
+      <li className={cn('pro-surface col-span-1 row-span-1', shape, warn && 'ring-1 ring-[hsl(38_90%_55%/0.5)]')} aria-label={`${name}: ${state}`}>
+        {body}
+      </li>
+    );
+  }
+  return (
+    <li className="col-span-1 row-span-1 min-w-0">
+      <Button
+        variant="secondary"
+        onPress={onPress}
+        aria-label={`${name}: ${state}. ${d.isOn ? 'Turn off' : 'Turn on'}`}
+        style={tint ? { background: tint } : undefined}
+        className={cn(shape, 'h-full w-full justify-start', !d.isOn && 'pro-surface', d.isOn && !light && 'bg-[color-mix(in_oklab,var(--accent)_16%,var(--surface))]')}
+      >
+        {body}
+      </Button>
+    </li>
+  );
+}
+
+/** A widget cell; in Edit, a frosted bar on top picks its size. */
+function WidgetCell({ w, editing, onSize }: { w: RoomWidget; editing: boolean; onSize: (s: WidgetSize) => void }) {
+  return (
+    <li className={cn(SPAN[w.size], 'relative min-h-0 min-w-0', editing && 'rounded-[24px] ring-2 ring-[var(--accent)]/50')}>
+      <div className={cn('h-full', editing && 'opacity-80')} inert={editing}>
+        <ErrorBoundary variant="card" label={w.title} resetKeys={[w.size]}>
+          {w.render(w.size)}
+        </ErrorBoundary>
+      </div>
+      {editing ? (
+        <div className="absolute inset-x-1.5 top-1.5 z-20 flex flex-wrap items-center gap-1 rounded-2xl bg-[var(--surface)]/90 p-1 text-foreground shadow-sm backdrop-blur-md">
+          <span className="min-w-0 flex-1 truncate px-1 text-xs font-semibold">{w.title}</span>
+          <ToggleButtonGroup
+            aria-label={`${w.title} size`}
+            size="sm"
+            selectionMode="single"
+            disallowEmptySelection
+            selectedKeys={new Set([w.size])}
+            onSelectionChange={(keys) => {
+              const next = [...keys][0] as WidgetSize | undefined;
+              if (next) onSize(next);
+            }}
+          >
+            {(['s', 'w', 't', 'l'] as const).map((s) => (
+              <ToggleButton key={s} id={s} aria-label={SIZE_LABEL[s]} className="h-6 min-w-0 px-1.5 text-[11px]">
+                {s.toUpperCase()}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+export default function RoomConceptWidgets({ data, areaId }: { data: RoomPageData; areaId: string }) {
+  const widgets = useRoomWidgets(areaId);
+  const act = useRoomDeviceActions();
+  const { updateConfig } = useUserConfig();
+  const [editing, setEditing] = useState(false);
+  const { page } = data;
+  const setSize = (id: string, size: WidgetSize) =>
+    updateConfig((prev) => {
+      const all = ((prev.preferences as Record<string, unknown> | undefined)?.[ROOM_WIDGETS_PREF_KEY] ?? {}) as RoomWidgetSizes;
+      const next: RoomWidgetSizes = { ...all, [areaId]: { ...(all[areaId] ?? {}), [id]: size } };
+      return { ...prev, preferences: { ...(prev.preferences || {}), [ROOM_WIDGETS_PREF_KEY]: next } as typeof prev.preferences };
+    });
+  const resetSizes = () =>
+    updateConfig((prev) => {
+      const all = { ...(((prev.preferences as Record<string, unknown> | undefined)?.[ROOM_WIDGETS_PREF_KEY] ?? {}) as RoomWidgetSizes) };
+      delete all[areaId];
+      return { ...prev, preferences: { ...(prev.preferences || {}), [ROOM_WIDGETS_PREF_KEY]: all } as typeof prev.preferences };
+    });
+
+  const rows = ROWS.map((row) => {
+    const ws = widgets.filter((w) => w.row === row);
+    // Widgets replace tiles; a kind with no widget (blinds, readings) keeps a tile per entity.
+    const tiles = ws.length || row === 'safety' || row === 'car' || row === 'scenes' || row === 'cameras' ? [] : (page.groups[row as RoomGroupId] ?? []);
+    return { row, ws, tiles };
+  }).filter((r) => r.ws.length || r.tiles.length);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <RoomHeaderCard data={data} />
+      <div className="-mb-2 flex items-center justify-end gap-1.5">
+        {editing ? (
+          <Button size="sm" variant="ghost" onPress={resetSizes} className="h-8 rounded-full px-3 text-xs">
+            Reset sizes
+          </Button>
+        ) : null}
+        <Button size="sm" variant={editing ? 'primary' : 'secondary'} onPress={() => setEditing((v) => !v)} className="h-8 gap-1.5 rounded-full px-3 text-xs">
+          <HugeiconsIcon icon={editing ? Tick02Icon : PencilEdit02Icon} size={14} />
+          {editing ? 'Done' : 'Edit'}
+        </Button>
+      </div>
+
+      {rows.map(({ row, ws, tiles }) => (
+        <section key={row} aria-label={ROW_TITLE[row] ?? GROUP_META[row as RoomGroupId].title} className="flex flex-col gap-1.5">
+          <h3 className="px-1 text-xs font-semibold text-muted">{ROW_TITLE[row] ?? GROUP_META[row as RoomGroupId].title}</h3>
+          <ul className="grid grid-flow-dense grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6" style={{ gridAutoRows: `${ROW_PX}px` }}>
+            {ws.map((w) => (
+              <WidgetCell key={w.id} w={w} editing={editing} onSize={(s) => setSize(w.id, s)} />
+            ))}
+            {tiles.map((d) => (
+              <EntityTile key={d.entityId} d={d} group={row as RoomGroupId} onPress={() => act.toggle(d)} />
+            ))}
+          </ul>
+        </section>
+      ))}
+
+      {page.today.length ? (
+        <SheetSection title="Today">
+          {page.today.map((e) => (
+            <SheetRow key={`${e.entityId}-${e.at}`} icon={GROUP_META[e.group].icon} title={e.name} subtitle={e.text} trailing={<span className="text-xs text-muted tabular-nums">{agoText(e.at)}</span>} />
+          ))}
+        </SheetSection>
+      ) : null}
+    </div>
+  );
+}

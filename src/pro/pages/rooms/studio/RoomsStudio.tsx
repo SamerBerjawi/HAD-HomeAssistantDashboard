@@ -15,6 +15,7 @@ import { bandMetrics, blendMetrics, QUICK_ACTIONS, roomActions, type BandMetrics
 import type { RoomItem, RoomsFloor } from '../../../lib/roomsPage';
 import type { ServiceCall } from '../../../widgets/shared/useServiceCall';
 import { Stage } from '../../../areas/studio/Stage';
+import { StudioNavBar } from '../../../studio/StudioNavBar';
 import { RoomServiceContext, useFloorLightsOff } from '../RoomQuickActions';
 import { RoomTile } from '../RoomTile';
 import { RoomBands } from '../RoomsExplorer';
@@ -303,6 +304,7 @@ export default function RoomsStudio() {
     <RoomServiceContext.Provider value={service}>
       <div className="pro h-dvh overflow-y-auto overscroll-contain bg-[var(--background)] text-foreground" data-page="rooms">
         <main className="mx-auto flex max-w-[1800px] flex-col gap-6 px-4 py-6">
+          <StudioNavBar current="rooms" />
           <header className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-3xl">
               <h1 className="text-2xl font-semibold">Rooms Studio</h1>

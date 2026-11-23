@@ -14,15 +14,15 @@ import ProShell from './components/ProShell';
 import ProOverview from './pages/ProOverview';
 import ProSecurity from './pages/ProSecurity';
 import ProRooms from './pages/ProRooms';
+import ProEnergy from './pages/ProEnergy';
 import ProToaster from './components/toasts/ProToaster';
 
-// Widget Design Studio (docs/pro-ui/WIDGET_DESIGN.md): dev builds only, /overview?studio.
+// Design Studio Hub + per-page studios (dev builds only, never bundled in production).
+const StudioHub = import.meta.env.DEV ? lazy(() => import('./studio/StudioHub')) : null;
 const WidgetStudio = import.meta.env.DEV ? lazy(() => import('./studio/WidgetStudio')) : null;
-// Area Tiles Studio (docs/pro-ui/AREA_TILES.md): dev builds only, /?studio=areas.
 const AreaStudio = import.meta.env.DEV ? lazy(() => import('./areas/studio/AreaStudio')) : null;
-// Rooms Studio (docs/pro-ui/ROOMS.md §5): dev builds only, /?studio=rooms.
 const RoomsStudio = import.meta.env.DEV ? lazy(() => import('./pages/rooms/studio/RoomsStudio')) : null;
-const showStudio = () => WidgetStudio !== null && new URLSearchParams(window.location.search).has('studio');
+const EnergyStudio = import.meta.env.DEV ? lazy(() => import('./pages/energy/studio/EnergyStudio')) : null;
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
 const ProNotificationCenter = lazy(() => import('./components/notifications/ProNotificationCenter'));
@@ -64,27 +64,47 @@ export default function ProApp() {
     addToast: overlays.addToast
   });
 
-  // The studio renders fixtures only, outside the shell, so each preview can own its theme.
-  if (AreaStudio && new URLSearchParams(window.location.search).get('studio') === 'areas') {
-    return (
-      <Suspense fallback={null}>
-        <AreaStudio />
-      </Suspense>
-    );
-  }
-  if (RoomsStudio && new URLSearchParams(window.location.search).get('studio') === 'rooms') {
-    return (
-      <Suspense fallback={null}>
-        <RoomsStudio />
-      </Suspense>
-    );
-  }
-  if (WidgetStudio && showStudio()) {
-    return (
-      <Suspense fallback={null}>
-        <WidgetStudio />
-      </Suspense>
-    );
+  // Studios render fixtures only, outside the shell, so each preview can own its theme.
+  if (import.meta.env.DEV) {
+    const studioParams = new URLSearchParams(window.location.search);
+    if (studioParams.has('studio')) {
+      const studioId = studioParams.get('studio');
+      if (studioId === 'areas' && AreaStudio) {
+        return (
+          <Suspense fallback={null}>
+            <AreaStudio />
+          </Suspense>
+        );
+      }
+      if (studioId === 'rooms' && RoomsStudio) {
+        return (
+          <Suspense fallback={null}>
+            <RoomsStudio />
+          </Suspense>
+        );
+      }
+      if (studioId === 'energy' && EnergyStudio) {
+        return (
+          <Suspense fallback={null}>
+            <EnergyStudio />
+          </Suspense>
+        );
+      }
+      if (studioId === 'widgets' && WidgetStudio) {
+        return (
+          <Suspense fallback={null}>
+            <WidgetStudio />
+          </Suspense>
+        );
+      }
+      if (StudioHub) {
+        return (
+          <Suspense fallback={null}>
+            <StudioHub />
+          </Suspense>
+        );
+      }
+    }
   }
 
   if (startup.isAppLoading && snapshotStatus === 'pending') {
@@ -120,6 +140,8 @@ export default function ProApp() {
           <ProSecurity />
         ) : activeTab === 'rooms' ? (
           <ProRooms />
+        ) : activeTab === 'energy' ? (
+          <ProEnergy />
         ) : (
           <div className="pro-surface p-8 flex flex-col gap-2">
             <p className="text-muted">This page has not been rebuilt in the pro design yet. Security and Overview are in progress.</p>

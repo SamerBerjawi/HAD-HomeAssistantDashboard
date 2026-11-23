@@ -1,6 +1,6 @@
 # HAD Pro UI: design document
 
-Status: living document. Last updated 2026-11-20.
+Status: living document. Last updated 2026-11-23.
 Owner: Samer (product decisions). Builders: any AI agent (Claude Code, Gemini on Antigravity, ...) or human.
 
 This file is the single source of truth for the **pro** front end. Read it fully before you touch
@@ -447,6 +447,22 @@ Implementation notes:
   emergency dialog, Acknowledge closes dialog and red toast. Not verified: real HA events, the
   chime, Open Security on a live alarm.
 
+### 7.9 Energy page — status: BUILT (2026-11-23)
+
+Built from the 11 owner-approved concepts in the Energy Studio (`/?studio=energy`, [ENERGY.md](ENERGY.md)). Accent: orange (hue 52, dark foreground, `data-page="energy"`).
+
+| Part | Decision |
+|---|---|
+| Layout | **One scrolling page on tablet/desktop (≥ 768 px; 2 cols tablet, 12 cols desktop), Kokonut `SmoothTab` tabs on phones (< 768 px)**. Live now sits always **above** the Period bar. |
+| Customise | **Hide and reorder sections** via `ProSheet` (Period bar button and page header `⋮` menu), persisted in `preferences.proEnergy`. |
+| Chosen concepts | **Responsive Desktop (≥ 768 px) / Mobile (< 768 px) mix:** **Live now**: B (`LiveNowB` Live Busbar Schematic) desktop · C (`LiveNowC` Living Horizon Strip) mobile; **Period bar**: B (`PeriodBarB` Editorial Timeline Header) desktop · C (`PeriodBarC` Compact Instrument Rail) mobile; **Summary**: B (`SummaryB` Dual Dial Dashboard) desktop · C (`SummaryC` Story Sentence & Source Ribbon) mobile; **Usage over time**: A (`UsageA` Power Wave & Mix); **Solar**: B (`SolarB` Forecast Variance Deck) desktop · A (`SolarA` Sun Arc Horizon) mobile; **Battery**: B (`BatteryB` Charge Cycle Dial + Timeline); **Where it went**: A (`FlowA` Calm Sankey) desktop · C (`FlowC` Three-Lane Flow Ladder) mobile; **Devices**: A (`DevicesA` Ranked Bar Leaderboard) desktop · B (`DevicesB` Podium Spotlight + Tail) mobile; **Costs & tariffs**: C (`CostsC` Cost-Over-Time Strip + Rate Cards) desktop · A (`CostsA` Tug-of-War Balance Scale) mobile; **Gas & water**: A (`UtilitiesA` Paired Meter Cards) desktop · C (`UtilitiesC` Compact Utility Switcher) mobile; **Lifetime impact**: B (`ImpactB` Calm Eco Stat Trio). |
+| States & visibility | Default unconfigured, initial loading skeleton, and error-with-retry cards. Sections without HA data (solar, battery, gas, water, Huawei lifetime impact sensors) hide cleanly and partner cards expand to full width. |
+
+Implementation notes:
+- Pure domain transformer & preferences persistence: `src/pro/lib/energyPage.ts` (`buildLiveEnergySnapshot`, `readEnergyPrefs`, `writeEnergyPrefs`, `computeCustomPresetDates`), tested in `tests/energyPage.test.ts`.
+- Production page: `src/pro/pages/ProEnergy.tsx` (wired into `src/pro/ProApp.tsx`), reading `useEnergyData`, `useEnergyComparison`, and `useAutoLayoutStore`, and publishing to `useEnergyStore`.
+- Energy Studio (`src/pro/pages/energy/studio/`) stays dev-only behind `import.meta.env.DEV` at `/?studio=energy` and is excluded from `dist-pro/`.
+
 ## 8. Page roadmap
 
 | # | Item | Status |
@@ -456,7 +472,7 @@ Implementation notes:
 | 3 | Mobile nav bar | Built: `src/pro/components/ProMobileNav.tsx` + `src/pro/ui/reactbits/GlassSurface.tsx` |
 | 4 | Page headers | Built: `src/pro/components/ProPageHeader.tsx` + `pageHeaderContext.ts` + `src/pro/ui/magicui/BlurFade.tsx` |
 | 5 | Security page | Built: `src/pro/pages/ProSecurity.tsx` + `src/pro/components/security/` (7.5) |
-| 6 | Overview, Rooms, Energy | Overview built (7.6); Rooms page built (Gallery, [ROOMS.md](ROOMS.md)); room pages: restarted from scratch as area tiles, batch 1 in review ([AREA_TILES.md](AREA_TILES.md); earlier mockups in [ROOM_PAGE.md](ROOM_PAGE.md)); Energy not started |
+| 6 | Overview, Rooms, Energy | Overview built (7.6); Rooms page built (Gallery, [ROOMS.md](ROOMS.md)); room pages: restarted from scratch as area tiles, batch 1 in review ([AREA_TILES.md](AREA_TILES.md); earlier mockups in [ROOM_PAGE.md](ROOM_PAGE.md)); Energy built: `src/pro/pages/ProEnergy.tsx` (7.9, [ENERGY.md](ENERGY.md); studio at `/?studio=energy`) |
 | — | Breadcrumbs in the page header | Planned: decide with the first page that has sub-views (7.4) |
 | — | Notification center | Built: `src/pro/components/notifications/` (7.7) |
 | — | Toasts + emergency alert | Built: `src/pro/components/toasts/` (7.8) |
@@ -617,6 +633,13 @@ Append only. One row per decision. Newest at the bottom.
 | 2026-11-22 | Area page build, phase 3: saved layouts | `preferences.proAreaLayouts[areaId][phone|wide]` (not `rooms.areaLayouts`), written on Save; `reconcile` fits it to the room's current tiles; All / Now view per screen in localStorage | Owner ("continue with the remaining phases"). AREA_TILES.md §4. `src/pro/areas/page/roomLayout.ts`, `useAreaLayout.ts`, `tests/areaRoomLayout.test.ts` |
 | 2026-11-22 | Area page build, phase 4: the room page | The production room page is the B + C page; Rail, Now and page kit shared with the studio from `src/pro/areas/page/`; chosen tile per kind in `tiles/chosenTiles.tsx`; A–D mockups removed from the build | Owner (same). `src/pro/pages/room/RoomPage.tsx` |
 | 2026-11-22 | Area page build, phase 5: cars | One whole-car tile plus an X-small tile per entity (battery and doors shown, the rest hidden at first); `CarTileModel.can` hides buttons the car can't do; picture from HA, or uploaded / none per car in `preferences.proCarPictures` (saved at once) | Owner (batch 5 choice). `src/pro/areas/ha/haRoomTiles.ts`, `carPictures.ts`, `page/CarPictureControl.tsx` |
+| 2026-11-23 | Energy: structure, sections & customise | One scrolling page on desktop/tablet (≥ 768 px), tabs on phone (< 768 px); Live now above Period bar; keep all 11 sections (incl. new Battery, Compare with last year, Huawei Lifetime impact) + edge states; Customise (hide/reorder) included | Owner. Energy Studio (`/?studio=energy`) next; bklit charts verified MIT. `docs/pro-ui/ENERGY.md` |
+| 2026-11-23 | Energy: section designs chosen & built | Live now B (Ambient flow), Period bar B (Pill rail), Summary B (Autarky gauge + tiles), Usage B (Power curve + mix strip, Power default), Solar C (Solar ledger), Battery A (Charge curve + throughput), Where it went A (Calm Sankey), Devices A (Ranked horizontal bars), Costs B (Spent vs earned balance), Gas & water A (Paired bar cards), Lifetime impact B (Ambient eco banner) | Owner, 11/11 from Energy Studio. Built at `src/pro/pages/ProEnergy.tsx`, saved options in `preferences.proEnergy`. `docs/pro-ui/ENERGY.md` §3 |
+| 2026-11-23 | Energy: Solar section revised | Solar A (Production + forecast) instead of C (Solar ledger) | Owner. `src/pro/pages/ProEnergy.tsx` |
+| 2026-11-23 | Energy: Live now backdrop | Subtle source-coloured radial glow + ambient shadow on `--surface` (`.pro-eb-live`) instead of full gradient background | Owner. `src/pro/pro.css` |
+| 2026-11-23 | Design Studio Hub | `/overview?studio` (bare `?studio`) serves `StudioHub` main menu linking `?studio=widgets`, `?studio=areas`, `?studio=rooms`, `?studio=energy`; shared `StudioNavBar` across all studios, driven by `studioRegistry.ts` (dev-only) | Owner. `src/pro/studio/{StudioHub,StudioNavBar,studioRegistry}.ts*`, `src/pro/ProApp.tsx` |
+| 2026-11-23 | Energy: redesigned concepts & responsive picks | All 11 Energy sections redesigned in `/?studio=energy` with distinct visual metaphors per concept. Production picks (`CHOSEN_ENERGY_CONCEPTS` & `ProEnergy.tsx`): Live B/C, Period B/C, Summary B/C, Usage A/A, Solar B/A, Battery B/B, Flow A/C, Devices A/B, Costs C/A, Gas & water A/C, Impact B/B (Desktop / Mobile), plus default edge states | Owner. `src/pro/pages/ProEnergy.tsx`, `src/pro/pages/energy/studio/concepts/*`, `docs/pro-ui/ENERGY.md` §3 |
+| 2026-11-23 | Energy: full-width Sankey & Usage | `flow` (`Where it went` / Sankey) and `usage` (`Usage over time`) both set to full width (`desktopSpan: 'full'` / `col-span-12`) across Desktop and Tablet so device labels in Sankey have full breathing room | Owner. `src/pro/lib/energyPage.ts`, `src/pro/pages/ProEnergy.tsx`, `src/pro/pages/energy/studio/EnergyPagePreview.tsx` |
 
 ## 10. Notes for other agents
 

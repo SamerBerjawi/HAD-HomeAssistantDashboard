@@ -98,11 +98,17 @@ export function SolarForecastBarChart({
       y: innerHeight - (val / domainMax) * innerHeight
     }));
 
-    const xCount = Math.min(data.length, innerWidth < 260 ? 3 : 5);
+    const xCount = Math.min(data.length, Math.max(2, Math.min(5, Math.floor(innerWidth / 64))));
     const xSet = new Set(evenlySpacedIndices(data.length, xCount));
-    const xTicks = bars
+    const rawTicks = bars
       .filter((b) => xSet.has(b.index))
       .map((b) => ({ index: b.index, x: b.centerX, label: b.datum.label }));
+    const xTicks = rawTicks.filter((t, i) => {
+      if (i === 0 || i === rawTicks.length - 1) return true;
+      const prevX = rawTicks[i - 1].x;
+      const lastX = rawTicks[rawTicks.length - 1].x;
+      return t.x - prevX >= 48 && lastX - t.x >= 48;
+    });
 
     return { bars, forecastPath, yTicks, xTicks };
   }, [data, innerHeight, innerWidth]);

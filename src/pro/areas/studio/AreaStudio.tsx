@@ -7,7 +7,8 @@
 import { useEffect, useState } from 'react';
 import { Button, Chip, TextArea, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, Copy01Icon, GridViewIcon, Moon02Icon, PaintBoardIcon, StarIcon, Sun01Icon } from '@hugeicons/core-free-icons';
+import { Copy01Icon, GridViewIcon, Moon02Icon, PaintBoardIcon, StarIcon, Sun01Icon } from '@hugeicons/core-free-icons';
+import { StudioNavBar } from '../../studio/StudioNavBar';
 import { cn } from '@/lib/utils';
 import { TILE_SIZE_LABEL as SIZE_LABELS, type TileAction, type TileModel, type TileSize } from '../tileTypes';
 import { BATCHES, TILE_TYPES, type TileConceptId, type TileTypeEntry } from './areaCatalog';
@@ -286,6 +287,7 @@ export default function AreaStudio() {
   return (
     <div className="pro h-dvh overflow-y-auto overscroll-contain bg-[var(--background)] text-foreground" data-page="rooms">
       <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-6">
+        <StudioNavBar current="areas" />
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-semibold">
@@ -293,10 +295,6 @@ export default function AreaStudio() {
               Area Tiles Studio
             </h1>
             <p className="text-sm text-muted">A fresh start for the Areas pages: one entity per tile. Dev only; the production Areas pages are untouched.</p>
-            <Button size="sm" variant="ghost" className="mt-1 -ml-2 gap-1 text-xs" onPress={() => window.location.assign('?studio')}>
-              <HugeiconsIcon icon={ArrowLeft01Icon} size={14} />
-              Widget Design Studio
-            </Button>
           </div>
           <Segmented<Tab>
             label="Section"

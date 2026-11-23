@@ -30,6 +30,7 @@ import { switchesStudio } from '../widgets/switches/concepts';
 import { thermostatStudio } from '../widgets/thermostat/concepts';
 import { vacuumsStudio } from '../widgets/vacuums/concepts';
 import { weatherStudio } from '../widgets/weather/concepts';
+import { StudioNavBar } from './StudioNavBar';
 import type { StudioEntry } from './types';
 import { useStudioSelection, type StudioPick } from './useStudioSelection';
 
@@ -297,6 +298,7 @@ export default function WidgetStudio() {
     // h-dvh, not min-h: #root is fixed with overflow hidden, so the studio must scroll itself.
     <div className="pro h-dvh overflow-y-auto overscroll-contain bg-[var(--background)] text-foreground" data-page="overview">
       <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-6">
+        <StudioNavBar current="widgets" />
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-semibold">
@@ -304,9 +306,6 @@ export default function WidgetStudio() {
               Widget Design Studio
             </h1>
             <p className="text-sm text-muted">Concepts for the HAD Overview widgets. Dev only; nothing here changes the dashboard.</p>
-            <Button size="sm" variant="ghost" className="mt-1 -ml-2 text-xs" onPress={() => window.location.assign('?studio=areas')}>
-              Area Tiles Studio →
-            </Button>
           </div>
           <Segmented
             label="Widget"

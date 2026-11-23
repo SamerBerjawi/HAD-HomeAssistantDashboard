@@ -1,0 +1,196 @@
+/**
+ * Shared parts of the room page mockups (docs/pro-ui/ROOM_PAGE.md): the room's model, device
+ * actions, the hero (picture or colour with the lights' glow) and the scene pills.
+ */
+import { useMemo } from 'react';
+import { Button } from '@heroui/react';
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
+import {
+  BulbIcon,
+  Camera01Icon,
+  CircleLock02Icon,
+  DoorIcon,
+  Fan01Icon,
+  MagicWand01Icon,
+  Motion01Icon,
+  MusicNote03Icon,
+  PlugSocketIcon,
+  RoboticIcon,
+  TemperatureIcon,
+  BlindsIcon,
+  AirVentIcon
+} from '@hugeicons/core-free-icons';
+import { cn } from '@/lib/utils';
+import type { ResolvedArea } from '@/types';
+import { buildRoomPage, type RoomDevice, type RoomGroupId, type RoomPageGroups } from '../../lib/roomPage';
+import { buildRoomItem, type RoomItem } from '../../lib/roomsPage';
+import { roomMood } from '../../lib/roomsInsights';
+import { useDerivedModel } from '../../widgets/shared/entities';
+import { useHaPicture } from '../../widgets/shared/useHaPicture';
+import { useServiceCall } from '../../widgets/shared/useServiceCall';
+import { GLASS } from '../rooms/RoomCardControls';
+import { roomGradient, roomIcon, temp } from '../rooms/shared';
+
+export interface RoomPageData {
+  room: RoomItem;
+  page: RoomPageGroups;
+}
+
+/** The room (as on the Rooms page, with its colour) and its devices by group. */
+export function useRoomPageData(areaId: string, color: string | undefined): RoomPageData | null {
+  return useDerivedModel(
+    (s) => {
+      const area: ResolvedArea | undefined = s.resolvedAreas.find((a) => a.area_id === areaId);
+      if (!area) return null;
+      const floor = s.floors.find((f) => f.floor_id === area.floor_id);
+      const room = buildRoomItem(area, floor?.name ?? null, false);
+      return { room: color ? { ...room, color } : room, page: buildRoomPage(area) };
+    },
+    (m) => JSON.stringify(m)
+  );
+}
+
+export const GROUP_META: Record<RoomGroupId, { title: string; icon: IconSvgElement }> = {
+  lights: { title: 'Lights', icon: BulbIcon },
+  climate: { title: 'Climate', icon: TemperatureIcon },
+  media: { title: 'Media', icon: MusicNote03Icon },
+  covers: { title: 'Blinds', icon: BlindsIcon },
+  fans: { title: 'Fans', icon: Fan01Icon },
+  switches: { title: 'Switches', icon: PlugSocketIcon },
+  openings: { title: 'Doors & windows', icon: DoorIcon },
+  motion: { title: 'Motion', icon: Motion01Icon },
+  readings: { title: 'Readings', icon: AirVentIcon },
+  cameras: { title: 'Cameras', icon: Camera01Icon },
+  vacuums: { title: 'Vacuums', icon: RoboticIcon },
+  locks: { title: 'Locks', icon: CircleLock02Icon },
+  scenes: { title: 'Scenes', icon: MagicWand01Icon }
+};
+
+/** Whether a device has an on/off the page can flip. */
+export const canToggle = (d: RoomDevice) => d.state !== 'unavailable' && ['light', 'switch', 'input_boolean', 'fan', 'cover', 'media_player'].includes(d.domain);
+
+/** On/off, brightness and scenes for the room's devices (optimistic, like the Overview widgets). */
+export function useRoomDeviceActions() {
+  const { call, setOptimistic } = useServiceCall();
+  return useMemo(
+    () => ({
+      toggle: (d: RoomDevice) => {
+        if (d.domain === 'cover') {
+          setOptimistic(d.entityId, d.isOn ? 'closing' : 'opening');
+          void call('cover', d.isOn ? 'close_cover' : 'open_cover', {}, d.entityId);
+          return;
+        }
+        if (d.domain === 'media_player') {
+          setOptimistic(d.entityId, d.state === 'playing' ? 'paused' : 'playing');
+          void call('media_player', 'media_play_pause', {}, d.entityId);
+          return;
+        }
+        setOptimistic(d.entityId, d.isOn ? 'off' : 'on');
+        void call(d.domain, d.isOn ? 'turn_off' : 'turn_on', {}, d.entityId);
+      },
+      setAll: (list: readonly RoomDevice[], on: boolean) => {
+        const ids = list.map((d) => d.entityId);
+        if (!ids.length) return;
+        for (const id of ids) setOptimistic(id, on ? 'on' : 'off');
+        void call('light', on ? 'turn_on' : 'turn_off', {}, ids);
+      },
+      brightness: (d: RoomDevice, pct: number) => {
+        setOptimistic(d.entityId, pct > 0 ? 'on' : 'off', { brightness: Math.round((pct / 100) * 255) });
+        void call('light', 'turn_on', { brightness_pct: pct }, d.entityId);
+      },
+      scene: (id: string) => {
+        setOptimistic(id, new Date().toISOString());
+        void call('scene', 'turn_on', {}, id);
+      }
+    }),
+    [call, setOptimistic]
+  );
+}
+
+const WARM = 'hsl(42 100% 68%)';
+
+/** The room's picture or colour, with the lights' glow from the top. */
+export function RoomBackdrop({ room, className }: { room: RoomItem; className?: string }) {
+  const picture = useHaPicture(room.picture);
+  const lit = room.lightsOn > 0;
+  const glow = room.lightColor || WARM;
+  return (
+    <div aria-hidden className={cn('absolute inset-0 -z-10', className)}>
+      {picture ? (
+        <img src={picture} alt="" className="absolute inset-0 size-full object-cover" />
+      ) : (
+        <div className="absolute inset-0" style={{ background: roomGradient(room.color) }}>
+          <HugeiconsIcon icon={roomIcon(room)} size={180} className="absolute -bottom-8 -right-6 opacity-15" />
+        </div>
+      )}
+      <div
+        className="absolute inset-0 transition-opacity duration-700"
+        style={{
+          background: `radial-gradient(80% 75% at 50% -10%, color-mix(in srgb, ${glow} 75%, transparent), transparent 70%)`,
+          opacity: lit ? Math.min(1, 0.45 + 0.55 * (room.lightsOn / Math.max(1, room.totalLights))) : 0
+        }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-black/20" />
+    </div>
+  );
+}
+
+/** "Cozy", "Too warm"… with the floor, for the hero's eyebrow. */
+export function roomEyebrow(room: RoomItem): string {
+  const mood = roomMood({ ...room, thermostatAction: room.thermostat?.action ?? null });
+  return [room.floorName, mood?.label].filter(Boolean).join(' · ') || 'Room';
+}
+
+/** Lights / humidity / power facts in one line. */
+export function roomFacts(room: RoomItem): string {
+  return [
+    room.totalLights ? (room.lightsOn ? `${room.lightsOn} of ${room.totalLights} lights on` : 'Lights off') : null,
+    room.humidity !== null ? `${Math.round(room.humidity)}% humidity` : null,
+    room.powerWatts > 0 ? `${room.powerWatts} W` : null
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** The lights button in the hero (glass when off, the lights' colour when on). */
+export function HeroLightsButton({ room, onPress, withLabel = true }: { room: RoomItem; onPress: () => void; withLabel?: boolean }) {
+  if (!room.totalLights) return null;
+  const lit = room.lightsOn > 0;
+  return (
+    <Button
+      size="sm"
+      isIconOnly={!withLabel}
+      variant="ghost"
+      onPress={onPress}
+      aria-label={`${room.name}: lights ${lit ? 'on, turn off' : 'off, turn on'}`}
+      style={lit ? { background: `color-mix(in srgb, ${room.lightColor || 'hsl(44 100% 70%)'} 80%, white)` } : undefined}
+      className={cn('h-9 min-w-0 gap-1.5 rounded-full font-semibold', withLabel ? 'px-3.5' : 'size-9', lit ? 'text-black ring-1 ring-white/40' : GLASS)}
+    >
+      <HugeiconsIcon icon={BulbIcon} size={16} />
+      {withLabel ? (lit ? 'Lights off' : 'Lights on') : null}
+    </Button>
+  );
+}
+
+/** The room's scenes as pills (on the hero, or on the page). */
+export function ScenePills({ scenes, onScene, onGlass = false }: { scenes: readonly RoomDevice[]; onScene: (id: string) => void; onGlass?: boolean }) {
+  if (!scenes.length) return null;
+  return (
+    <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
+      {scenes.map((s) => (
+        <Button
+          key={s.entityId}
+          size="sm"
+          variant={onGlass ? 'ghost' : 'secondary'}
+          onPress={() => onScene(s.entityId)}
+          className={cn('h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs font-semibold', onGlass && GLASS)}
+        >
+          <HugeiconsIcon icon={MagicWand01Icon} size={14} />
+          {s.name}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+export { temp };
