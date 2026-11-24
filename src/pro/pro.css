@@ -44,7 +44,19 @@
   --accent-soft-hover: color-mix(in oklab, var(--accent) 28%, transparent);
   --accent-soft-foreground: color-mix(in oklab, var(--accent) 78%, white);
 }
-.pro[data-page='security'] { --pro-h: 300; --pro-c: 0.2; }
+.pro[data-page='security'] {
+  --pro-h: 300;
+  --pro-c: 0.2;
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 20%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--accent) 78%, black);
+}
+.dark .pro[data-page='security'],
+.pro.dark[data-page='security'] {
+  --accent-soft: color-mix(in oklab, var(--accent) 22%, transparent);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 28%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--accent) 78%, white);
+}
 
 .pro-surface {
   background: var(--surface);

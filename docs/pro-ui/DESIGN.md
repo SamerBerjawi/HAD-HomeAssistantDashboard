@@ -307,9 +307,15 @@ and header-on-desktop/More-on-phone; no animation, React Bits Blur Text and Spli
 long titles; static description and no subtitle; Frost glass and white compact bar; fixed and no
 overflow menus.
 
-### 7.5 Security page — status: BUILT (2026-11-18)
+### 7.5 Security page — status: BUILT, redesigned (2026-11-24)
 
-The owner did not like the first pass's alarm card and status tiles; this replaces them.
+Redesigned from the 5 owner-approved concepts in the Security Studio (`/?studio=security`, [SECURITY.md](SECURITY.md)). Accent: violet (`hue 300`, `data-page="security"`). Status pills remain strictly green / orange / red.
+
+- **Layout (2026-11-24):** One scrolling page on desktop & tablet (`≥ 768 px`: Alarm + Attention 8/4 and Cameras + Recent Activity 8/4 on `≥ 1024 px`, Devices full width); on phone (`< 768 px`), **Alarm hero** stays pinned above Kokonut `SmoothTab` tabs (`Alerts`, `Cams`, `Log`, `Devices`).
+- **Chosen concepts:** Alarm hero **A** (Shield Halo Console with 4-zone concentric perimeter SVG ring), Needs attention **B** (Perimeter Radar Matrix 2×2 zone grid with inline drilldown + `ProSheet`), Cameras **A** (Theater Stage + Filmstrip with captions strictly below video), Recent activity **C** (Compact Audit Ledger), Device groups **B** (Interactive Tile Deck with category filters + `SecurityDeviceSheet`).
+- **Critical-action safety rule:** Always require **press-and-hold** (`HoldToConfirmButton`) for critical security actions: arming Away / Vacation (and code-free Disarm when armed), unlocking locks, opening garages/gates, and testing sirens.
+
+Previous 2026-11-18 specification notes retained below for HA plumbing reference:
 
 | Decision | Choice |
 |---|---|
@@ -640,6 +646,8 @@ Append only. One row per decision. Newest at the bottom.
 | 2026-11-23 | Design Studio Hub | `/overview?studio` (bare `?studio`) serves `StudioHub` main menu linking `?studio=widgets`, `?studio=areas`, `?studio=rooms`, `?studio=energy`; shared `StudioNavBar` across all studios, driven by `studioRegistry.ts` (dev-only) | Owner. `src/pro/studio/{StudioHub,StudioNavBar,studioRegistry}.ts*`, `src/pro/ProApp.tsx` |
 | 2026-11-23 | Energy: redesigned concepts & responsive picks | All 11 Energy sections redesigned in `/?studio=energy` with distinct visual metaphors per concept. Production picks (`CHOSEN_ENERGY_CONCEPTS` & `ProEnergy.tsx`): Live B/C, Period B/C, Summary B/C, Usage A/A, Solar B/A, Battery B/B, Flow A/C, Devices A/B, Costs C/A, Gas & water A/C, Impact B/B (Desktop / Mobile), plus default edge states | Owner. `src/pro/pages/ProEnergy.tsx`, `src/pro/pages/energy/studio/concepts/*`, `docs/pro-ui/ENERGY.md` §3 |
 | 2026-11-23 | Energy: full-width Sankey & Usage | `flow` (`Where it went` / Sankey) and `usage` (`Usage over time`) both set to full width (`desktopSpan: 'full'` / `col-span-12`) across Desktop and Tablet so device labels in Sankey have full breathing room | Owner. `src/pro/lib/energyPage.ts`, `src/pro/pages/ProEnergy.tsx`, `src/pro/pages/energy/studio/EnergyPagePreview.tsx` |
+| 2026-11-23 | Security: studio kickoff & responsive structure | Build Security Studio (`/?studio=security`, added to `/overview?studio` hub) with 3 distinct A/B/C concepts across all 5 core sections (`Alarm`, `Attention`, `Cameras`, `Activity`, `Devices`) + edge states; one scrolling page ≥ 768 px, Alarm pinned above `SmoothTab` tabs on phone (< 768 px); keep purple accent (`hue 300`, added `--accent-soft*` tokens). Production `ProSecurity.tsx` untouched until picks approved | Owner. `docs/pro-ui/SECURITY.md`, `src/pro/pages/security/studio/*`, `src/pro/studio/studioRegistry.ts` |
+| 2026-11-24 | Security: studio picks chosen & built | Alarm hero **A** (Shield Halo Console), Needs attention **B** (Perimeter Radar Matrix), Cameras **A** (Theater Stage + Filmstrip), Recent activity **C** (Compact Audit Ledger), Device groups **B** (Interactive Tile Deck); **always press-and-hold for critical actions** (arming Away/Vacation, code-free disarm when armed, unlocking locks, opening garages, testing sirens); phone `< 768 px` pins Alarm above Kokonut `SmoothTab` tabs | Owner, 5/5 from Security Studio. Built in `src/pro/pages/ProSecurity.tsx` & `src/pro/components/security/*`, `docs/pro-ui/SECURITY.md` |
 
 ## 10. Notes for other agents
 

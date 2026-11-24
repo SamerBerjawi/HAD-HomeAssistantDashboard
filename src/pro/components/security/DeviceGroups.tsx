@@ -1,61 +1,46 @@
 import { useMemo, useState } from 'react';
-import { SearchField, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Button, SearchField, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
   AlarmSmokeIcon,
   Alert02Icon,
-  BlindsIcon,
-  DashboardSquare01Icon,
-  DashboardSquare02Icon,
+  BatteryLowIcon,
   DoorIcon,
-  DropletIcon,
-  GarageIcon,
-  Megaphone01Icon,
+  GridViewIcon,
   Motion01Icon,
   SecurityCheckIcon,
-  Sofa01Icon,
-  SquareLock02Icon
+  SquareLock02Icon,
+  WifiDisconnected01Icon
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import { entityName } from '../../hooks/useSecurityData';
 import {
-  bentoSpan,
-  groupByRoom,
-  groupByType,
-  groupHasDanger,
-  packOrder,
-  type DeviceGroup,
+  deviceItem,
+  kindRank,
+  LOW_BATTERY_THRESHOLD,
   type DeviceItem,
-  type SecurityEntities
+  type SecurityEntities,
+  type Tone
 } from '../../lib/securityLogic';
-import { BentoCard, BentoGrid } from '../../ui/magicui/BentoGrid';
-import { DeviceRow } from './DeviceRow';
+import { GarageAction, KIND_ICON, LockAction, SirenAction } from './DeviceRow';
 
-type View = 'type' | 'room';
-type FilterMode = 'all' | 'issues';
-const VIEW_KEY = 'had_pro_security_group_view';
+type CategoryFilter = 'all' | 'locks' | 'openings' | 'motion' | 'hazards' | 'issues';
 
-const GROUP_ICON: Record<DeviceGroup['kind'], IconSvgElement> = {
-  lock: SquareLock02Icon,
-  garage: GarageIcon,
-  siren: Megaphone01Icon,
-  openings: DoorIcon,
-  hazards: AlarmSmokeIcon,
-  motion: Motion01Icon,
-  room: Sofa01Icon,
-  door: DoorIcon,
-  window: BlindsIcon,
-  leak: DropletIcon,
-  smoke: AlarmSmokeIcon
+const TONE_COLOR: Record<Tone, string> = {
+  default: 'var(--accent)',
+  success: 'var(--success)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)'
 };
 
-function readView(): View {
-  try {
-    return localStorage.getItem(VIEW_KEY) === 'room' ? 'room' : 'type';
-  } catch {
-    return 'type';
-  }
-}
+const CATEGORY_META: ReadonlyArray<{ id: CategoryFilter; label: string; icon: IconSvgElement }> = [
+  { id: 'all', label: 'All', icon: GridViewIcon },
+  { id: 'locks', label: 'Locks', icon: SquareLock02Icon },
+  { id: 'openings', label: 'Openings', icon: DoorIcon },
+  { id: 'motion', label: 'Motion', icon: Motion01Icon },
+  { id: 'hazards', label: 'Hazards', icon: AlarmSmokeIcon },
+  { id: 'issues', label: 'Issues', icon: Alert02Icon }
+];
 
 interface DeviceGroupsProps {
   entities: SecurityEntities;
@@ -65,8 +50,10 @@ interface DeviceGroupsProps {
 }
 
 /**
- * Device groups in a Magic UI bento grid, sized by content, by type or by room,
- * with `All` / `Issues` filtering, optional search when 8+ devices, and danger tint on hazard cards.
+ * Device Groups — Concept B · Interactive Tile Deck (DESIGN.md 7.5, SECURITY.md §3):
+ * Area-tile-inspired visual device grid with category filters, optional search when 8+ devices,
+ * direct Lock / Garage / Siren controls (press-and-hold on Unlock / Open / Test), and tap to
+ * inspect in SecurityDeviceSheet.
  */
 export function DeviceGroups({
   entities,
@@ -74,64 +61,79 @@ export function DeviceGroups({
   onError,
   onSelectDevice
 }: DeviceGroupsProps) {
-  const [view, setView] = useState<View>(readView);
-  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [filter, setFilter] = useState<CategoryFilter>('all');
   const [query, setQuery] = useState('');
 
-  const totalCount =
-    entities.locks.length +
-    (entities.garages?.length ?? 0) +
-    (entities.sirens?.length ?? 0) +
-    entities.doorSensors.length +
-    entities.windowSensors.length +
-    entities.motionSensors.length +
-    entities.leakSensors.length +
-    entities.smokeSensors.length;
+  const allItems = useMemo<DeviceItem[]>(() => {
+    const list: DeviceItem[] = [
+      ...entities.locks.map((e) => deviceItem(e, 'lock')),
+      ...(entities.garages ?? []).map((e) => deviceItem(e, 'garage')),
+      ...(entities.sirens ?? []).map((e) => deviceItem(e, 'siren')),
+      ...entities.doorSensors.map((e) => deviceItem(e, 'door')),
+      ...entities.windowSensors.map((e) => deviceItem(e, 'window')),
+      ...entities.motionSensors.map((e) => deviceItem(e, 'motion')),
+      ...entities.smokeSensors.map((e) => deviceItem(e, 'smoke')),
+      ...entities.leakSensors.map((e) => deviceItem(e, 'leak'))
+    ];
+    return list.sort(
+      (a, b) =>
+        Number(b.problem) - Number(a.problem) ||
+        (b.tone === 'danger' ? 1 : 0) - (a.tone === 'danger' ? 1 : 0) ||
+        kindRank(a.kind) - kindRank(b.kind) ||
+        entityName(a.entity).localeCompare(entityName(b.entity))
+    );
+  }, [entities]);
 
-  const groups = useMemo(() => {
-    const raw = view === 'room' ? groupByRoom(entities) : groupByType(entities);
-    const trimmed = query.trim().toLowerCase();
+  const availableCategories = useMemo(() => {
+    return CATEGORY_META.filter((c) => {
+      if (c.id === 'all' || c.id === 'issues') return true;
+      if (c.id === 'locks') return allItems.some((i) => i.kind === 'lock' || i.kind === 'garage');
+      if (c.id === 'openings') return allItems.some((i) => i.kind === 'door' || i.kind === 'window');
+      if (c.id === 'motion') return allItems.some((i) => i.kind === 'motion');
+      return allItems.some((i) => i.kind === 'smoke' || i.kind === 'leak' || i.kind === 'siren');
+    });
+  }, [allItems]);
 
-    const filtered = raw
-      .map((g) => {
-        const items = g.items.filter((item) => {
-          if (filterMode === 'issues' && !item.problem && item.tone !== 'warning' && item.tone !== 'danger') {
-            return false;
-          }
-          if (trimmed) {
-            const hay = `${entityName(item.entity)} ${item.entity.area?.name ?? ''} ${item.stateLabel}`.toLowerCase();
-            if (!hay.includes(trimmed)) return false;
-          }
-          return true;
-        });
-        return { ...g, items };
-      })
-      .filter((g) => g.items.length > 0);
+  const effectiveFilter = availableCategories.some((c) => c.id === filter) ? filter : 'all';
 
-    return packOrder(filtered);
-  }, [entities, view, filterMode, query]);
+  const visibleItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return allItems.filter((item) => {
+      if (effectiveFilter === 'locks' && item.kind !== 'lock' && item.kind !== 'garage') return false;
+      if (effectiveFilter === 'openings' && item.kind !== 'door' && item.kind !== 'window') return false;
+      if (effectiveFilter === 'motion' && item.kind !== 'motion') return false;
+      if (
+        effectiveFilter === 'hazards' &&
+        item.kind !== 'smoke' &&
+        item.kind !== 'leak' &&
+        item.kind !== 'siren'
+      ) {
+        return false;
+      }
+      if (effectiveFilter === 'issues' && !item.problem && item.tone !== 'warning' && item.tone !== 'danger') {
+        return false;
+      }
+      if (q) {
+        const hay = `${entityName(item.entity)} ${item.entity.area?.name ?? ''} ${item.stateLabel}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allItems, effectiveFilter, query]);
 
-  if (totalCount === 0) return null;
-
-  const changeView = (next: View) => {
-    setView(next);
-    try {
-      localStorage.setItem(VIEW_KEY, next);
-    } catch {
-      /* per-viewer convenience only */
-    }
-  };
+  if (allItems.length === 0) return null;
 
   return (
-    <section aria-label="Devices" className="flex flex-col gap-3">
+    <section aria-label="Devices" className="pro-surface flex flex-col gap-3.5 p-4 sm:p-5">
       <header className="flex flex-wrap items-center justify-between gap-2.5">
-        <h2 className="inline-flex items-center gap-2 text-base font-semibold">
-          <HugeiconsIcon icon={DashboardSquare02Icon} size={18} className="text-[var(--accent)]" />
-          Devices
+        <h2 className="inline-flex items-center gap-2 text-sm font-semibold">
+          <HugeiconsIcon icon={GridViewIcon} size={16} className="text-[var(--accent)]" />
+          Sensor & lock tiles
+          <span className="text-xs font-normal text-muted tabular-nums">· {allItems.length}</span>
         </h2>
 
         <div className="flex flex-wrap items-center gap-2">
-          {totalCount >= 8 ? (
+          {allItems.length >= 8 ? (
             <SearchField
               aria-label="Search security devices"
               value={query}
@@ -147,104 +149,113 @@ export function DeviceGroups({
           ) : null}
 
           <ToggleButtonGroup
-            aria-label="Filter devices by state"
+            aria-label="Filter device tiles"
             size="sm"
             selectionMode="single"
             disallowEmptySelection
-            selectedKeys={new Set([filterMode])}
+            className="flex-wrap"
+            selectedKeys={new Set([effectiveFilter])}
             onSelectionChange={(keys) => {
-              const next = [...keys][0] as FilterMode | undefined;
-              if (next) setFilterMode(next);
+              const next = [...keys][0] as CategoryFilter | undefined;
+              if (next) setFilter(next);
             }}
           >
-            <ToggleButton id="all">
-              <HugeiconsIcon icon={DashboardSquare01Icon} size={14} />
-              All
-            </ToggleButton>
-            <ToggleButton id="issues">
-              <HugeiconsIcon icon={Alert02Icon} size={14} />
-              Issues
-            </ToggleButton>
-          </ToggleButtonGroup>
-
-          <ToggleButtonGroup
-            aria-label="Group devices"
-            size="sm"
-            selectionMode="single"
-            disallowEmptySelection
-            selectedKeys={new Set([view])}
-            onSelectionChange={(keys) => {
-              const next = [...keys][0] as View | undefined;
-              if (next) changeView(next);
-            }}
-          >
-            <ToggleButton id="type">
-              <HugeiconsIcon icon={DashboardSquare02Icon} size={16} />
-              By type
-            </ToggleButton>
-            <ToggleButton id="room">
-              <HugeiconsIcon icon={Sofa01Icon} size={16} />
-              By room
-            </ToggleButton>
+            {availableCategories.map((c) => (
+              <ToggleButton key={c.id} id={c.id} className="gap-1 text-xs">
+                <HugeiconsIcon icon={c.icon} size={13} />
+                {c.label}
+              </ToggleButton>
+            ))}
           </ToggleButtonGroup>
         </div>
       </header>
 
-      {groups.length === 0 ? (
-        <div className="pro-surface flex items-center gap-3 px-4 py-3 text-sm text-muted">
-          <HugeiconsIcon icon={SecurityCheckIcon} size={18} className="text-success" />
-          {filterMode === 'issues' && !query.trim()
+      {visibleItems.length === 0 ? (
+        <div className="flex items-center gap-2.5 rounded-2xl bg-default/40 px-4 py-3 text-xs text-muted">
+          <HugeiconsIcon icon={SecurityCheckIcon} size={16} className="text-success" />
+          {effectiveFilter === 'issues' && !query.trim()
             ? 'No active security issues across your devices.'
             : 'No security devices match your filter.'}
         </div>
       ) : (
-        <BentoGrid>
-          {groups.map((g) => {
-            const hasDanger = groupHasDanger(g.items);
-            const iconClass = hasDanger
-              ? 'bg-danger/15 text-danger'
-              : g.problems
-                ? 'bg-warning/15 text-warning'
-                : undefined;
-            const summaryClass = hasDanger
-              ? 'font-medium text-danger'
-              : g.problems
-                ? 'font-medium text-warning'
-                : 'text-muted';
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {visibleItems.map((item) => {
+            const name = entityName(item.entity);
+            const isOffline = item.entity.state === 'unavailable' || item.entity.state === 'unknown';
+            const battery = deviceBatteryByEntityId[item.entity.entity_id];
+            const isLowBattery = typeof battery === 'number' && battery <= LOW_BATTERY_THRESHOLD;
+            const hasDirectAction =
+              !isOffline &&
+              (item.kind === 'lock' || item.kind === 'garage' || item.kind === 'siren');
 
             return (
-              <BentoCard
-                key={g.id}
-                icon={GROUP_ICON[g.kind]}
-                iconClassName={iconClass}
-                title={g.title}
-                aside={<span className={cn('shrink-0 text-xs', summaryClass)}>{g.summary}</span>}
-                className={bentoSpan(g.items.length)}
+              <article
+                key={item.entity.entity_id}
+                className="flex flex-col justify-between gap-3 rounded-2xl p-3"
+                style={{
+                  background: item.problem
+                    ? `color-mix(in oklab, ${TONE_COLOR[item.tone]} 12%, var(--background))`
+                    : 'color-mix(in oklab, var(--default) 55%, transparent)'
+                }}
               >
-                <ul
-                  className={cn(
-                    '-my-2.5 flex flex-col divide-y divide-separator',
-                    g.items.length >= 4 &&
-                      (g.items.some((i) => i.kind === 'lock' || i.kind === 'garage' || i.kind === 'siren')
-                        ? '@xl:grid @xl:grid-cols-2 @xl:gap-x-6 @xl:divide-y-0'
-                        : '@md:grid @md:grid-cols-2 @md:gap-x-6 @md:divide-y-0')
-                  )}
-                >
-                  {g.items.map((item) => (
-                    <DeviceRow
-                      key={item.entity.entity_id}
-                      item={item}
-                      secondary={view === 'room' ? 'type' : 'area'}
-                      batteryPct={deviceBatteryByEntityId[item.entity.entity_id]}
-                      onError={onError}
-                      onSelect={onSelectDevice}
+                <div className="flex items-start justify-between gap-2">
+                  <span
+                    className="grid size-9 shrink-0 place-items-center rounded-xl"
+                    style={{
+                      background: `color-mix(in oklab, ${TONE_COLOR[item.tone]} 18%, transparent)`,
+                      color: TONE_COLOR[item.tone]
+                    }}
+                  >
+                    <HugeiconsIcon
+                      icon={isOffline ? WifiDisconnected01Icon : KIND_ICON[item.kind]}
+                      size={18}
                     />
-                  ))}
-                </ul>
-              </BentoCard>
+                  </span>
+
+                  {hasDirectAction ? (
+                    item.kind === 'lock' ? (
+                      <LockAction item={item} onError={onError} />
+                    ) : item.kind === 'garage' ? (
+                      <GarageAction item={item} onError={onError} />
+                    ) : (
+                      <SirenAction item={item} onError={onError} />
+                    )
+                  ) : (
+                    <span
+                      className="mt-1 size-2.5 shrink-0 rounded-full"
+                      style={{ background: TONE_COLOR[item.tone] }}
+                      aria-hidden
+                    />
+                  )}
+                </div>
+
+                <Button
+                  variant="ghost"
+                  fullWidth
+                  onPress={() => onSelectDevice?.(item)}
+                  aria-label={`Inspect ${name} (${item.stateLabel})`}
+                  className="-mx-1.5 flex h-auto flex-col items-start gap-0.5 rounded-xl px-1.5 py-1 text-left"
+                >
+                  <span className="w-full truncate text-xs font-bold leading-tight text-foreground">
+                    {name}
+                  </span>
+                  <span className="flex w-full items-center gap-1.5 text-[11px] text-muted">
+                    <span className="truncate">
+                      {item.entity.area?.name ? `${item.entity.area.name} · ` : ''}
+                      {item.stateLabel}
+                    </span>
+                    {isLowBattery ? (
+                      <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-mono font-semibold text-warning">
+                        <HugeiconsIcon icon={BatteryLowIcon} size={11} />
+                        {battery}%
+                      </span>
+                    ) : null}
+                  </span>
+                </Button>
+              </article>
             );
           })}
-        </BentoGrid>
+        </div>
       )}
     </section>
   );

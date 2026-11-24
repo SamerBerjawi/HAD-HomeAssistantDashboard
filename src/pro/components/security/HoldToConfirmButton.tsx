@@ -10,13 +10,18 @@ interface HoldToConfirmButtonProps {
   ariaLabel: string;
   onConfirm: () => void;
   holdMs?: number;
+  variant?: 'primary' | 'secondary' | 'tertiary' | 'danger';
+  fullWidth?: boolean;
+  hintLabel?: string;
+  fillClassName?: string;
   isPending?: boolean;
   isDisabled?: boolean;
   className?: string;
 }
 
 /**
- * HeroUI Button that fires only after being held for `holdMs` (DESIGN.md 7.5, unlock).
+ * HeroUI Button that fires only after being held for `holdMs` (DESIGN.md 7.5: critical security
+ * actions — arming Away/Vacation, code-free disarm, unlocking doors, opening garages, testing sirens).
  * A fill grows while held; releasing early cancels and briefly shows a "Hold…" hint.
  */
 export function HoldToConfirmButton({
@@ -24,7 +29,11 @@ export function HoldToConfirmButton({
   label,
   ariaLabel,
   onConfirm,
-  holdMs = 1500,
+  holdMs = 1400,
+  variant = 'secondary',
+  fullWidth,
+  hintLabel,
+  fillClassName = 'bg-warning/30',
   isPending,
   isDisabled,
   className
@@ -82,12 +91,14 @@ export function HoldToConfirmButton({
   return (
     <Button
       size="sm"
-      variant="secondary"
+      variant={variant}
+      fullWidth={fullWidth}
       aria-label={ariaLabel}
       isPending={isPending}
       isDisabled={isDisabled}
       className={cn('relative overflow-hidden', showHint && 'ring-1 ring-warning/60', className)}
       onPressStart={() => {
+        if (isDisabled || isPending) return;
         setShowHint(false);
         start.current = performance.now();
         progressRef.current = 0.01;
@@ -98,12 +109,12 @@ export function HoldToConfirmButton({
     >
       <span
         aria-hidden="true"
-        className="absolute inset-y-0 left-0 bg-warning/25"
+        className={cn('pointer-events-none absolute inset-y-0 left-0', fillClassName)}
         style={{ width: `${progress * 100}%` }}
       />
       <span className="relative inline-flex items-center gap-1.5">
-        <HugeiconsIcon icon={icon} size={16} />
-        {showHint ? `Hold to ${label.toLowerCase()}` : label}
+        <HugeiconsIcon icon={icon} size={15} />
+        <span className="truncate">{showHint ? (hintLabel ?? `Hold ${label.toLowerCase()}`) : label}</span>
       </span>
     </Button>
   );

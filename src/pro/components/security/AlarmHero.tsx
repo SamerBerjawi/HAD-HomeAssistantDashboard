@@ -3,10 +3,9 @@ import {
   AlertDialog,
   Avatar,
   Button,
+  Chip,
   ListBox,
-  Select,
-  ToggleButton,
-  ToggleButtonGroup
+  Select
 } from '@heroui/react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
@@ -18,6 +17,7 @@ import {
   DoorIcon,
   GarageIcon,
   Home01Icon,
+  Key01Icon,
   Logout03Icon,
   MegaphoneOffIcon,
   Moon02Icon,
@@ -53,6 +53,7 @@ import { useHaPicture } from '../../widgets/shared/useHaPicture';
 import { entityName } from '../../hooks/useSecurityData';
 import { BorderBeam } from '../../ui/magicui/BorderBeam';
 import { AlarmCodeSheet } from './AlarmCodeSheet';
+import { HoldToConfirmButton } from './HoldToConfirmButton';
 
 const MODE_ICON: Record<AlarmModeId, IconSvgElement> = {
   disarmed: PowerIcon,
@@ -70,11 +71,18 @@ export const TONE_TILE: Record<Tone, string> = {
   danger: 'bg-danger/15 text-danger'
 };
 
-const TONE_WASH: Record<Tone, string> = {
-  default: '',
-  success: 'bg-gradient-to-br from-success/10 to-transparent',
-  warning: 'bg-gradient-to-br from-warning/12 to-transparent',
-  danger: 'bg-gradient-to-br from-danger/15 to-transparent'
+const TONE_TINT: Record<Tone, string> = {
+  default: '168, 85, 247',
+  success: '34, 197, 94',
+  warning: '245, 158, 11',
+  danger: '239, 68, 68'
+};
+
+const TONE_COLOR: Record<Tone, string> = {
+  default: 'var(--accent)',
+  success: 'var(--success)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)'
 };
 
 function stateIcon(state: string): IconSvgElement {
@@ -98,12 +106,78 @@ function initials(name: string): string {
     : name.slice(0, 2).toUpperCase();
 }
 
+function ShieldHaloSvg({
+  state,
+  tone,
+  zones
+}: {
+  state: string;
+  tone: Tone;
+  zones: readonly { id: string; tone: Tone }[];
+}) {
+  const r = 48;
+  const c = 2 * Math.PI * r;
+  const segLen = c / zones.length;
+  const color = TONE_COLOR[tone];
+
+  return (
+    <div className="relative grid size-28 shrink-0 place-items-center sm:size-32">
+      <svg
+        viewBox="0 0 120 120"
+        className="size-full"
+        role="img"
+        aria-label={`Alarm ${alarmStateLabel(state)} perimeter ring`}
+      >
+        <g transform="rotate(-90 60 60)">
+          {zones.map((z, idx) => (
+            <circle
+              key={z.id}
+              cx="60"
+              cy="60"
+              r={r}
+              fill="none"
+              stroke={TONE_COLOR[z.tone]}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={`${Math.max(4, segLen - 10)} ${c}`}
+              strokeDashoffset={-(idx * segLen + 5)}
+              opacity="0.88"
+            />
+          ))}
+        </g>
+        <circle
+          cx="60"
+          cy="60"
+          r="35"
+          fill={color}
+          fillOpacity="0.14"
+          stroke={color}
+          strokeOpacity="0.35"
+          strokeWidth="1.5"
+        />
+      </svg>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <HugeiconsIcon
+          icon={stateIcon(state)}
+          size={28}
+          style={{ color }}
+          className={state === 'triggered' ? 'animate-pulse' : undefined}
+        />
+        <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-muted">
+          {state === 'triggered' ? 'ALERT' : state.startsWith('armed') ? 'ARMED' : 'OFF'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 interface AlarmHeroProps {
   alarm: ResolvedEntity;
   alarms: ResolvedEntity[];
   openings: ResolvedEntity[];
   openGarages?: ResolvedEntity[];
   unlockedLocks?: ResolvedEntity[];
+  jammedLocks?: ResolvedEntity[];
   activeSirens?: ResolvedEntity[];
   hazards?: ResolvedEntity[];
   people?: ResolvedEntity[];
@@ -115,9 +189,10 @@ interface AlarmHeroProps {
 }
 
 /**
- * Alarm hero (DESIGN.md 7.5): state-tinted shield tile, BorderBeam when triggered,
- * Who's Home presence context, siren silence button, triggered diagnostics + camera jump,
- * arming/entry delay countdown, readiness pill, Secure & arm confirmation, and segmented modes.
+ * Alarm Hero — Concept A · Shield Halo Console (DESIGN.md 7.5, SECURITY.md §3):
+ * Concentric 4-zone perimeter readiness SVG ring around the shield, subtle state glow,
+ * BorderBeam when triggered, Who's Home avatars, panel picker, PIN sheet, open-entry dialog,
+ * and press-and-hold (`HoldToConfirmButton`) for critical modes (Away, Vacation, code-free Disarm).
  */
 export function AlarmHero({
   alarm,
@@ -125,6 +200,7 @@ export function AlarmHero({
   openings,
   openGarages = [],
   unlockedLocks = [],
+  jammedLocks = [],
   activeSirens = [],
   hazards = [],
   people = [],
@@ -154,6 +230,7 @@ export function AlarmHero({
   const current = modes.find((m) => m.id === state)?.id;
   const changedBy = alarm.attributes?.changed_by as string | undefined;
   const changedAt = alarm.last_changed ? (Date.now() - Date.parse(alarm.last_changed)) / 60000 : null;
+  const hasCode = Boolean(alarm.attributes?.code_format);
 
   useEffect(() => {
     if (!isDelayState) return;
@@ -191,6 +268,17 @@ export function AlarmHero({
   const homePeople = useMemo(() => people.filter((p) => p.state === 'home'), [people]);
   const everyoneAway = people.length > 0 && homePeople.length === 0;
   const canArmAway = modes.some((m) => m.id === 'armed_away');
+
+  const zones: { id: string; tone: Tone }[] = [
+    {
+      id: 'locks',
+      tone: jammedLocks.length > 0 ? 'danger' : unlockedLocks.length > 0 ? 'warning' : 'success'
+    },
+    { id: 'openings', tone: openings.length > 0 ? 'warning' : 'success' },
+    { id: 'garages', tone: openGarages.length > 0 ? 'warning' : 'success' },
+    { id: 'hazards', tone: hazards.length > 0 || activeSirens.length > 0 ? 'danger' : 'success' }
+  ];
+  const sealedZones = zones.filter((z) => z.tone === 'success').length;
 
   const send = async (mode: AlarmModeId, code?: string) => {
     const service = modes.find((m) => m.id === mode)!.service;
@@ -282,6 +370,13 @@ export function AlarmHero({
   const modeLabel = (id: AlarmModeId | null) =>
     id === 'disarmed' ? 'disarm' : `arm ${modes.find((m) => m.id === id)?.label ?? ''}`;
 
+  const requiresHold = (mode: AlarmModeId): boolean => {
+    if (mode === current) return false;
+    if (mode === 'armed_away' || mode === 'armed_vacation') return true;
+    if (mode === 'disarmed' && state !== 'disarmed' && !alarmNeedsCode(alarm, 'disarmed')) return true;
+    return false;
+  };
+
   const readinessIssues: string[] = [];
   const totalOpenings = openings.length + openGarages.length;
   if (totalOpenings > 0) {
@@ -295,108 +390,116 @@ export function AlarmHero({
   const canAutoSecure = unlockedLocks.length > 0 || openGarages.length > 0;
 
   return (
-    <section aria-label="Alarm" className="pro-surface relative overflow-hidden">
+    <section
+      aria-label="Alarm"
+      className={cn(
+        'pro-eb @container relative flex h-full flex-col justify-between gap-4 p-4 sm:p-5',
+        state === 'triggered' && 'ring-2 ring-danger'
+      )}
+      style={{ ['--eb-tint' as string]: TONE_TINT[tone] }}
+    >
       {state === 'triggered' ? (
         <BorderBeam colorFrom="var(--danger)" colorTo="#fb7185" duration={3.5} borderWidth={2} />
       ) : null}
 
-      <div className={cn('flex flex-col gap-4 p-5 md:p-6', TONE_WASH[tone])}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-4">
-            <span
-              className={cn(
-                'grid size-16 shrink-0 place-items-center rounded-2xl',
-                TONE_TILE[tone],
-                state === 'triggered' && 'animate-pulse'
-              )}
-            >
-              <HugeiconsIcon icon={stateIcon(state)} size={32} />
-            </span>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col items-center gap-4 text-center @[520px]:flex-row @[520px]:items-center @[520px]:justify-between @[520px]:text-left">
+          <div className="flex min-w-0 flex-col items-center gap-3.5 @[520px]:flex-row">
+            <ShieldHaloSvg state={state} tone={tone} zones={zones} />
+
             <div className="flex min-w-0 flex-col gap-1">
-              <h2 className="text-2xl font-bold tracking-tight" aria-live="polite">
-                {alarmStateLabel(state)}
-              </h2>
+              <div className="flex flex-wrap items-center justify-center gap-2 @[520px]:justify-start">
+                <h2 className="text-2xl font-bold tracking-tight leading-none" aria-live="polite">
+                  {alarmStateLabel(state)}
+                </h2>
+                <Chip size="sm" variant="soft" color={tone}>
+                  <HugeiconsIcon icon={hasCode ? Key01Icon : Shield01Icon} size={12} />
+                  <Chip.Label>{hasCode ? 'PIN protected' : `${sealedZones}/4 zones sealed`}</Chip.Label>
+                </Chip>
+              </div>
+
               {(changedBy || changedAt !== null) && (
-                <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted">
+                <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-xs text-muted @[520px]:justify-start">
                   {changedBy && (
                     <span className="inline-flex items-center gap-1">
-                      <HugeiconsIcon icon={ShieldUserIcon} size={14} />
+                      <HugeiconsIcon icon={ShieldUserIcon} size={13} />
                       by {changedBy}
                     </span>
                   )}
                   {changedAt !== null && !Number.isNaN(changedAt) && (
                     <span className="inline-flex items-center gap-1">
-                      <HugeiconsIcon icon={Clock01Icon} size={14} />
+                      <HugeiconsIcon icon={Clock01Icon} size={13} />
                       {timeAgo(changedAt)}
                     </span>
                   )}
                 </p>
               )}
-              {alarms.length > 1 ? (
-                <Select
-                  aria-label="Alarm panel"
-                  selectedKey={alarm.entity_id}
-                  onSelectionChange={(key) => key && setSelectedAlarm(String(key))}
-                  className="w-fit max-w-full"
+
+              <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5 @[520px]:justify-start">
+                {alarms.length > 1 ? (
+                  <Select
+                    aria-label="Alarm panel"
+                    selectedKey={alarm.entity_id}
+                    onSelectionChange={(key) => key && setSelectedAlarm(String(key))}
+                    className="w-fit max-w-full"
+                  >
+                    <Select.Trigger className="min-h-8 items-center gap-1.5 px-2.5 py-1 text-xs leading-normal text-foreground">
+                      <HugeiconsIcon icon={Shield01Icon} size={13} className="shrink-0 text-muted" />
+                      <Select.Value className="truncate leading-normal text-foreground">
+                        {() => <span className="truncate leading-normal text-foreground">{entityName(alarm)}</span>}
+                      </Select.Value>
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover className="pro" data-page="security">
+                      <ListBox>
+                        {alarms.map((a) => (
+                          <ListBox.Item key={a.entity_id} id={a.entity_id} textValue={entityName(a)}>
+                            <HugeiconsIcon
+                              icon={a.state?.startsWith('armed') ? SecurityCheckIcon : Shield01Icon}
+                              size={16}
+                              className="shrink-0"
+                            />
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate">{entityName(a)}</span>
+                              <span className="text-xs text-muted">{alarmStateLabel(a.state)}</span>
+                            </span>
+                            <ListBox.ItemIndicator />
+                          </ListBox.Item>
+                        ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs text-muted">
+                    <HugeiconsIcon icon={Shield01Icon} size={13} />
+                    <span className="truncate">{entityName(alarm)}</span>
+                  </span>
+                )}
+
+                <span
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium',
+                    readinessIssues.length > 0
+                      ? 'bg-warning/15 text-warning'
+                      : 'bg-success/15 text-success'
+                  )}
                 >
-                  <Select.Trigger className="h-8 min-h-8 gap-1.5 px-2.5 text-sm text-foreground">
-                    <HugeiconsIcon icon={Shield01Icon} size={14} className="shrink-0 text-muted" />
-                    <Select.Value className="truncate text-foreground">
-                      {() => <span className="truncate text-foreground">{entityName(alarm)}</span>}
-                    </Select.Value>
-                    <Select.Indicator />
-                  </Select.Trigger>
-                  <Select.Popover className="pro" data-page="security">
-                    <ListBox>
-                      {alarms.map((a) => (
-                        <ListBox.Item key={a.entity_id} id={a.entity_id} textValue={entityName(a)}>
-                          <HugeiconsIcon
-                            icon={a.state?.startsWith('armed') ? SecurityCheckIcon : Shield01Icon}
-                            size={16}
-                            className="shrink-0"
-                          />
-                          <span className="flex min-w-0 flex-col">
-                            <span className="truncate">{entityName(a)}</span>
-                            <span className="text-xs text-muted">{alarmStateLabel(a.state)}</span>
-                          </span>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
-                    </ListBox>
-                  </Select.Popover>
-                </Select>
-              ) : (
-                <p className="inline-flex items-center gap-1 text-sm text-muted">
-                  <HugeiconsIcon icon={Shield01Icon} size={14} />
-                  <span className="truncate">{entityName(alarm)}</span>
-                </p>
-              )}
+                  <HugeiconsIcon
+                    icon={readinessIssues.length > 0 ? Alert02Icon : CheckmarkCircle02Icon}
+                    size={12}
+                  />
+                  {readinessIssues.length > 0 ? readinessIssues.join(' · ') : 'Ready to arm'}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {activeSirens.length > 0 ? (
-              <Button size="sm" variant="danger" isPending={busy} onPress={() => void silenceSirens()}>
-                <HugeiconsIcon icon={MegaphoneOffIcon} size={15} />
-                Silence siren
-              </Button>
-            ) : null}
-
-            <span
-              className={cn(
-                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
-                readinessIssues.length > 0
-                  ? 'bg-warning/15 text-warning'
-                  : 'bg-success/15 text-success'
-              )}
-            >
-              <HugeiconsIcon
-                icon={readinessIssues.length > 0 ? Alert02Icon : CheckmarkCircle02Icon}
-                size={13}
-              />
-              {readinessIssues.length > 0 ? readinessIssues.join(' · ') : 'Ready to arm'}
-            </span>
-          </div>
+          {activeSirens.length > 0 ? (
+            <Button size="sm" variant="danger" isPending={busy} onPress={() => void silenceSirens()}>
+              <HugeiconsIcon icon={MegaphoneOffIcon} size={15} />
+              Silence siren
+            </Button>
+          ) : null}
         </div>
 
         {people.length > 0 ? (
@@ -411,7 +514,7 @@ export function AlarmHero({
                       key={p.entity_id}
                       size="sm"
                       className={cn(
-                        'size-6 ring-2 ring-surface text-[10px]',
+                        'size-6 text-[10px] ring-2 ring-surface',
                         p.state !== 'home' && 'opacity-55 grayscale'
                       )}
                     >
@@ -429,15 +532,16 @@ export function AlarmHero({
             </div>
 
             {everyoneAway && state === 'disarmed' && canArmAway ? (
-              <Button
-                size="sm"
+              <HoldToConfirmButton
+                icon={Logout03Icon}
+                label="Arm Away"
+                hintLabel="Hold to arm away"
+                ariaLabel="Hold to arm Away"
+                holdMs={1200}
                 variant="tertiary"
                 className="h-7 min-h-7 rounded-full bg-warning/15 px-2.5 text-xs font-medium text-warning"
-                onPress={() => select('armed_away')}
-              >
-                <HugeiconsIcon icon={Logout03Icon} size={13} />
-                Arm Away?
-              </Button>
+                onConfirm={() => select('armed_away')}
+              />
             ) : null}
           </div>
         ) : null}
@@ -492,31 +596,73 @@ export function AlarmHero({
             </div>
           </div>
         ) : null}
+      </div>
 
-        <ToggleButtonGroup
+      {/* Mode controls: critical modes (Away, Vacation, code-free Disarm) use HoldToConfirmButton */}
+      <div className="flex flex-col gap-1.5">
+        <div
+          role="group"
           aria-label="Alarm mode"
-          selectionMode="single"
-          disallowEmptySelection
-          fullWidth
-          isDisabled={busy || state === 'unavailable'}
-          selectedKeys={current ? new Set([current]) : new Set()}
-          onSelectionChange={(keys) => {
-            const next = [...keys][0] as AlarmModeId | undefined;
-            if (next) select(next);
-          }}
+          className={cn(
+            'grid gap-2',
+            modes.length >= 4
+              ? 'grid-cols-2 @[420px]:grid-cols-4'
+              : modes.length === 3
+                ? 'grid-cols-3'
+                : 'grid-cols-2'
+          )}
         >
-          {modes.map((m) => (
-            <ToggleButton
-              key={m.id}
-              id={m.id}
-              aria-label={m.id === 'disarmed' ? 'Disarm' : `Arm ${m.label}`}
-              className="h-auto min-w-0 flex-col gap-0.5 px-1 py-2 text-xs sm:h-10 sm:flex-row sm:gap-2 sm:px-3 sm:py-0 sm:text-sm"
-            >
-              <HugeiconsIcon icon={MODE_ICON[m.id]} size={18} />
-              {m.label}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+          {modes.map((m) => {
+            const active = current === m.id;
+            const hold = requiresHold(m.id);
+            const aria =
+              m.id === 'disarmed'
+                ? hold
+                  ? 'Disarm alarm (press and hold)'
+                  : 'Disarm'
+                : hold
+                  ? `Arm ${m.label} (press and hold)`
+                  : `Arm ${m.label}`;
+
+            if (hold) {
+              return (
+                <HoldToConfirmButton
+                  key={m.id}
+                  icon={MODE_ICON[m.id]}
+                  label={m.label}
+                  hintLabel={m.id === 'disarmed' ? 'Hold to disarm' : `Hold ${m.label.toLowerCase()}`}
+                  ariaLabel={aria}
+                  holdMs={1200}
+                  variant="tertiary"
+                  fullWidth
+                  isDisabled={busy || state === 'unavailable'}
+                  className="h-10 rounded-xl text-xs font-semibold sm:text-sm"
+                  onConfirm={() => select(m.id)}
+                />
+              );
+            }
+
+            return (
+              <Button
+                key={m.id}
+                size="sm"
+                fullWidth
+                variant={active ? 'primary' : 'tertiary'}
+                aria-label={aria}
+                aria-pressed={active}
+                isDisabled={busy || state === 'unavailable'}
+                onPress={() => select(m.id)}
+                className="h-10 gap-1.5 rounded-xl text-xs font-semibold sm:text-sm"
+              >
+                <HugeiconsIcon icon={MODE_ICON[m.id]} size={15} />
+                <span className="truncate">{m.label}</span>
+              </Button>
+            );
+          })}
+        </div>
+        <p className="text-[11px] text-muted">
+          Press and hold Away{!hasCode && state !== 'disarmed' ? ' or Off' : ''} to confirm critical alarm changes.
+        </p>
       </div>
 
       <AlertDialog.Backdrop isOpen={confirmMode !== null} onOpenChange={(open) => !open && setConfirmMode(null)}>
@@ -592,12 +738,7 @@ export function AlarmHero({
   );
 }
 
-/**
- * A person's photo, fetched with the session token (HA serves `/api/image/serve/...` to signed-in
- * clients only). It used to be put straight into <img>, which asked the dashboard's own server
- * (the server URL was passed as the cache-buster) and showed a broken image.
- */
-function PersonPhoto({ picture, name, serverUrl }: { picture?: string; name: string; serverUrl?: string | null }) {
+function PersonPhoto({ picture, name, serverUrl }: { picture?: string | null; name: string; serverUrl?: string | null }) {
   const src = useHaPicture(picture ?? null, serverUrl);
   return src ? <Avatar.Image src={src} alt={name} /> : null;
 }

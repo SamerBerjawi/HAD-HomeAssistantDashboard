@@ -23,6 +23,7 @@ const WidgetStudio = import.meta.env.DEV ? lazy(() => import('./studio/WidgetStu
 const AreaStudio = import.meta.env.DEV ? lazy(() => import('./areas/studio/AreaStudio')) : null;
 const RoomsStudio = import.meta.env.DEV ? lazy(() => import('./pages/rooms/studio/RoomsStudio')) : null;
 const EnergyStudio = import.meta.env.DEV ? lazy(() => import('./pages/energy/studio/EnergyStudio')) : null;
+const SecurityStudio = import.meta.env.DEV ? lazy(() => import('./pages/security/studio/SecurityStudio')) : null;
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
 const ProNotificationCenter = lazy(() => import('./components/notifications/ProNotificationCenter'));
@@ -87,6 +88,13 @@ export default function ProApp() {
         return (
           <Suspense fallback={null}>
             <EnergyStudio />
+          </Suspense>
+        );
+      }
+      if (studioId === 'security' && SecurityStudio) {
+        return (
+          <Suspense fallback={null}>
+            <SecurityStudio />
           </Suspense>
         );
       }

@@ -4,9 +4,9 @@
  * StudioHub and StudioNavBar render directly from this list.
  */
 import type { IconSvgElement } from '@hugeicons/react';
-import { FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon } from '@hugeicons/core-free-icons';
+import { FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon } from '@hugeicons/core-free-icons';
 
-export type StudioId = 'widgets' | 'areas' | 'rooms' | 'energy';
+export type StudioId = 'widgets' | 'areas' | 'rooms' | 'energy' | 'security';
 
 export interface StudioEntry {
   id: StudioId;
@@ -15,7 +15,7 @@ export interface StudioEntry {
   subtitle: string;
   query: string;
   icon: IconSvgElement;
-  pageAccent: 'overview' | 'rooms' | 'energy';
+  pageAccent: 'overview' | 'rooms' | 'energy' | 'security';
   status: 'Shipped' | 'In review' | 'Redesigning';
   statusTone: 'success' | 'accent' | 'warning';
   highlights: string[];
@@ -69,6 +69,18 @@ export const STUDIOS: readonly StudioEntry[] = [
     status: 'Shipped',
     statusTone: 'success',
     highlights: ['11 Energy sections', 'Bespoke charts & SVGs', 'Assembled responsive page']
+  },
+  {
+    id: 'security',
+    title: 'Security Studio',
+    shortTitle: 'Security',
+    subtitle: 'Full-page Security & Safety redesign: Alarm hero, Perimeter attention, WebRTC Cameras, 24 h Activity, and Device groups across 5 live states.',
+    query: 'security',
+    icon: Shield01Icon,
+    pageAccent: 'security',
+    status: 'Shipped',
+    statusTone: 'success',
+    highlights: ['5 Security sections', 'Press-and-hold safety', 'Desktop scroll + Phone tabs']
   }
 ];
 
