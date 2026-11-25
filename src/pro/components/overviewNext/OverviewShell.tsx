@@ -2,13 +2,18 @@
  * Overview shell (rebuild, Phase 4 + Phase 2 custom sections, visibility rules & header options).
  */
 import { useCallback, useMemo, type ReactNode } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { DashboardSquareAddIcon, PlusSignIcon, RotateLeft01Icon } from '@hugeicons/core-free-icons';
+import { useUserConfig } from '@/contexts/ConfigContext';
 import { haWebSocketService } from '@/services/haWebSocket';
+import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
 import type { OverviewLayoutApi } from '../../hooks/useOverviewLayout';
 import { useOverviewTab } from '../../hooks/useOverviewTab';
 import { useOpenSheet } from '../../hooks/useSheetParam';
+import { useWidgetStatusStore } from '../../hooks/useWidgetStatus';
+import { applyOverviewVisibilityRules } from '../../lib/visibilityRules';
 import {
   editableSections,
   isPinnedCardId,
@@ -64,15 +69,37 @@ function EmptyOverview({ isEditing, onAdd, onRestore }: { isEditing: boolean; on
 export function OverviewShell({ widgets, api, cols, onAddWidgets, onRenameSection, toolbar }: OverviewShellProps) {
   const open = useOpenSheet();
   const [askedTab, selectTab] = useOverviewTab();
+  const { currentUser } = useUserConfig();
+  const resolvedEntities = useAutoLayoutStore(useShallow((s) => s.resolvedEntities));
+  const resolvedAreas = useAutoLayoutStore((s) => s.resolvedAreas);
+  const widgetStatuses = useWidgetStatusStore((s) => s.byId);
   const byId = useMemo(() => new Map(widgets.map((w) => [w.id, w])), [widgets]);
   const isDemo = haWebSocketService.isDemo();
 
-  const sections = useMemo(
+  const baseSections = useMemo(
     () =>
       visibleSections(api.layout)
         .map((s) => ({ ...s, items: s.items.filter((p) => byId.has(p.i) || isPinnedCardId(p.i)) }))
         .filter((s) => s.items.length > 0 && sectionVisibilityOf(api.layout, s.section) !== 'hidden'),
     [api.layout, byId]
+  );
+
+  const sections = useMemo(
+    () =>
+      api.isEditing
+        ? baseSections
+        : applyOverviewVisibilityRules(
+            baseSections,
+            { sectionRules: api.layout.sectionRules, cardRules: api.layout.cardRules },
+            {
+              entities: resolvedEntities,
+              device: api.device,
+              user: currentUser ? { id: currentUser.id, isAdmin: currentUser.isAdmin } : null,
+              widgetStatuses,
+              resolvedAreas
+            }
+          ),
+    [api.isEditing, baseSections, api.layout.sectionRules, api.layout.cardRules, resolvedEntities, api.device, currentUser, widgetStatuses, resolvedAreas]
   );
 
   const sectionLabels = useMemo(() => {
@@ -102,17 +129,30 @@ export function OverviewShell({ widgets, api, cols, onAddWidgets, onRenameSectio
   const watches = onPage.some((w) => w.attention);
   const collapsed = api.layout.collapsed;
 
-  const offScreen = useMemo(
-    () =>
-      sections
-        .filter((s) => {
-          const vis = sectionVisibilityOf(api.layout, s.section);
-          if (tab === 'all' && vis === 'tab_only') return true;
-          return !sectionShowsCards(s.section, tab, collapsed);
-        })
-        .flatMap((s) => s.items.map((p) => byId.get(p.i)).filter((w): w is EngineWidget => Boolean(w))),
-    [sections, api.layout, tab, collapsed, byId]
-  );
+  const offScreen = useMemo(() => {
+    const renderedIds = new Set<string>();
+    for (const s of sections) {
+      const vis = sectionVisibilityOf(api.layout, s.section);
+      if (tab === 'all' && vis === 'tab_only') continue;
+      if (!sectionShowsCards(s.section, tab, collapsed)) continue;
+      for (const p of s.items) {
+        if (byId.has(p.i)) renderedIds.add(p.i);
+      }
+    }
+    const out: EngineWidget[] = [];
+    const seen = new Set<string>();
+    for (const s of baseSections) {
+      for (const p of s.items) {
+        if (renderedIds.has(p.i) || seen.has(p.i)) continue;
+        const w = byId.get(p.i);
+        if (w) {
+          seen.add(p.i);
+          out.push(w);
+        }
+      }
+    }
+    return out;
+  }, [baseSections, sections, api.layout, tab, collapsed, byId]);
 
   const activate = useCallback(
     (pill: ShellPill) => {

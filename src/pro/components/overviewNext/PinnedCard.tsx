@@ -38,6 +38,8 @@ interface PinnedCardProps {
   onMove: (section: AnyOverviewSectionId, id: string, dir: -1 | 1, span: number) => void;
   onMoveToSection: (id: string, fromSection: AnyOverviewSectionId, toSection: AnyOverviewSectionId) => void;
   onRemove: (id: string, section: AnyOverviewSectionId) => void;
+  hasVisibilityRules?: boolean;
+  onEditVisibility?: (id: string, title: string) => void;
   span: number;
 }
 
@@ -168,6 +170,8 @@ export const PinnedCard = memo(function PinnedCard({
   onMove,
   onMoveToSection,
   onRemove,
+  hasVisibilityRules = false,
+  onEditVisibility,
   span
 }: PinnedCardProps) {
   const { kind, targetId } = parseCardId(cardId);
@@ -193,6 +197,9 @@ export const PinnedCard = memo(function PinnedCard({
         <div className="absolute inset-x-1.5 top-1.5 z-20 flex items-center gap-1 rounded-2xl bg-[var(--surface)]/90 p-0.5 text-foreground shadow-sm backdrop-blur-md">
           <DragHandle className="text-muted hover:bg-default" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+          {hasVisibilityRules ? (
+            <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent)]">Rule</span>
+          ) : null}
           <WidgetCardMenu
             title={title}
             size={size}
@@ -206,6 +213,8 @@ export const PinnedCard = memo(function PinnedCard({
             sections={sections}
             currentSection={section}
             onMoveToSection={(to) => onMoveToSection(cardId, section, to)}
+            hasVisibilityRules={hasVisibilityRules}
+            onEditVisibility={onEditVisibility ? () => onEditVisibility(cardId, title) : undefined}
           />
         </div>
       ) : null}

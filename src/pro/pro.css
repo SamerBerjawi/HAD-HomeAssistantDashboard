@@ -32,6 +32,7 @@
 .dark .pro[data-page='mobility'], .pro.dark[data-page='mobility'] { --pro-l: 0.73; --accent-foreground: oklch(0.18 0.02 155); }
 .pro[data-page='media'] { --pro-h: 330; }
 .pro[data-page='rooms'] { --pro-h: 192; --pro-c: 0.115; }
+.pro[data-page='settings'] { --pro-h: 254; --pro-c: 0.14; }
 .pro[data-page='energy'] {
   --pro-h: 52;
   --pro-c: 0.17;

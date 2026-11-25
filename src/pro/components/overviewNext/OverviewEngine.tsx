@@ -1,6 +1,15 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { useUserConfig } from '@/contexts/ConfigContext';
+import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
 import type { OverviewLayoutApi } from '../../hooks/useOverviewLayout';
 import { useOpenSheet } from '../../hooks/useSheetParam';
+import { useWidgetStatusStore } from '../../hooks/useWidgetStatus';
+import { VisibilityEditorSheet } from '../VisibilityEditorSheet';
+import {
+  applyOverviewVisibilityRules,
+  withUpdatedRule
+} from '../../lib/visibilityRules';
 import {
   DEVICE_COLUMNS,
   deleteOverviewSection,
@@ -48,9 +57,14 @@ interface OverviewEngineProps {
  */
 export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = true, onOpenSection, onRenameSection }: OverviewEngineProps) {
   const open = useOpenSheet();
+  const { currentUser } = useUserConfig();
+  const resolvedEntities = useAutoLayoutStore(useShallow((s) => s.resolvedEntities));
+  const resolvedAreas = useAutoLayoutStore((s) => s.resolvedAreas);
+  const widgetStatuses = useWidgetStatusStore((s) => s.byId);
   const byId = useMemo(() => new Map(widgets.map((w) => [w.id, w])), [widgets]);
   const allowedSizes = useCallback((id: string): readonly WidgetSize[] => byId.get(id)?.sizes ?? ['s', 'w', 't', 'l'], [byId]);
   const { layout, isEditing, update } = api;
+  const [ruleTarget, setRuleTarget] = useState<{ scope: 'section' | 'card'; id: string; label: string } | null>(null);
 
   const actions = useMemo<CardActions>(
     () => ({
@@ -59,7 +73,8 @@ export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = t
       move: (section, id, dir, span) => update((l) => withSectionItems(l, section, moveInFlow(l.items[section] ?? [], id, dir, span))),
       hide: (widget, span) => update((l) => hideWidget(l, widget, span)),
       setDesign: (id, style) => update((l) => withWidgetStyle(l, id, style)),
-      moveToSection: (id, fromSec, toSec) => update((l) => moveWidgetToSection(l, id, fromSec, toSec, cols, widgets))
+      moveToSection: (id, fromSec, toSec) => update((l) => moveWidgetToSection(l, id, fromSec, toSec, cols, widgets)),
+      editVisibility: (id, title) => setRuleTarget({ scope: 'card', id, label: title })
     }),
     [open, update, cols, widgets]
   );
@@ -78,7 +93,7 @@ export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = t
   );
 
   const rawList = isEditing ? editableSections(layout) : visibleSections(layout);
-  const sections = rawList
+  const preFiltered = rawList
     .map((s) => ({ ...s, items: s.items.filter((p) => byId.has(p.i) || isPinnedCardId(p.i)) }))
     .filter((s) => {
       if (!isEditing && s.items.length === 0) return false;
@@ -90,17 +105,40 @@ export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = t
       return !onlySection || s.section === onlySection;
     });
 
+  const sections = isEditing
+    ? preFiltered
+    : applyOverviewVisibilityRules(
+        preFiltered,
+        { sectionRules: layout.sectionRules, cardRules: layout.cardRules },
+        {
+          entities: resolvedEntities,
+          device: api.device,
+          user: currentUser ? { id: currentUser.id, isAdmin: currentUser.isAdmin } : null,
+          widgetStatuses,
+          resolvedAreas
+        }
+      );
+
+  const activeRules =
+    ruleTarget?.scope === 'section'
+      ? layout.sectionRules?.[ruleTarget.id] ?? []
+      : ruleTarget?.scope === 'card'
+      ? layout.cardRules?.[ruleTarget.id] ?? []
+      : [];
+
   return (
+    <>
     <div className="grid w-full" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, rowGap: GAP_PX * 2, columnGap: GAP_PX, gridAutoFlow: 'row dense' }}>
       {sections.map(({ section, items }, idx) => {
         const span = isEditing || !sideBySide || onlySection ? cols : sectionSpan(items, cols);
         const order = readingOrder(items).map((p) => p.i);
         const isCustom = isCustomOverviewSection(layout, section);
+        const secTitle = sectionTitleOf(layout, section);
         return (
           <OverviewSection
             key={section}
             id={section}
-            title={sectionTitleOf(layout, section)}
+            title={secTitle}
             count={items.length}
             span={span}
             isEditing={isEditing}
@@ -109,9 +147,11 @@ export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = t
             isLast={idx === sections.length - 1}
             visibility={sectionVisibilityOf(layout, section)}
             isCustom={isCustom}
+            hasVisibilityRules={Boolean(layout.sectionRules?.[section]?.length)}
             onToggleCollapsed={() => api.toggleCollapsed(section)}
             onMove={(dir) => update((l) => moveSection(l, section, dir))}
             onSetVisibility={(vis) => update((l) => setSectionVisibility(l, section, vis))}
+            onEditVisibility={() => setRuleTarget({ scope: 'section', id: section, label: `${secTitle} section` })}
             onRename={isCustom && onRenameSection ? () => onRenameSection(section) : undefined}
             onDelete={isCustom ? () => update((l) => deleteOverviewSection(l, section, widgets, cols)) : undefined}
             onOpenTab={!isEditing && !onlySection && onOpenSection ? () => onOpenSection(section) : undefined}
@@ -129,6 +169,7 @@ export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = t
                 onChange={(next) => update((l) => withSectionItems(l, section, next))}
                 renderCard={(p) => {
                   const at = order.indexOf(p.i);
+                  const hasCardRules = Boolean(layout.cardRules?.[p.i]?.length);
                   if (isPinnedCardId(p.i)) {
                     return (
                       <PinnedCard
@@ -144,6 +185,8 @@ export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = t
                         onMove={actions.move}
                         onMoveToSection={actions.moveToSection}
                         onRemove={handleRemovePinned}
+                        hasVisibilityRules={hasCardRules}
+                        onEditVisibility={actions.editVisibility}
                       />
                     );
                   }
@@ -160,6 +203,7 @@ export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = t
                       canMoveEarlier={at > 0}
                       canMoveLater={at < order.length - 1}
                       design={layout.styles?.[widget.id]}
+                      hasVisibilityRules={hasCardRules}
                       actions={actions}
                     />
                   );
@@ -170,5 +214,21 @@ export function OverviewEngine({ widgets, api, cols, onlySection, sideBySide = t
         );
       })}
     </div>
+    <VisibilityEditorSheet
+      isOpen={Boolean(ruleTarget)}
+      onOpenChange={(openSheet) => !openSheet && setRuleTarget(null)}
+      page="overview"
+      targetLabel={ruleTarget?.label ?? ''}
+      rules={activeRules}
+      onSave={(nextRules) => {
+        if (!ruleTarget) return;
+        if (ruleTarget.scope === 'section') {
+          update((l) => ({ ...l, sectionRules: withUpdatedRule(l.sectionRules, ruleTarget.id, nextRules) }));
+        } else {
+          update((l) => ({ ...l, cardRules: withUpdatedRule(l.cardRules, ruleTarget.id, nextRules) }));
+        }
+      }}
+    />
+    </>
   );
 }

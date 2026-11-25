@@ -30,6 +30,7 @@ const MediaStudio = import.meta.env.DEV ? lazy(() => import('./pages/media/studi
 const SecurityStudio = import.meta.env.DEV ? lazy(() => import('./pages/security/studio/SecurityStudio')) : null;
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
+const ProSettings = lazy(() => import('./pages/ProSettings'));
 const ProNotificationCenter = lazy(() => import('./components/notifications/ProNotificationCenter'));
 const ProEmergencyAlert = lazy(() => import('./components/toasts/ProEmergencyAlert'));
 
@@ -164,9 +165,13 @@ export default function ProApp() {
           <ProMedia dark={darkMode} />
         ) : activeTab === 'energy' ? (
           <ProEnergy />
+        ) : activeTab === 'settings' ? (
+          <Suspense fallback={null}>
+            <ProSettings />
+          </Suspense>
         ) : (
           <div className="pro-surface p-8 flex flex-col gap-2">
-            <p className="text-muted">This page has not been rebuilt in the pro design yet. Security and Overview are in progress.</p>
+            <p className="text-muted">This page has not been rebuilt in the pro design yet.</p>
           </div>
         )}
       </ProShell>

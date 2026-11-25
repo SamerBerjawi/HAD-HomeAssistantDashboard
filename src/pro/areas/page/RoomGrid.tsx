@@ -10,6 +10,7 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   DragDropVerticalIcon,
+  EyeIcon,
   MoreHorizontalIcon,
   PencilEdit01Icon,
   PinIcon,
@@ -40,6 +41,8 @@ export interface GridEditing {
   currentSection?: SectionId;
   onMoveToSection?: (key: string, target: SectionId) => void;
   onEditTile?: (key: string) => void;
+  hasVisibilityRules?: (key: string) => boolean;
+  onEditVisibility?: (key: string) => void;
 }
 
 interface RoomGridProps {
@@ -114,12 +117,18 @@ function EditGrid({ keys, sizeOf, renderTile, editing, className }: RoomGridProp
 function EditCell({ id, size, first, last, editing, dragging, children }: { id: string; size: TileSize; first: boolean; last: boolean; editing: GridEditing; dragging: boolean; children: ReactNode }) {
   const { setNodeRef, attributes, listeners } = useSortable({ id });
   const name = editing.name(id);
+  const hasRules = editing.hasVisibilityRules?.(id) ?? false;
   return (
     <li ref={setNodeRef} className={cn(SPAN[size], 'relative min-h-0 min-w-0', dragging && 'opacity-30')}>
       <div inert className="h-full w-full opacity-90 saturate-[.85]">
         {children}
       </div>
       <div className="pointer-events-none absolute inset-0 rounded-[26px] ring-2 ring-inset ring-[color-mix(in_srgb,var(--accent)_55%,transparent)] [background:color-mix(in_srgb,var(--accent)_6%,transparent)]" />
+      {hasRules ? (
+        <span className="pointer-events-none absolute bottom-2 left-2 z-10 rounded-full bg-[var(--surface)]/90 px-2 py-0.5 text-[10px] font-medium text-[var(--accent)] shadow-sm">
+          Rule
+        </span>
+      ) : null}
       <div className="absolute -inset-x-2 -top-2 z-10 flex items-center justify-between">
         <span
           {...attributes}
@@ -137,6 +146,7 @@ function EditCell({ id, size, first, last, editing, dragging, children }: { id: 
 
 function TileEditMenu({ id, name, size, first, last, editing }: { id: string; name: string; size: TileSize; first: boolean; last: boolean; editing: GridEditing }) {
   const pinned = editing.pinned?.(id) ?? false;
+  const hasRules = editing.hasVisibilityRules?.(id) ?? false;
   const otherSections = (editing.sections ?? []).filter((s) => s.id !== editing.currentSection);
   return (
     <Dropdown>
@@ -151,6 +161,7 @@ function TileEditMenu({ id, name, size, first, last, editing }: { id: string; na
             if (k.startsWith('size:')) editing.onSize(id, k.slice(5) as TileSize);
             else if (k.startsWith('move:')) editing.onMoveToSection?.(id, k.slice(5) as SectionId);
             else if (k === 'editTile') editing.onEditTile?.(id);
+            else if (k === 'visibility') editing.onEditVisibility?.(id);
             else if (k === 'earlier') editing.onMoveBy(id, -1);
             else if (k === 'later') editing.onMoveBy(id, 1);
             else if (k === 'pin') editing.onPin?.(id);
@@ -181,6 +192,12 @@ function TileEditMenu({ id, name, size, first, last, editing }: { id: string; na
               <Dropdown.Item id="editTile" textValue="Edit tile">
                 <HugeiconsIcon icon={PencilEdit01Icon} size={16} className="shrink-0" />
                 <Label>Edit tile…</Label>
+              </Dropdown.Item>
+            ) : null}
+            {editing.onEditVisibility ? (
+              <Dropdown.Item id="visibility" textValue="Visibility rules">
+                <HugeiconsIcon icon={EyeIcon} size={16} className={hasRules ? 'shrink-0 text-[var(--accent)]' : 'shrink-0'} />
+                <Label>{hasRules ? 'Visibility rules (active)…' : 'Visibility rules…'}</Label>
               </Dropdown.Item>
             ) : null}
             {editing.onPin ? (

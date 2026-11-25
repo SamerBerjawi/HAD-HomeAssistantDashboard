@@ -166,6 +166,29 @@ describe('saved layouts', () => {
     expect(afterDelete.customSections).toBeUndefined();
     expect(afterDelete.order.lights).toContain('light.b');
   });
+
+  it('normalizes sectionRules and cardRules in reconcile and cleans up on section deletion', () => {
+    const base = defaultLayout(ITEMS, 'wide');
+    const created = createRoomSection(base, 'Night');
+    const withRules = {
+      ...created.layout,
+      sectionRules: {
+        [created.id]: [{ kind: 'user' as const, adminOnly: true }],
+        ghost: [{ kind: 'active_only' as const }]
+      },
+      cardRules: {
+        'light.a': [{ kind: 'active_only' as const }],
+        'light.missing': [{ kind: 'active_only' as const }]
+      }
+    };
+    const rec = reconcile(withRules, ITEMS, 'wide');
+    expect(rec.sectionRules).toEqual({ [created.id]: [{ kind: 'user', adminOnly: true }] });
+    expect(rec.cardRules).toEqual({ 'light.a': [{ kind: 'active_only' }] });
+
+    const deleted = deleteRoomSection(rec, created.id, ITEMS);
+    expect(deleted.sectionRules).toBeUndefined();
+    expect(deleted.cardRules).toEqual({ 'light.a': [{ kind: 'active_only' }] });
+  });
 });
 
 describe('room summary', () => {

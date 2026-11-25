@@ -1,6 +1,6 @@
 import { Button, Dropdown, Header, Label } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, ArrowRight01Icon, MoreHorizontalIcon, Tick02Icon, ViewOffSlashIcon } from '@hugeicons/core-free-icons';
+import { ArrowLeft01Icon, ArrowRight01Icon, EyeIcon, MoreHorizontalIcon, Tick02Icon, ViewOffSlashIcon } from '@hugeicons/core-free-icons';
 import { SIZE_CELLS, SIZE_LABELS, type WidgetSize } from '../../lib/overviewLayout';
 
 interface WidgetCardMenuProps {
@@ -20,6 +20,8 @@ interface WidgetCardMenuProps {
   sections?: readonly { id: string; title: string }[];
   currentSection?: string;
   onMoveToSection?: (sectionId: string) => void;
+  hasVisibilityRules?: boolean;
+  onEditVisibility?: () => void;
   hideLabel?: string;
 }
 
@@ -42,6 +44,8 @@ export function WidgetCardMenu({
   sections,
   currentSection,
   onMoveToSection,
+  hasVisibilityRules = false,
+  onEditVisibility,
   hideLabel = 'Hide'
 }: WidgetCardMenuProps) {
   const showStyles = Boolean(designs && designs.length > 1 && onSetDesign);
@@ -61,6 +65,7 @@ export function WidgetCardMenu({
             else if (k.startsWith('move:')) onMoveToSection?.(k.slice(5));
             else if (k === 'earlier') onMove(-1);
             else if (k === 'later') onMove(1);
+            else if (k === 'visibility') onEditVisibility?.();
             else if (k === 'hide') onHide();
           }}
         >
@@ -102,6 +107,12 @@ export function WidgetCardMenu({
               <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="shrink-0" />
               <Label>Move later</Label>
             </Dropdown.Item>
+            {onEditVisibility ? (
+              <Dropdown.Item id="visibility" textValue="Visibility rules">
+                <HugeiconsIcon icon={EyeIcon} size={16} className={hasVisibilityRules ? 'shrink-0 text-[var(--accent)]' : 'shrink-0'} />
+                <Label>{hasVisibilityRules ? 'Visibility rules (active)…' : 'Visibility rules…'}</Label>
+              </Dropdown.Item>
+            ) : null}
             <Dropdown.Item id="hide" textValue={hideLabel}>
               <HugeiconsIcon icon={ViewOffSlashIcon} size={16} className="shrink-0" />
               <Label>{hideLabel}</Label>

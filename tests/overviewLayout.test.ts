@@ -238,4 +238,27 @@ describe('overviewLayout', () => {
     expect(deleted.items[created.id]).toBeUndefined();
     expect(deleted.items.lights?.map((p) => p.i)).toEqual(['lights']);
   });
+
+  it('normalizes sectionRules and cardRules, cleans deleted sections, and omits empty maps', () => {
+    let layout = buildDefaultDeviceLayout(WIDGETS, 'desktop');
+    const created = createOverviewSection(layout, 'Night');
+    layout = {
+      ...created.layout,
+      sectionRules: {
+        [created.id]: [{ kind: 'device', devices: ['phone'] }],
+        nonexistent: [{ kind: 'active_only' }]
+      },
+      cardRules: {
+        lights: [{ kind: 'active_only' }],
+        emptyRule: []
+      }
+    };
+    const normalized = normalizeDeviceLayout(layout, WIDGETS, 'desktop');
+    expect(normalized.sectionRules).toEqual({ [created.id]: [{ kind: 'device', devices: ['phone'] }] });
+    expect(normalized.cardRules).toEqual({ lights: [{ kind: 'active_only' }] });
+
+    const afterDelete = deleteOverviewSection(normalized, created.id, WIDGETS, 6);
+    expect(afterDelete.sectionRules).toBeUndefined();
+    expect(afterDelete.cardRules).toEqual({ lights: [{ kind: 'active_only' }] });
+  });
 });

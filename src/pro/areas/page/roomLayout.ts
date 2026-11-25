@@ -4,6 +4,7 @@
  * tile sizes, hidden/collapsed/pinned lists, and editable Scenes/Readings rail order.
  */
 import type { TileModel, TileSize } from '../tileTypes';
+import { normalizeRulesMap, type VisibilityRuleSet } from '../../lib/visibilityRules';
 
 export type BuiltInSectionId = 'scenes' | 'lights' | 'air' | 'climate' | 'media' | 'security' | 'machines' | 'power';
 export type SectionId = BuiltInSectionId | (string & {});
@@ -82,6 +83,9 @@ export interface RoomLayout {
   railScenesOrder?: string[];
   /** User-defined order of Readings in the Room Rail. */
   railReadingsOrder?: string[];
+  /** Declarative conditional visibility rules per section and tile key. */
+  sectionRules?: Record<string, VisibilityRuleSet>;
+  cardRules?: Record<string, VisibilityRuleSet>;
 }
 
 export function itemDefaultSize(item: RoomItem, device: AnyDevice): TileSize {
@@ -198,15 +202,18 @@ export function deleteRoomSection(l: RoomLayout, id: SectionId, items: readonly 
     nextOrder[home] = [...(nextOrder[home] ?? []).filter((x) => x !== k), k];
     if (!nextSectionOrder.includes(home)) nextSectionOrder = [...nextSectionOrder, home];
   }
+  const nextSecRules = { ...(l.sectionRules ?? {}) };
+  delete nextSecRules[id];
   const nextCustom = (l.customSections ?? []).filter((c) => c.id !== id);
-  const { customSections: _c, sectionOverrides: _o, ...base } = l;
+  const { customSections: _c, sectionOverrides: _o, sectionRules: _r, ...base } = l;
   return {
     ...base,
     ...(nextCustom.length > 0 ? { customSections: nextCustom } : {}),
     sectionOrder: nextSectionOrder,
     order: nextOrder,
     collapsed: l.collapsed.filter((s) => s !== id),
-    ...(Object.keys(nextOverrides).length > 0 ? { sectionOverrides: nextOverrides } : {})
+    ...(Object.keys(nextOverrides).length > 0 ? { sectionOverrides: nextOverrides } : {}),
+    ...(Object.keys(nextSecRules).length > 0 ? { sectionRules: nextSecRules } : {})
   };
 }
 
@@ -323,6 +330,8 @@ export function reconcile(saved: RoomLayout | null | undefined, items: readonly 
   const placed = new Set(Object.values(saved.order ?? {}).flatMap((l) => (Array.isArray(l) ? l : [])));
   const railScenesOrder = Array.isArray(saved.railScenesOrder) ? keep(saved.railScenesOrder) : undefined;
   const railReadingsOrder = Array.isArray(saved.railReadingsOrder) ? keep(saved.railReadingsOrder) : undefined;
+  const sectionRules = normalizeRulesMap(saved.sectionRules, (sid) => validSectionIds.has(sid));
+  const cardRules = normalizeRulesMap(saved.cardRules, (k) => here.has(k));
 
   return {
     sectionOrder,
@@ -334,7 +343,9 @@ export function reconcile(saved: RoomLayout | null | undefined, items: readonly 
     ...(customSections.length > 0 ? { customSections } : {}),
     ...(Object.keys(sectionOverrides).length > 0 ? { sectionOverrides } : {}),
     ...(railScenesOrder && railScenesOrder.length > 0 ? { railScenesOrder } : {}),
-    ...(railReadingsOrder && railReadingsOrder.length > 0 ? { railReadingsOrder } : {})
+    ...(railReadingsOrder && railReadingsOrder.length > 0 ? { railReadingsOrder } : {}),
+    ...(sectionRules ? { sectionRules } : {}),
+    ...(cardRules ? { cardRules } : {})
   };
 }
 

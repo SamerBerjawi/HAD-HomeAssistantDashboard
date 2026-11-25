@@ -9,6 +9,7 @@
  */
 import type { UserDashboardConfig } from '@/types/userConfig';
 import { DEFAULT_OVERVIEW_SECTION_ORDER, OVERVIEW_SECTION_LABELS, type OverviewSectionId } from './overviewSections';
+import { normalizeRulesMap, type VisibilityRuleSet } from './visibilityRules';
 
 export type WidgetSize = 's' | 'w' | 't' | 'l';
 export type DeviceType = 'phone' | 'tablet' | 'desktop';
@@ -71,6 +72,9 @@ export interface DeviceLayout {
   sectionVisibility?: Record<string, SectionTabVisibility>;
   /** Overview header & tab configuration. */
   header?: OverviewHeaderPrefs;
+  /** Declarative conditional visibility rules per section and card. */
+  sectionRules?: Record<string, VisibilityRuleSet>;
+  cardRules?: Record<string, VisibilityRuleSet>;
 }
 
 export interface ProOverviewLayoutConfig {
@@ -430,6 +434,9 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
       }
     : undefined;
 
+  const sectionRules = normalizeRulesMap(raw.sectionRules, (sid) => sectionIds.has(sid));
+  const cardRules = normalizeRulesMap(raw.cardRules);
+
   return {
     sectionOrder,
     collapsed,
@@ -439,7 +446,9 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
     ...(customSections.length > 0 ? { customSections } : {}),
     ...(Object.keys(sectionOverrides).length > 0 ? { sectionOverrides } : {}),
     ...(Object.keys(sectionVisibility).length > 0 ? { sectionVisibility } : {}),
-    ...(header && Object.keys(header).length > 0 ? { header } : {})
+    ...(header && Object.keys(header).length > 0 ? { header } : {}),
+    ...(sectionRules ? { sectionRules } : {}),
+    ...(cardRules ? { cardRules } : {})
   };
 }
 
@@ -682,8 +691,10 @@ export function deleteOverviewSection(layout: DeviceLayout, sectionId: AnyOvervi
   }
   const nextVis = { ...(layout.sectionVisibility ?? {}) };
   delete nextVis[sectionId];
+  const nextSecRules = { ...(layout.sectionRules ?? {}) };
+  delete nextSecRules[sectionId];
   const nextCustom = (layout.customSections ?? []).filter((c) => c.id !== sectionId);
-  const { customSections: _c, sectionOverrides: _o, sectionVisibility: _v, ...base } = layout;
+  const { customSections: _c, sectionOverrides: _o, sectionVisibility: _v, sectionRules: _r, ...base } = layout;
   return {
     ...base,
     ...(nextCustom.length > 0 ? { customSections: nextCustom } : {}),
@@ -691,7 +702,8 @@ export function deleteOverviewSection(layout: DeviceLayout, sectionId: AnyOvervi
     collapsed: layout.collapsed.filter((s) => s !== sectionId),
     items: nextItems,
     ...(Object.keys(nextOverrides).length > 0 ? { sectionOverrides: nextOverrides } : {}),
-    ...(Object.keys(nextVis).length > 0 ? { sectionVisibility: nextVis } : {})
+    ...(Object.keys(nextVis).length > 0 ? { sectionVisibility: nextVis } : {}),
+    ...(Object.keys(nextSecRules).length > 0 ? { sectionRules: nextSecRules } : {})
   };
 }
 

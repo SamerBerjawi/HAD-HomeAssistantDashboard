@@ -342,6 +342,101 @@ export function registerConfigRoutes(app: express.Express, deps: ConfigRoutesDep
     }
   });
 
+  // List available rolling backups and .bak file (Admin only)
+  app.get('/api/config/backups', requireHAAuth, async (req, res) => {
+    if (!configStore.isWritable) {
+      return res.status(503).json({
+        success: false,
+        error: 'Dashboard configuration storage directory is not writable or reachable'
+      });
+    }
+    try {
+      const haUser = await resolveRequestUser(req.haToken ?? '');
+      if (!haUser?.isAdmin) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: viewing config backups requires a Home Assistant administrator'
+        });
+      }
+      const backups = await configStore.listConfigBackups();
+      return res.json({ success: true, backups });
+    } catch (err: unknown) {
+      console.error('[NAS Config] Error listing config backups:', err);
+      return res.status(500).json({ success: false, error: 'Failed to list config backups' });
+    }
+  });
+
+  // Restore a specific snapshot or .bak file atomically (Admin only)
+  app.post('/api/config/backups/:filename/restore', requireHAAuth, async (req, res) => {
+    if (!configStore.isWritable) {
+      return res.status(503).json({
+        success: false,
+        error: 'Dashboard configuration storage directory is not writable or reachable'
+      });
+    }
+    try {
+      const haUser = await resolveRequestUser(req.haToken ?? '');
+      if (!haUser?.isAdmin) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: restoring config backups requires a Home Assistant administrator'
+        });
+      }
+      const filename = String(req.params.filename || '');
+      const result = await configStore.withConfigWriteLock(async () => {
+        const snapshot = await configStore.readConfigBackup(filename);
+        if (!snapshot) {
+          return {
+            statusCode: 404,
+            payload: { success: false, error: 'Backup snapshot not found or invalid filename' }
+          };
+        }
+        if (!isValidDashboardConfig(snapshot.config)) {
+          return {
+            statusCode: 400,
+            payload: { success: false, error: 'Backup snapshot does not contain a valid dashboard configuration' }
+          };
+        }
+        const shapeError = validateDashboardConfigShape(snapshot.config);
+        if (shapeError) {
+          return {
+            statusCode: 400,
+            payload: { success: false, error: `Invalid backup snapshot: ${shapeError}` }
+          };
+        }
+
+        const existing = await configStore.readPersistentConfig();
+        const currentServerVersion = existing?.serverVersion || configStore.cachedVersion || 0;
+        const nextServerVersion = currentServerVersion + 1;
+        const diskPayload = {
+          serverVersion: nextServerVersion,
+          config: snapshot.config
+        };
+        await configStore.writeConfigFileAtomic(configStore.configFilePath, JSON.stringify(diskPayload, null, 2));
+        configStore.setCache(snapshot.config, nextServerVersion);
+        console.log(`[NAS Config Audit] Restored configuration from backup "${filename}" -> v${nextServerVersion}`);
+
+        return {
+          statusCode: 200,
+          payload: {
+            success: true,
+            serverVersion: nextServerVersion,
+            config: redactConfigForClient(snapshot.config)
+          }
+        };
+      });
+
+      if (result.statusCode === 200 && 'serverVersion' in result.payload && typeof result.payload.serverVersion === 'number') {
+        broadcastConfigUpdate(result.payload.serverVersion, { scope: 'shared' });
+        onCameraSourcesChanged();
+      }
+      return res.status(result.statusCode).json(result.payload);
+    } catch (err: unknown) {
+      console.error('[NAS Config] Error restoring config backup:', err);
+      return res.status(500).json({ success: false, error: 'Failed to restore config backup' });
+    }
+  });
+
   function closeSseClients() {
     for (const client of sseClients) {
       try {

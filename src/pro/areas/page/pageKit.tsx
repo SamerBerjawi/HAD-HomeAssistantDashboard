@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react';
 import { Button, Dropdown, Label } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, ArrowRight01Icon, DashboardSquare01Icon, Delete02Icon, DropletIcon, ArrowUp01Icon, ArrowDown01Icon, BulbIcon, MoreHorizontalIcon, PencilEdit01Icon, TemperatureIcon, Tick02Icon } from '@hugeicons/core-free-icons';
+import { ArrowLeft01Icon, ArrowRight01Icon, DashboardSquare01Icon, Delete02Icon, DropletIcon, ArrowUp01Icon, ArrowDown01Icon, BulbIcon, EyeIcon, MoreHorizontalIcon, PencilEdit01Icon, TemperatureIcon, Tick02Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import type { CarTileModel, TileAction, TileModel, TileSize } from '../tileTypes';
 import { hide, moveBy, moveOnto, moveSection, moveTileToSection, setSize, togglePin, type AnyDevice, type RoomItem, type SectionId } from './roomLayout';
@@ -135,6 +135,8 @@ export function gridEditing(
     sections?: readonly { id: SectionId; title: string }[];
     currentSection?: SectionId;
     onEditTile?: (key: string) => void;
+    hasVisibilityRules?: (key: string) => boolean;
+    onEditVisibility?: (key: string) => void;
   }
 ): GridEditing {
   return {
@@ -145,11 +147,13 @@ export function gridEditing(
     onHide: (k) => editor.update((l) => hide(l, k)),
     ...(withPin ? { pinned: (k: string) => editor.layout.pinned.includes(k), onPin: (k: string) => editor.update((l) => togglePin(l, k)) } : {}),
     ...(extra?.sections ? { sections: extra.sections, currentSection: extra.currentSection, onMoveToSection: (k: string, target: SectionId) => editor.update((l) => moveTileToSection(l, k, target, extra.items)) } : {}),
-    ...(extra?.onEditTile ? { onEditTile: extra.onEditTile } : {})
+    ...(extra?.onEditTile ? { onEditTile: extra.onEditTile } : {}),
+    ...(extra?.hasVisibilityRules ? { hasVisibilityRules: extra.hasVisibilityRules } : {}),
+    ...(extra?.onEditVisibility ? { onEditVisibility: extra.onEditVisibility } : {})
   };
 }
 
-/** A section heading; in edit mode it gets ↑ / ↓ to move the section and optional rename/delete for custom sections. */
+/** A section heading; in edit mode it gets ↑ / ↓ to move the section and optional rename/delete/visibility controls. */
 export function SectionHeading({
   id,
   title,
@@ -159,6 +163,8 @@ export function SectionHeading({
   index,
   count,
   isCustom = false,
+  hasVisibilityRules = false,
+  onEditVisibility,
   onRename,
   onDelete
 }: {
@@ -170,17 +176,23 @@ export function SectionHeading({
   index: number;
   count: number;
   isCustom?: boolean;
+  hasVisibilityRules?: boolean;
+  onEditVisibility?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
 }) {
+  const showMenu = Boolean(onEditVisibility || (isCustom && (onRename || onDelete)));
   return (
     <div className="mb-2 flex min-h-8 items-center gap-2 px-1">
       <h3 className="text-[15px] font-semibold">{title}</h3>
+      {editor?.editing && hasVisibilityRules ? (
+        <span className="rounded-full bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">Conditional</span>
+      ) : null}
       {summary ? <span className="truncate text-[13px] text-muted">{summary}</span> : null}
       <span className="flex-1" />
       {editor?.editing ? (
         <span className="flex items-center gap-1">
-          {isCustom && (onRename || onDelete) ? (
+          {showMenu ? (
             <Dropdown>
               <Button isIconOnly size="sm" variant="secondary" aria-label={`${title} section options`} className="size-8 min-w-0 rounded-full">
                 <HugeiconsIcon icon={MoreHorizontalIcon} size={15} />
@@ -189,10 +201,17 @@ export function SectionHeading({
                 <Dropdown.Menu
                   aria-label={`${title} options`}
                   onAction={(key) => {
-                    if (key === 'rename') onRename?.();
+                    if (key === 'rules') onEditVisibility?.();
+                    else if (key === 'rename') onRename?.();
                     else if (key === 'delete') onDelete?.();
                   }}
                 >
+                  {onEditVisibility ? (
+                    <Dropdown.Item id="rules" textValue="Visibility rules">
+                      <HugeiconsIcon icon={EyeIcon} size={15} className={hasVisibilityRules ? 'shrink-0 text-[var(--accent)]' : 'shrink-0'} />
+                      <Label>Visibility rules…</Label>
+                    </Dropdown.Item>
+                  ) : null}
                   {onRename ? (
                     <Dropdown.Item id="rename" textValue="Rename section">
                       <HugeiconsIcon icon={PencilEdit01Icon} size={15} className="shrink-0" />

@@ -9,6 +9,16 @@ import fs from 'fs';
 import type { PersistedConfig, ServerConfig } from '../lib/configTypes';
 import { errorMessage } from '../lib/errors';
 
+export interface ConfigBackupEntry {
+  filename: string;
+  kind: 'latest_bak' | 'snapshot';
+  updatedAt: string;
+  sizeBytes: number;
+  serverVersion: number | null;
+}
+
+const SNAPSHOT_FILENAME_RE = /^dashboard-config-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/;
+
 export function createConfigStore({ configDir }: { configDir: string }) {
   const configFilePath = path.join(configDir, 'dashboard-config.json');
 
@@ -202,10 +212,87 @@ export function createConfigStore({ configDir }: { configDir: string }) {
     return null;
   }
 
+  function resolveSafeBackupPath(filename: string): { path: string; kind: 'latest_bak' | 'snapshot' } | null {
+    if (typeof filename !== 'string' || !filename || path.basename(filename) !== filename) return null;
+    if (filename === 'dashboard-config.json.bak') {
+      return { path: configBackupPath, kind: 'latest_bak' };
+    }
+    if (SNAPSHOT_FILENAME_RE.test(filename)) {
+      return { path: path.join(configBackupsDir, filename), kind: 'snapshot' };
+    }
+    return null;
+  }
+
+  function parsePersistedJson(raw: string): PersistedConfig | null {
+    if (!raw || raw.trim().length === 0) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const version = parsed.serverVersion !== undefined ? Number(parsed.serverVersion) : (parsed?.version || 1);
+    const conf = parsed.serverVersion !== undefined ? parsed.config : parsed;
+    if (!conf || typeof conf !== 'object' || Array.isArray(conf)) return null;
+    return { config: conf as ServerConfig, serverVersion: Number.isFinite(version) ? version : 1 };
+  }
+
+  async function listConfigBackups(): Promise<ConfigBackupEntry[]> {
+    const entries: ConfigBackupEntry[] = [];
+    const inspectFile = async (filename: string, filePath: string, kind: 'latest_bak' | 'snapshot') => {
+      try {
+        const stat = await fs.promises.stat(filePath);
+        if (!stat.isFile()) return;
+        let serverVersion: number | null = null;
+        try {
+          const raw = await fs.promises.readFile(filePath, 'utf-8');
+          const parsed = parsePersistedJson(raw);
+          if (parsed) serverVersion = parsed.serverVersion;
+        } catch {
+          serverVersion = null;
+        }
+        entries.push({
+          filename,
+          kind,
+          updatedAt: stat.mtime.toISOString(),
+          sizeBytes: stat.size,
+          serverVersion
+        });
+      } catch {
+        // File vanished or unreadable
+      }
+    };
+
+    await inspectFile('dashboard-config.json.bak', configBackupPath, 'latest_bak');
+    if (fs.existsSync(configBackupsDir)) {
+      try {
+        const files = await fs.promises.readdir(configBackupsDir);
+        for (const f of files) {
+          if (SNAPSHOT_FILENAME_RE.test(f)) {
+            await inspectFile(f, path.join(configBackupsDir, f), 'snapshot');
+          }
+        }
+      } catch {
+        // Backups dir unreadable
+      }
+    }
+
+    return entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async function readConfigBackup(filename: string): Promise<PersistedConfig | null> {
+    const target = resolveSafeBackupPath(filename);
+    if (!target) return null;
+    try {
+      const stat = await fs.promises.stat(target.path);
+      if (!stat.isFile()) return null;
+      const raw = await fs.promises.readFile(target.path, 'utf-8');
+      return parsePersistedJson(raw);
+    } catch {
+      return null;
+    }
+  }
 
   return {
     configFilePath,
     configBackupPath,
+    configBackupsDir,
     get isWritable() { return isConfigStorageWritable; },
     get cachedConfig() { return cachedServerConfig; },
     get cachedVersion() { return cachedServerVersion; },
@@ -218,6 +305,8 @@ export function createConfigStore({ configDir }: { configDir: string }) {
     withConfigWriteLock,
     readPersistentConfig,
     writeConfigFileAtomic,
+    listConfigBackups,
+    readConfigBackup,
     /** Resolves once all queued config writes have finished (graceful shutdown). */
     drainWrites: () => configWriteQueue
   };

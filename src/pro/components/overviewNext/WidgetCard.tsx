@@ -23,6 +23,7 @@ export interface CardActions {
   hide: (widget: EngineWidget, span: number) => void;
   setDesign: (id: string, design: string) => void;
   moveToSection: (id: string, fromSection: AnyOverviewSectionId, toSection: AnyOverviewSectionId) => void;
+  editVisibility?: (id: string, title: string) => void;
 }
 
 export interface WidgetCardProps {
@@ -36,6 +37,7 @@ export interface WidgetCardProps {
   canMoveEarlier: boolean;
   canMoveLater: boolean;
   design?: string;
+  hasVisibilityRules?: boolean;
   actions: CardActions;
 }
 
@@ -53,6 +55,8 @@ interface CardChromeProps {
   sections?: readonly { id: string; title: string }[];
   currentSection?: string;
   onMoveToSection?: (sectionId: string) => void;
+  hasVisibilityRules?: boolean;
+  onEditVisibility?: () => void;
   /** Stored style for widgets that offer several. */
   design?: string;
   onSetDesign?: (design: string) => void;
@@ -68,7 +72,7 @@ interface CardChromeProps {
  * for its own model, size, style or edit state, not when another part of the page changes. Its
  * looping animations pause while it is scrolled out of view.
  */
-export const WidgetCard = memo(function WidgetCard({ widget, section, sections, span, size, isEditing, canMoveEarlier, canMoveLater, design, actions }: WidgetCardProps) {
+export const WidgetCard = memo(function WidgetCard({ widget, section, sections, span, size, isEditing, canMoveEarlier, canMoveLater, design, hasVisibilityRules, actions }: WidgetCardProps) {
   const id = widget.id;
   const onOpen = useCallback(() => actions.open(id), [actions, id]);
   const onSetSize = useCallback((next: WidgetSize) => actions.setSize(section, id, next, span), [actions, section, id, span]);
@@ -76,6 +80,7 @@ export const WidgetCard = memo(function WidgetCard({ widget, section, sections, 
   const onHide = useCallback(() => actions.hide(widget, span), [actions, widget, span]);
   const onSetDesign = useCallback((style: string) => actions.setDesign(id, style), [actions, id]);
   const onMoveToSection = useCallback((toSection: string) => actions.moveToSection(id, section, toSection), [actions, id, section]);
+  const onEditVisibility = actions.editVisibility ? () => actions.editVisibility!(id, widget.title) : undefined;
   const pauseRef = usePauseOffscreen<HTMLDivElement>();
   return (
     <div ref={pauseRef} className="h-full min-h-0">
@@ -93,6 +98,8 @@ export const WidgetCard = memo(function WidgetCard({ widget, section, sections, 
           sections={sections}
           currentSection={section}
           onMoveToSection={onMoveToSection}
+          hasVisibilityRules={hasVisibilityRules}
+          onEditVisibility={onEditVisibility}
           design={design}
           onSetDesign={onSetDesign}
         />
@@ -145,6 +152,8 @@ function DesignedCard({
   sections,
   currentSection,
   onMoveToSection,
+  hasVisibilityRules,
+  onEditVisibility,
   onSetDesign,
   DesignBody,
   designId,
@@ -161,6 +170,9 @@ function DesignedCard({
         <div className="absolute inset-x-1.5 top-1.5 z-20 flex items-center gap-1 rounded-2xl bg-[var(--surface)]/90 p-0.5 text-foreground shadow-sm backdrop-blur-md">
           <DragHandle className="text-muted hover:bg-default" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{widget.title}</span>
+          {hasVisibilityRules ? (
+            <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent)]">Rule</span>
+          ) : null}
           <WidgetCardMenu
             title={widget.title}
             size={size}
@@ -176,6 +188,8 @@ function DesignedCard({
             sections={sections}
             currentSection={currentSection}
             onMoveToSection={onMoveToSection}
+            hasVisibilityRules={hasVisibilityRules}
+            onEditVisibility={onEditVisibility}
           />
         </div>
       ) : null}
@@ -183,7 +197,7 @@ function DesignedCard({
   );
 }
 
-function StandardCard({ widget, model, size, isEditing, canMoveEarlier, canMoveLater, onOpen, onSetSize, onMove, onHide, sections, currentSection, onMoveToSection }: CardChromeProps & WithModel) {
+function StandardCard({ widget, model, size, isEditing, canMoveEarlier, canMoveLater, onOpen, onSetSize, onMove, onHide, sections, currentSection, onMoveToSection, hasVisibilityRules, onEditVisibility }: CardChromeProps & WithModel) {
   const Body = widget.Body;
   const subtitle = widget.subtitle?.(model);
   const canOpen = Boolean(widget.Sheet) && !isEditing;
@@ -237,10 +251,19 @@ function StandardCard({ widget, model, size, isEditing, canMoveEarlier, canMoveL
             sections={sections}
             currentSection={currentSection}
             onMoveToSection={onMoveToSection}
+            hasVisibilityRules={hasVisibilityRules}
+            onEditVisibility={onEditVisibility}
           />
         ) : null}
       </header>
-      {isEditing ? <p className="relative z-[1] -mt-1 truncate px-1.5 text-sm font-semibold leading-tight">{widget.title}</p> : null}
+      {isEditing ? (
+        <div className="relative z-[1] -mt-1 flex items-center gap-1.5 px-1.5">
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold leading-tight">{widget.title}</p>
+          {hasVisibilityRules ? (
+            <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent)]">Rule</span>
+          ) : null}
+        </div>
+      ) : null}
       {/* While arranging, the body is inert: no accidental toggles, and it leaves the tab order. */}
       <div className={cn('min-h-0 flex-1 px-1.5', isEditing && 'opacity-70')} inert={isEditing}>
         <ErrorBoundary variant="card" label={widget.title} resetKeys={[size]}>

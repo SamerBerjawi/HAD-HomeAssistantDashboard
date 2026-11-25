@@ -299,6 +299,7 @@ export interface ConfigContextType {
   flushPendingSave: () => Promise<UserDashboardConfig>;
   uploadVehicleAsset: (fileOrDataUrl: File | string, key: string) => Promise<string>;
   resetConfig: () => Promise<UserDashboardConfig>;
+  refreshConfig?: () => Promise<void>;
   exportConfigJson: () => string;
   importConfigJson: (jsonStr: string) => Promise<boolean>;
 }

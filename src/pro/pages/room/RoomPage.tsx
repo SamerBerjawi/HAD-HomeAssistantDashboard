@@ -32,6 +32,8 @@ import { foldAll } from '../../areas/page/PageNow';
 import PageRail from '../../areas/page/PageRail';
 import type { PageItem, PageRoom } from '../../areas/page/pageKit';
 import { ProEditBar } from '../../components/ProEditBar';
+import { VisibilityEditorSheet } from '../../components/VisibilityEditorSheet';
+import { withUpdatedRule } from '../../lib/visibilityRules';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { useLayoutScope } from '../../hooks/useLayoutScope';
 import { useProEditChrome } from '../../store/useProEditChrome';
@@ -71,7 +73,7 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
   const defaultRoomView = effectivePrefs.roomDefaultViews?.[areaId] ?? null;
   const [view, setView] = useRoomView(viewKey, areaId, defaultRoomView);
 
-  const { config } = useUserConfig();
+  const { config, currentUser } = useUserConfig();
   const roomOverride = config.rooms?.areaOverrides?.[areaId];
   const roomItem = rooms.find((r) => r.areaId === areaId);
   const rawPhoto =
@@ -123,6 +125,7 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
   const [editTileKey, setEditTileKey] = useState<string | null>(null);
   const [sectionDialog, setSectionDialog] = useState<{ mode: 'create' } | { mode: 'rename'; id: SectionId } | null>(null);
   const [sectionNameInput, setSectionNameInput] = useState('');
+  const [ruleTarget, setRuleTarget] = useState<{ scope: 'section' | 'card'; id: string; label: string } | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<{ key: string; name: string; action: TileAction } | null>(null);
 
   const carPictures = useMemo(() => readCarPictures(config.preferences), [config.preferences]);
@@ -281,6 +284,15 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
           setSectionNameInput(roomSectionTitle(editor.layout, id));
           setSectionDialog({ mode: 'rename', id });
         }}
+        onEditSectionVisibility={(id) =>
+          setRuleTarget({ scope: 'section', id, label: `${roomSectionTitle(editor.layout, id)} section` })
+        }
+        onEditTileVisibility={(k) => setRuleTarget({ scope: 'card', id: k, label: name(k) })}
+        visibilityCtx={{
+          entities: resolvedEntities,
+          device: activeDevice,
+          user: currentUser ? { id: currentUser.id, isAdmin: currentUser.isAdmin } : null
+        }}
         editExtras={<CarPictures cars={tiles.filter((t) => t.model.kind === 'car' && !t.focus)} chosen={carPictures} />}
         renderTile={renderTile}
         actOn={actOn}
@@ -360,6 +372,27 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
         isOpen={Boolean(editTileEntityId)}
         onOpenChange={(open) => {
           if (!open) setEditTileKey(null);
+        }}
+      />
+      <VisibilityEditorSheet
+        isOpen={Boolean(ruleTarget)}
+        onOpenChange={(openSheet) => !openSheet && setRuleTarget(null)}
+        page="rooms"
+        targetLabel={ruleTarget?.label ?? ''}
+        rules={
+          ruleTarget?.scope === 'section'
+            ? editor.layout.sectionRules?.[ruleTarget.id] ?? []
+            : ruleTarget?.scope === 'card'
+            ? editor.layout.cardRules?.[ruleTarget.id] ?? []
+            : []
+        }
+        onSave={(nextRules) => {
+          if (!ruleTarget) return;
+          if (ruleTarget.scope === 'section') {
+            editor.update((l) => ({ ...l, sectionRules: withUpdatedRule(l.sectionRules, ruleTarget.id, nextRules) }));
+          } else {
+            editor.update((l) => ({ ...l, cardRules: withUpdatedRule(l.cardRules, ruleTarget.id, nextRules) }));
+          }
         }}
       />
 

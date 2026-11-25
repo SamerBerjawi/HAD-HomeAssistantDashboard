@@ -6,6 +6,7 @@ import {
   ArrowRight01Icon,
   ArrowUp01Icon,
   Delete02Icon,
+  EyeIcon,
   MoreHorizontalIcon,
   PencilEdit01Icon,
   Tick02Icon
@@ -26,9 +27,11 @@ interface OverviewSectionProps {
   isLast: boolean;
   visibility?: SectionTabVisibility;
   isCustom?: boolean;
+  hasVisibilityRules?: boolean;
   onToggleCollapsed: () => void;
   onMove: (dir: -1 | 1) => void;
   onSetVisibility?: (v: SectionTabVisibility) => void;
+  onEditVisibility?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
   /** View mode on "All": the button that opens this section's tab (Phase 4). */
@@ -56,9 +59,11 @@ export function OverviewSection({
   isLast,
   visibility = 'all_and_tab',
   isCustom = false,
+  hasVisibilityRules = false,
   onToggleCollapsed,
   onMove,
   onSetVisibility,
+  onEditVisibility,
   onRename,
   onDelete,
   onOpenTab,
@@ -85,9 +90,12 @@ export function OverviewSection({
         {isEditing && visBadge ? (
           <span className="rounded-full bg-default/60 px-2 py-0.5 text-[10px] font-medium text-muted">{visBadge}</span>
         ) : null}
+        {isEditing && hasVisibilityRules ? (
+          <span className="rounded-full bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">Conditional</span>
+        ) : null}
         {isEditing ? (
           <span className="ml-auto flex items-center gap-1">
-            {onSetVisibility || isCustom ? (
+            {onSetVisibility || onEditVisibility || isCustom ? (
               <Dropdown>
                 <Button isIconOnly size="sm" variant="ghost" aria-label={`${label} section options`} className="size-8 min-w-0">
                   <HugeiconsIcon icon={MoreHorizontalIcon} size={16} />
@@ -100,10 +108,19 @@ export function OverviewSection({
                       if (k === 'vis:all_and_tab') onSetVisibility?.('all_and_tab');
                       else if (k === 'vis:tab_only') onSetVisibility?.('tab_only');
                       else if (k === 'vis:hidden') onSetVisibility?.('hidden');
+                      else if (k === 'rules') onEditVisibility?.();
                       else if (k === 'rename') onRename?.();
                       else if (k === 'delete') onDelete?.();
                     }}
                   >
+                    {onEditVisibility ? (
+                      <Dropdown.Section>
+                        <Dropdown.Item id="rules" textValue="Visibility rules">
+                          <HugeiconsIcon icon={EyeIcon} size={15} className={hasVisibilityRules ? 'shrink-0 text-[var(--accent)]' : 'shrink-0'} />
+                          <Label>Visibility rules…</Label>
+                        </Dropdown.Item>
+                      </Dropdown.Section>
+                    ) : null}
                     {onSetVisibility ? (
                       <Dropdown.Section>
                         <Dropdown.Item id="vis:all_and_tab" textValue="Overview and Tab">

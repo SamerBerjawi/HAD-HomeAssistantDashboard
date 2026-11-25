@@ -14,6 +14,7 @@ import {
   ViewOffSlashIcon
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
+import { evaluateVisibility, type VisibilityDevice } from '../../lib/visibilityRules';
 import type { ReadingTileModel } from '../tileTypes';
 import {
   applyRailOrder,
@@ -49,6 +50,13 @@ interface RailProps extends PageProps {
   onOpenEntities?: () => void;
   onAddSection?: () => void;
   onRenameSection?: (id: SectionId) => void;
+  onEditSectionVisibility?: (id: SectionId) => void;
+  onEditTileVisibility?: (key: string) => void;
+  visibilityCtx?: {
+    entities: Record<string, { state?: string } | undefined>;
+    device: VisibilityDevice;
+    user: { id: string; isAdmin: boolean } | null;
+  };
 }
 
 export default function PageRail({
@@ -64,6 +72,9 @@ export default function PageRail({
   onOpenEntities,
   onAddSection,
   onRenameSection,
+  onEditSectionVisibility,
+  onEditTileVisibility,
+  visibilityCtx,
   ...props
 }: RailProps) {
   const { room, device, model, renderTile } = props;
@@ -80,10 +91,37 @@ export default function PageRail({
     return m.kind === 'scene' || m.kind === 'reading';
   };
 
+  const itemByKey = new Map(room.items.map((it) => [it.key, it]));
+  const keyIsActive = (k: string) => {
+    const it = itemByKey.get(k);
+    return it ? itemActive(it, model(k)) : false;
+  };
+
   const baseList = editor.editing ? editableRoomSections(l) : visibleSections(l);
   const sections = baseList
-    .map((s) => ({ ...s, keys: s.keys.filter((k) => !isRail(k)) }))
-    .filter((s) => s.keys.length > 0 || (editor.editing && isCustomRoomSection(l, s.id)));
+    .map((s) => {
+      let keys = s.keys.filter((k) => !isRail(k));
+      if (!editor.editing && visibilityCtx && l.cardRules) {
+        keys = keys.filter((k) =>
+          evaluateVisibility(l.cardRules?.[k], {
+            ...visibilityCtx,
+            isActive: keyIsActive(k)
+          })
+        );
+      }
+      return { ...s, keys };
+    })
+    .filter((s) => {
+      if (editor.editing) return s.keys.length > 0 || isCustomRoomSection(l, s.id);
+      if (s.keys.length === 0) return false;
+      if (visibilityCtx && l.sectionRules?.[s.id]) {
+        return evaluateVisibility(l.sectionRules[s.id], {
+          ...visibilityCtx,
+          isActive: s.keys.some(keyIsActive)
+        });
+      }
+      return true;
+    });
 
   const sectionChoices = sections.map((s) => ({ id: s.id, title: roomSectionTitle(l, s.id) }));
 
@@ -226,6 +264,8 @@ export default function PageRail({
               index={i}
               count={sections.length}
               isCustom={customSec}
+              hasVisibilityRules={Boolean(l.sectionRules?.[s.id]?.length)}
+              onEditVisibility={onEditSectionVisibility ? () => onEditSectionVisibility(s.id) : undefined}
               onRename={customSec && onRenameSection ? () => onRenameSection(s.id) : undefined}
               onDelete={customSec ? () => editor.update((x) => deleteRoomSection(x, s.id, room.items)) : undefined}
               action={
@@ -251,7 +291,9 @@ export default function PageRail({
                         items: room.items,
                         sections: sectionChoices,
                         currentSection: s.id,
-                        onEditTile
+                        onEditTile,
+                        hasVisibilityRules: (k) => Boolean(l.cardRules?.[k]?.length),
+                        onEditVisibility: onEditTileVisibility
                       })
                     : undefined
                 }
