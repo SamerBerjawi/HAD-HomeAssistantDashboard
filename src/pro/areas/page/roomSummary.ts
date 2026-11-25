@@ -62,19 +62,65 @@ export interface RoomFacts {
   humidity: number | null;
   lightsOn: number;
   lights: number;
+  mediaLabel: string | null;
+  climateAction: 'heating' | 'cooling' | null;
+  climateTarget: number | null;
+  fansOn: number;
+  openingsOpen: number;
+  locksUnlocked: number;
+  motionDetected: boolean;
+  vacuumStatus: string | null;
+  alertText: string | null;
 }
 
 export function roomFacts(models: readonly TileModel[]): RoomFacts {
-  const reading = (cls: string) => models.find((m) => m.kind === 'reading' && m.deviceClass === cls && m.available && m.value !== null);
-  const climate = models.find((m) => m.kind === 'climate' && m.current !== null);
+  const live = models.filter((m) => m.available);
+  const reading = (cls: string) => live.find((m) => m.kind === 'reading' && m.deviceClass === cls && m.value !== null);
+  const climate = models.find((m): m is Extract<TileModel, { kind: 'climate' }> => m.kind === 'climate' && m.current !== null);
   const t = reading('temperature');
   const h = reading('humidity');
-  const lights = models.filter((m) => m.kind === 'light' && m.available);
+  const lights = live.filter((m) => m.kind === 'light');
+  const playingMedia = live.filter((m): m is Extract<TileModel, { kind: 'media' }> => m.kind === 'media' && m.playing);
+  const activeClimate = live.find(
+    (m): m is Extract<TileModel, { kind: 'climate' }> =>
+      m.kind === 'climate' && (m.action === 'heating' || m.action === 'cooling') && m.target !== null
+  );
+  const activeVacuum = live.find(
+    (m): m is Extract<TileModel, { kind: 'vacuum' }> =>
+      m.kind === 'vacuum' && (m.state === 'cleaning' || m.state === 'returning')
+  );
+  const alertModel = live.find(isAlert);
+  const alertText = alertModel
+    ? alertModel.kind === 'safety'
+      ? `${alertModel.name}: ${alertModel.deviceClass === 'moisture' ? 'leak' : alertModel.deviceClass.replace(/_/g, ' ')}`
+      : alertModel.kind === 'lock'
+      ? `${alertModel.name} jammed`
+      : `${alertModel.name} error`
+    : null;
+
+  const mediaLabel =
+    playingMedia.length === 0
+      ? null
+      : playingMedia.length === 1 && playingMedia[0].deviceClass === 'tv'
+      ? `${playingMedia[0].name} on`
+      : playingMedia.length === 1
+      ? 'Playing'
+      : `${playingMedia.length} playing`;
+
   return {
-    temperature: t && t.kind === 'reading' ? t.value : climate && climate.kind === 'climate' ? climate.current : null,
+    temperature: t && t.kind === 'reading' ? t.value : climate ? climate.current : null,
     humidity: h && h.kind === 'reading' ? h.value : null,
     lightsOn: lights.filter((m) => m.isOn).length,
-    lights: lights.length
+    lights: lights.length,
+    mediaLabel,
+    climateAction: activeClimate ? (activeClimate.action as 'heating' | 'cooling') : null,
+    climateTarget: activeClimate ? activeClimate.target : null,
+    fansOn: live.filter((m) => m.kind === 'fan' && m.isOn).length,
+    openingsOpen: live.filter((m) => m.kind === 'opening' && m.isOn).length,
+    locksUnlocked: live.filter((m) => m.kind === 'lock' && m.state === 'unlocked').length,
+    motionDetected: live.some((m) => m.kind === 'motion' && m.isOn),
+    vacuumStatus: activeVacuum ? (activeVacuum.state === 'cleaning' ? 'Cleaning' : 'Returning') : null,
+    alertText
   };
 }
 

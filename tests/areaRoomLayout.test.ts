@@ -207,11 +207,18 @@ describe('room summary', () => {
   });
 
   it('reads the facts', () => {
-    const f = roomFacts([light, off, model(READING_STATES, 'temp'), model(READING_STATES, 'humidity')]);
+    const f = roomFacts([
+      light,
+      off,
+      model(READING_STATES, 'temp'),
+      model(READING_STATES, 'humidity'),
+      model(MEDIA_STATES, 'playing')
+    ]);
     expect(f.lights).toBe(2);
     expect(f.lightsOn).toBe(1);
     expect(f.temperature).not.toBeNull();
     expect(f.humidity).not.toBeNull();
+    expect(f.mediaLabel).toBe('Playing');
   });
 
   it('says it in one sentence, alerts first', () => {

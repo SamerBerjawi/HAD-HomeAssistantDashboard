@@ -26,6 +26,7 @@ const area = (entities: ResolvedEntity[]) => ({ area_id: 'living', name: 'Living
 describe('roomPage', () => {
   it('drops the room name from device names', () => {
     expect(shortName('Living Room Lamp', 'Living Room')).toBe('Lamp');
+    expect(shortName('Bedroom Thermostat', 'Bedroom', 'Thermostat')).toBe('Thermostat');
     expect(shortName('Living Room - main light', 'Living Room')).toBe('Main light');
     expect(shortName('Living Room', 'Living Room')).toBe('Living Room');
     expect(shortName('Sofa lamp', 'Living Room')).toBe('Sofa lamp');

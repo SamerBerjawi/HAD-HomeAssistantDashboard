@@ -6,7 +6,30 @@
 import type { ReactNode } from 'react';
 import { Button, Dropdown, Label } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, ArrowRight01Icon, DashboardSquare01Icon, Delete02Icon, DropletIcon, ArrowUp01Icon, ArrowDown01Icon, BulbIcon, EyeIcon, MoreHorizontalIcon, PencilEdit01Icon, TemperatureIcon, Tick02Icon } from '@hugeicons/core-free-icons';
+import {
+  Alert02Icon,
+  ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ArrowUp01Icon,
+  BulbIcon,
+  DashboardSquare01Icon,
+  Delete02Icon,
+  Door01Icon,
+  DropletIcon,
+  EyeIcon,
+  FastWindIcon,
+  FireIcon,
+  MoreHorizontalIcon,
+  MusicNote01Icon,
+  PencilEdit01Icon,
+  Robot01Icon,
+  SnowIcon,
+  SquareUnlock02Icon,
+  TemperatureIcon,
+  Tick02Icon,
+  WalkingIcon
+} from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import type { CarTileModel, TileAction, TileModel, TileSize } from '../tileTypes';
 import { hide, moveBy, moveOnto, moveSection, moveTileToSection, setSize, togglePin, type AnyDevice, type RoomItem, type SectionId } from './roomLayout';
@@ -51,14 +74,12 @@ export function RoomTitlePicker({
   room,
   rooms,
   onRoom,
-  className
-}: Pick<PageProps, 'room' | 'rooms' | 'onRoom'> & { className?: string }) {
+  className,
+  titleClassName
+}: Pick<PageProps, 'room' | 'rooms' | 'onRoom'> & { className?: string; titleClassName?: string }) {
+  const headingStyle = cn('min-w-0 truncate text-[24px] font-bold leading-tight tracking-[-0.02em]', titleClassName);
   if (rooms.length <= 1) {
-    return (
-      <h1 className={cn('min-w-0 truncate text-[24px] font-bold leading-tight tracking-[-0.02em]', className)}>
-        {room.name}
-      </h1>
-    );
+    return <h1 className={cn(headingStyle, className)}>{room.name}</h1>;
   }
   return (
     <Dropdown>
@@ -67,7 +88,7 @@ export function RoomTitlePicker({
         aria-label={`Jump to room (currently ${room.name})`}
         className={cn('-ml-1.5 h-auto min-w-0 max-w-full justify-start gap-1 rounded-xl px-1.5 py-0.5 text-left', className)}
       >
-        <h1 className="min-w-0 truncate text-[24px] font-bold leading-tight tracking-[-0.02em]">{room.name}</h1>
+        <h1 className={headingStyle}>{room.name}</h1>
         <HugeiconsIcon icon={ArrowDown01Icon} size={18} className="shrink-0 opacity-70" />
       </Button>
       <Dropdown.Popover placement="bottom start" className="max-h-[60dvh] min-w-52 overflow-y-auto">
@@ -84,6 +105,34 @@ export function RoomTitlePicker({
   );
 }
 
+/** Previous / next room icon buttons in the Rooms page's order. */
+export function RoomStepButtons({ room, rooms, onRoom }: Pick<PageProps, 'room' | 'rooms' | 'onRoom'>) {
+  if (rooms.length <= 1) return null;
+  const i = rooms.findIndex((r) => r.id === room.id);
+  const prev = i > 0 ? rooms[i - 1] : null;
+  const next = i >= 0 && i < rooms.length - 1 ? rooms[i + 1] : null;
+  return (
+    <>
+      <Button isIconOnly size="sm" variant="ghost" isDisabled={!prev} aria-label={prev ? `Previous room: ${prev.name}` : 'No previous room'} onPress={() => prev && onRoom(prev.id)} className="size-8 min-w-0 rounded-full">
+        <HugeiconsIcon icon={ArrowLeft01Icon} size={16} />
+      </Button>
+      <Button isIconOnly size="sm" variant="ghost" isDisabled={!next} aria-label={next ? `Next room: ${next.name}` : 'No next room'} onPress={() => next && onRoom(next.id)} className="size-8 min-w-0 rounded-full">
+        <HugeiconsIcon icon={ArrowRight01Icon} size={16} />
+      </Button>
+    </>
+  );
+}
+
+/** Button returning to the Rooms explorer. */
+export function AllRoomsButton({ onBack, className }: { onBack?: () => void; className?: string }) {
+  return (
+    <Button size="sm" variant="ghost" className={cn('gap-1.5 px-2.5 text-[13px] font-medium opacity-85', className)} onPress={() => onBack?.()}>
+      <HugeiconsIcon icon={DashboardSquare01Icon} size={15} />
+      All rooms
+    </Button>
+  );
+}
+
 /** All rooms + optional quick-jump picker + ‹ › previous / next room (in the Rooms page's order). */
 export function RoomNav({
   room,
@@ -94,15 +143,9 @@ export function RoomNav({
   light,
   hidePicker = false
 }: Pick<PageProps, 'room' | 'rooms' | 'onRoom' | 'onBack'> & { right?: ReactNode; light?: boolean; hidePicker?: boolean }) {
-  const i = rooms.findIndex((r) => r.id === room.id);
-  const prev = i > 0 ? rooms[i - 1] : null;
-  const next = i >= 0 && i < rooms.length - 1 ? rooms[i + 1] : null;
   return (
     <nav aria-label="Rooms" className={cn('flex items-center gap-1', light && 'text-white')}>
-      <Button size="sm" variant="ghost" className="-ml-2 gap-1 px-2 text-[13px] font-medium opacity-80" onPress={() => onBack?.()}>
-        <HugeiconsIcon icon={DashboardSquare01Icon} size={15} />
-        All rooms
-      </Button>
+      <AllRoomsButton onBack={onBack} className="-ml-2 px-2" />
       <span className="flex-1" />
       {rooms.length > 1 ? (
         <>
@@ -129,12 +172,7 @@ export function RoomNav({
               </Dropdown.Popover>
             </Dropdown>
           ) : null}
-          <Button isIconOnly size="sm" variant="ghost" isDisabled={!prev} aria-label={prev ? `Previous room: ${prev.name}` : 'No previous room'} onPress={() => prev && onRoom(prev.id)} className="size-8 min-w-0 rounded-full">
-            <HugeiconsIcon icon={ArrowLeft01Icon} size={16} />
-          </Button>
-          <Button isIconOnly size="sm" variant="ghost" isDisabled={!next} aria-label={next ? `Next room: ${next.name}` : 'No next room'} onPress={() => next && onRoom(next.id)} className="size-8 min-w-0 rounded-full">
-            <HugeiconsIcon icon={ArrowRight01Icon} size={16} />
-          </Button>
+          <RoomStepButtons room={room} rooms={rooms} onRoom={onRoom} />
         </>
       ) : null}
       {right}
@@ -142,21 +180,36 @@ export function RoomNav({
   );
 }
 
-/** "21.8° · 48% · 3 lights on", as icons and words. */
+/** Room summary reading line: colored category icons + concise values for Desktop & Mobile. */
 export function Facts({ models, className }: { models: TileModel[]; className?: string }) {
   const f = roomFacts(models);
   const items = [
-    f.temperature !== null ? { icon: TemperatureIcon, text: `${f.temperature.toFixed(1)}°` } : null,
-    f.humidity !== null ? { icon: DropletIcon, text: `${Math.round(f.humidity)}%` } : null,
-    f.lights ? { icon: BulbIcon, text: f.lightsOn ? `${f.lightsOn} light${f.lightsOn > 1 ? 's' : ''} on` : 'Lights off' } : null
+    f.alertText ? { key: 'alert', icon: Alert02Icon, text: f.alertText, color: 'text-red-500 dark:text-red-400', textClass: 'font-semibold text-red-500 dark:text-red-400' } : null,
+    f.temperature !== null ? { key: 'temp', icon: TemperatureIcon, text: `${f.temperature.toFixed(1)}°`, color: 'text-orange-500 dark:text-orange-400' } : null,
+    f.humidity !== null ? { key: 'hum', icon: DropletIcon, text: `${Math.round(f.humidity)}%`, color: 'text-sky-500 dark:text-sky-400' } : null,
+    f.lights ? { key: 'lights', icon: BulbIcon, text: f.lightsOn ? `${f.lightsOn} light${f.lightsOn > 1 ? 's' : ''} on` : 'Lights off', color: 'text-amber-400 dark:text-amber-300' } : null,
+    f.mediaLabel ? { key: 'media', icon: MusicNote01Icon, text: f.mediaLabel, color: 'text-violet-500 dark:text-violet-400' } : null,
+    f.climateAction && f.climateTarget !== null
+      ? {
+          key: 'climate',
+          icon: f.climateAction === 'heating' ? FireIcon : SnowIcon,
+          text: `${f.climateAction === 'heating' ? 'Heating' : 'Cooling'} ${f.climateTarget}°`,
+          color: f.climateAction === 'heating' ? 'text-rose-500 dark:text-rose-400' : 'text-cyan-500 dark:text-cyan-400'
+        }
+      : null,
+    f.fansOn > 0 ? { key: 'fans', icon: FastWindIcon, text: f.fansOn === 1 ? 'Fan on' : `${f.fansOn} fans on`, color: 'text-teal-500 dark:text-teal-400' } : null,
+    f.openingsOpen > 0 ? { key: 'openings', icon: Door01Icon, text: `${f.openingsOpen} open`, color: 'text-indigo-500 dark:text-indigo-400' } : null,
+    f.locksUnlocked > 0 ? { key: 'locks', icon: SquareUnlock02Icon, text: `${f.locksUnlocked} unlocked`, color: 'text-pink-500 dark:text-pink-400' } : null,
+    f.motionDetected ? { key: 'motion', icon: WalkingIcon, text: 'Motion', color: 'text-emerald-500 dark:text-emerald-400' } : null,
+    f.vacuumStatus ? { key: 'vacuum', icon: Robot01Icon, text: f.vacuumStatus, color: 'text-teal-500 dark:text-teal-400' } : null
   ].filter((x): x is NonNullable<typeof x> => x !== null);
   if (!items.length) return null;
   return (
     <p className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted', className)}>
       {items.map((it) => (
-        <span key={it.text} className="inline-flex items-center gap-1 tabular-nums">
-          <HugeiconsIcon icon={it.icon} size={15} />
-          {it.text}
+        <span key={it.key} className={cn('inline-flex items-center gap-1 tabular-nums', it.textClass)}>
+          <HugeiconsIcon icon={it.icon} size={15} className={cn('shrink-0', it.color)} />
+          <span>{it.text}</span>
         </span>
       ))}
     </p>

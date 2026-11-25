@@ -14,7 +14,6 @@ import {
   ViewOffSlashIcon
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
-import { RichSubtitle } from '../../components/PageSentence';
 import { evaluateVisibility, type VisibilityDevice } from '../../lib/visibilityRules';
 import type { ReadingTileModel } from '../tileTypes';
 import {
@@ -29,11 +28,11 @@ import {
   visibleSections,
   type SectionId
 } from './roomLayout';
-import { sectionSummary, roomFacts, roomSentenceParts } from './roomSummary';
+import { sectionSummary } from './roomSummary';
 import { RoomGrid } from './RoomGrid';
 import { EmptyRoom, HiddenTray, RoomEditBar } from './RoomEditParts';
 import type { RoomEditor } from './useRoomEditor';
-import { Facts, gridEditing, nameOf, lightsOff, RoomNav, RoomTitlePicker, SectionHeading, type PageProps } from './pageKit';
+import { AllRoomsButton, Facts, gridEditing, nameOf, lightsOff, RoomNav, RoomStepButtons, RoomTitlePicker, SectionHeading, type PageProps } from './pageKit';
 import { itemActive, NowBody, PinnedSection, RoomSentence } from './PageNow';
 
 export type RoomView = 'all' | 'now';
@@ -324,8 +323,6 @@ export default function PageRail({
   const content = showNow ? now : grid;
 
   if (phone) {
-    const values = readings.map(model).filter((m): m is ReadingTileModel => m.kind === 'reading' && m.available && m.value !== null);
-    const facts = roomFacts(all);
     const rightControls =
       (room.items.length && !hideEditBar) || headerEnd ? (
         <span className="flex items-center gap-0.5">
@@ -337,28 +334,11 @@ export default function PageRail({
     return (
       <div ref={root} className={cn(inset ? 'px-4 pb-6 pt-3' : 'pb-6')}>
         <RoomNav room={room} rooms={props.rooms} onRoom={props.onRoom} onBack={props.onBack} hidePicker right={rightControls} />
-        <header className="mb-3.5 mt-1.5 flex items-start gap-3">
-          <div className="size-[86px] shrink-0">{picture}</div>
+        <header className="mb-3.5 mt-1.5 flex items-center gap-3">
+          <div className="size-[84px] shrink-0">{picture}</div>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <RoomTitlePicker room={room} rooms={props.rooms} onRoom={props.onRoom} />
-              {values.length ? (
-                <p className="flex shrink-0 items-center gap-2 text-sm font-medium tabular-nums text-muted">
-                  {values.slice(0, 3).map((v) => (
-                    <span key={v.entityId}>
-                      {v.unit === '%' || v.unit === '°C' ? Math.round(v.value! * 10) / 10 : Math.round(v.value!)}
-                      {v.unit === '°C' ? '°' : ` ${v.unit}`.replace(' %', '%')}
-                    </span>
-                  ))}
-                </p>
-              ) : facts.temperature !== null || facts.humidity !== null ? (
-                <p className="flex shrink-0 items-center gap-2 text-sm font-medium tabular-nums text-muted">
-                  {facts.temperature !== null ? <span>{Number(facts.temperature.toFixed(1))}°</span> : null}
-                  {facts.humidity !== null ? <span>{Math.round(facts.humidity)}%</span> : null}
-                </p>
-              ) : null}
-            </div>
-            <RichSubtitle parts={roomSentenceParts(all)} compact />
+            <RoomTitlePicker room={room} rooms={props.rooms} onRoom={props.onRoom} />
+            <Facts models={all} className="text-[13px]" />
           </div>
         </header>
         {editor.editing && room.items.length && !hideEditBar ? <div className="mb-3">{<RoomEditBar editor={editor} device={device} />}</div> : null}
@@ -382,13 +362,20 @@ export default function PageRail({
     );
   }
 
+  const desktopTopActions = (
+    <div className="flex items-center gap-1">
+      <AllRoomsButton onBack={props.onBack} />
+      <RoomStepButtons room={room} rooms={props.rooms} onRoom={props.onRoom} />
+      {headerEnd}
+    </div>
+  );
+
   return (
     <div ref={root} className={cn('flex items-start gap-6', inset ? 'px-6 pb-8 pt-4' : 'pb-8')}>
       <aside aria-label={room.name} className="sticky top-4 flex max-h-[calc(100vh-2rem)] w-[248px] shrink-0 flex-col gap-4 overflow-y-auto [scrollbar-width:thin] [&>*]:shrink-0">
-        <RoomNav room={room} rooms={props.rooms} onRoom={props.onRoom} onBack={props.onBack} />
         {picture}
         <div>
-          <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.02em]">{room.name}</h1>
+          <RoomTitlePicker room={room} rooms={props.rooms} onRoom={props.onRoom} titleClassName="text-[28px] font-semibold" />
           <Facts models={all} className="mt-1.5" />
         </div>
         {room.items.length && !hideEditBar ? <RoomEditBar editor={editor} device={device} /> : null}
@@ -403,17 +390,15 @@ export default function PageRail({
       </aside>
       {views ? (
         <div className="flex min-w-0 flex-1 flex-col">
-          {switcher || headerEnd ? (
-            <div className="mb-4 flex items-center justify-between gap-2">
-              <div>{switcher}</div>
-              {headerEnd}
-            </div>
-          ) : null}
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div>{switcher}</div>
+            {desktopTopActions}
+          </div>
           {content}
         </div>
       ) : (
         <div className="flex min-w-0 flex-1 flex-col">
-          {headerEnd ? <div className="mb-4 flex justify-end">{headerEnd}</div> : null}
+          <div className="mb-4 flex justify-end">{desktopTopActions}</div>
           {grid}
         </div>
       )}
