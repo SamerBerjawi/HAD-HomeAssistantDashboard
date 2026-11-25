@@ -3,10 +3,14 @@ import { DEFAULT_USER_CONFIG, type UserDashboardConfig } from '@/types/userConfi
 import {
   buildForkToPersonalPatch,
   buildRevertToSharedPatch,
+  buildScopedClassicOverviewPatch,
   buildScopedPreferencesPatch,
+  buildScopedResponsiveOverridesPatch,
   buildToggleSharePatch,
+  getEffectiveClassicOverview,
   getEffectiveFavoriteAreas,
   getEffectiveLayoutPreferences,
+  getEffectiveResponsiveLayoutOverrides,
   resolveLayoutScope
 } from '@/services/layoutScope';
 import { mergeConfig } from '@/services/configMerge';
@@ -85,5 +89,35 @@ describe('layoutScope', () => {
 
     const adminScope = resolveLayoutScope(cfg, admin);
     expect(adminScope.activeTarget).toBe('personal');
+  });
+
+  it('scopes Classic overview & responsive overrides, forks cleanly, and reverts with null markers', () => {
+    const cfg = baseConfig({
+      layoutSharing: { shareLayoutsWithUsers: true },
+      overview: { tileOrder: ['lights', 'weather'], hiddenTiles: [], tileSizes: {} },
+      responsiveLayoutOverrides: { mobile: { 'light.a': { colSpan: 4, order: 0 } }, laptop: {}, desktop: {} }
+    });
+
+    const memberScope = resolveLayoutScope(cfg, member);
+    expect(getEffectiveClassicOverview(cfg, memberScope).tileOrder).toEqual(['lights', 'weather']);
+    expect(getEffectiveResponsiveLayoutOverrides(cfg, memberScope).mobile).toEqual({ 'light.a': { colSpan: 4, order: 0 } });
+
+    const personalPatch = buildScopedClassicOverviewPatch(memberScope, { tileOrder: ['weather', 'lights'] });
+    expect(personalPatch.overview).toBeUndefined();
+    expect(personalPatch.userLayouts?.[member.id]?.classicOverview).toEqual({ tileOrder: ['weather', 'lights'] });
+
+    const forkPatch = buildForkToPersonalPatch(cfg, memberScope);
+    const forked = mergeConfig(cfg, forkPatch);
+    expect(forked.userLayouts?.[member.id]?.classicOverview?.tileOrder).toEqual(['lights', 'weather']);
+
+    const bpPatch = buildScopedResponsiveOverridesPatch(resolveLayoutScope(forked, member), 'mobile', {
+      'light.a': { colSpan: 2, order: 1 }
+    });
+    const updatedFork = mergeConfig(forked, bpPatch);
+    expect(getEffectiveResponsiveLayoutOverrides(updatedFork, resolveLayoutScope(updatedFork, member)).mobile?.['light.a']).toEqual({ colSpan: 2, order: 1 });
+
+    const reverted = mergeConfig(updatedFork, buildRevertToSharedPatch(member.id));
+    expect(reverted.userLayouts?.[member.id]?.classicOverview).toBeUndefined();
+    expect(reverted.userLayouts?.[member.id]?.classicResponsiveLayoutOverrides).toBeUndefined();
   });
 });

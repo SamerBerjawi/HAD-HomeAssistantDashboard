@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Lightbulb, Plug, Thermometer, Drop, SpeakerHigh, Power, SquaresFour } from '@phosphor-icons/react';
+import { Lightbulb, Plug, Thermometer, Drop, SpeakerHigh, Power, SquaresFour, Lightning } from '@phosphor-icons/react';
 import { ResolvedEntity } from '../../../types';
 import { useEntityPopup } from '../../../contexts/EntityPopupContext';
 import { useUserConfig } from '../../../contexts/ConfigContext';
@@ -64,7 +64,15 @@ export function useAreaDetailState(props: AreaDetailViewProps) {
   } = useMemo(() => enrichAreaEntities(entities), [entities]);
 
   const { config } = useUserConfig();
-  const { isEditMode, activeBreakpoint, activeLayoutOverrides } = useEditMode();
+  const {
+    isEditMode,
+    setEditMode,
+    activeBreakpoint,
+    editingBreakpoint,
+    setEditingBreakpoint,
+    activeLayoutOverrides,
+    resetBreakpointOverrides
+  } = useEditMode();
   const layoutOverrides = activeLayoutOverrides;
 
   const tileLayoutMode: TileLayoutMode = config?.rooms?.tileLayout || (config?.rooms?.fullWidthTiles ? 'full' : 'compact');
@@ -437,6 +445,80 @@ export function useAreaDetailState(props: AreaDetailViewProps) {
     mediaCount +
     sensorsCount;
 
+  const isActiveFilter = activeDomainTab === 'active' && !isEditMode;
+  const activeLightsList = useMemo(() => sortedLights.filter((l) => l.state === 'on'), [sortedLights]);
+  const activeClimatesList = useMemo(() => sortedClimates.filter((c) => c.state !== 'off' && c.state !== 'unavailable' && c.state !== 'unknown'), [sortedClimates]);
+  const activeFansList = useMemo(() => sortedFans.filter((f) => f.state === 'on'), [sortedFans]);
+  const activeSwitchesList = useMemo(() => sortedSwitches.filter((sw) => sw.state === 'on'), [sortedSwitches]);
+  const activeLocksList = useMemo(() => sortedLocks.filter((l) => l.state === 'unlocked' || l.state === 'jammed'), [sortedLocks]);
+  const activeCoversList = useMemo(() => sortedCovers.filter((c) => c.state === 'open' || c.state === 'opening' || c.state === 'closing'), [sortedCovers]);
+  const activeMediaList = useMemo(() => sortedMediaPlayers.filter((m) => m.state === 'playing' || m.state === 'buffering'), [sortedMediaPlayers]);
+  const activeVacuumsList = useMemo(() => sortedVacuums.filter((v) => v.state === 'cleaning' || v.state === 'returning' || v.state === 'error'), [sortedVacuums]);
+  const activeContactList = useMemo(() => sortedContactSensors.filter((c) => c.state === 'on' || c.state === 'open'), [sortedContactSensors]);
+  const activeMotionList = useMemo(() => sortedMotionSensors.filter((m) => m.state === 'on' || m.state === 'detected'), [sortedMotionSensors]);
+  const activeHazardList = useMemo(() => sortedHazardSensors.filter((h) => h.state === 'on' || h.state === 'detected' || h.state === 'wet' || h.state === 'smoke'), [sortedHazardSensors]);
+
+  const activeTotalCount =
+    activeLightsList.length +
+    activeClimatesList.length +
+    activeFansList.length +
+    activeSwitchesList.length +
+    activeLocksList.length +
+    activeCoversList.length +
+    activeMediaList.length +
+    activeVacuumsList.length +
+    activeContactList.length +
+    activeMotionList.length +
+    activeHazardList.length;
+
+  const roomEntityIds = useMemo(
+    () => [
+      ...sortedLights,
+      ...sortedClimates,
+      ...sortedFans,
+      ...sortedSwitches,
+      ...sortedLocks,
+      ...sortedCovers,
+      ...sortedMediaPlayers,
+      ...sortedVacuums,
+      ...sortedCameras,
+      ...sortedContactSensors,
+      ...sortedMotionSensors,
+      ...sortedHazardSensors,
+      ...sortedEnergySensors,
+      ...sortedEnvironmentalSensors,
+      ...sortedBatterySensors,
+      ...sortedGeneralSensors
+    ].map((e) => e.entity_id),
+    [
+      sortedLights,
+      sortedClimates,
+      sortedFans,
+      sortedSwitches,
+      sortedLocks,
+      sortedCovers,
+      sortedMediaPlayers,
+      sortedVacuums,
+      sortedCameras,
+      sortedContactSensors,
+      sortedMotionSensors,
+      sortedHazardSensors,
+      sortedEnergySensors,
+      sortedEnvironmentalSensors,
+      sortedBatterySensors,
+      sortedGeneralSensors
+    ]
+  );
+
+  const visibleContactSensors = isActiveFilter ? activeContactList : contactSensors;
+  const visibleMotionSensors = isActiveFilter ? activeMotionList : motionSensors;
+  const visibleHazardSensors = isActiveFilter ? activeHazardList : hazardSensors;
+  const visibleEnergySensors = isActiveFilter ? [] : energySensors;
+  const visibleEnvironmentalSensors = isActiveFilter ? [] : environmentalSensors;
+  const visibleBatterySensors = isActiveFilter ? [] : unclaimedBatterySensors;
+  const visibleGeneralSensors = isActiveFilter ? [] : generalSensors;
+  const visibleSensorsCount = isActiveFilter ? activeContactList.length + activeMotionList.length + activeHazardList.length : sensorsCount;
+
   const domainTabs: SectionTabItem[] = [
     {
       id: 'all',
@@ -444,6 +526,14 @@ export function useAreaDetailState(props: AreaDetailViewProps) {
       icon: SquaresFour,
       badge: totalEntityCount,
       color: '#3b82f6'
+    },
+    {
+      id: 'active',
+      label: 'Active',
+      icon: Lightning,
+      badge: activeTotalCount,
+      badgeColor: activeTotalCount > 0 ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold' : undefined,
+      color: '#f59e0b'
     },
     ...(lightsCount > 0
       ? [
@@ -509,32 +599,34 @@ export function useAreaDetailState(props: AreaDetailViewProps) {
     activeLightsCount,
     activeMediaDrawerEntity,
     activeSwitchesCount,
+    activeTotalCount,
     area,
     batterySpans,
     callHAService,
     climateAndFanSpans,
     climateCount,
     config,
-    contactSensors,
+    contactSensors: visibleContactSensors,
     contactSpans,
     darkMode,
     defaultColSpan,
     defaultDesktopColSpan,
     defaultTabletColSpan,
     domainTabs,
-    energySensors,
+    editingBreakpoint,
+    energySensors: visibleEnergySensors,
     energySpans,
-    enrichedClimates,
-    enrichedCovers,
-    enrichedFans,
-    enrichedLights,
-    enrichedLocks,
-    enrichedSwitches,
-    enrichedVacuums,
-    entities,
-    environmentalSensors,
+    enrichedClimates: isActiveFilter ? activeClimatesList : enrichedClimates,
+    enrichedCovers: isActiveFilter ? activeCoversList : enrichedCovers,
+    enrichedFans: isActiveFilter ? activeFansList : enrichedFans,
+    enrichedLights: isActiveFilter ? activeLightsList : enrichedLights,
+    enrichedLocks: isActiveFilter ? activeLocksList : enrichedLocks,
+    enrichedSwitches: isActiveFilter ? activeSwitchesList : enrichedSwitches,
+    enrichedVacuums: isActiveFilter ? activeVacuumsList : enrichedVacuums,
+    entities: isActiveFilter ? { ...entities, mediaPlayers: activeMediaList, cameras: [] } : entities,
+    environmentalSensors: visibleEnvironmentalSensors,
     environmentalSpans,
-    generalSensors,
+    generalSensors: visibleGeneralSensors,
     generalSpans,
     getTileSpan,
     handleBrightnessChange,
@@ -551,7 +643,7 @@ export function useAreaDetailState(props: AreaDetailViewProps) {
     handleToggleLock,
     handleToggleMediaPlay,
     handleToggleSwitch,
-    hazardSensors,
+    hazardSensors: visibleHazardSensors,
     hazardSpans,
     isEditMode,
     isFullWidth,
@@ -560,37 +652,41 @@ export function useAreaDetailState(props: AreaDetailViewProps) {
     lightsCount,
     mediaCount,
     mediaVacuumSpans,
-    motionSensors,
+    motionSensors: visibleMotionSensors,
     motionSpans,
     onToggleEntityLock,
     onToggleLights,
     onToggleLocks,
     openEntityDetails,
-    sensorsCount,
+    resetBreakpointOverrides,
+    roomEntityIds,
+    sensorsCount: visibleSensorsCount,
     setActiveDomainTab,
     setActiveMediaDrawerEntity,
-    sortedBatterySensors,
-    sortedCameras,
-    sortedClimates,
-    sortedContactSensors,
-    sortedCovers,
-    sortedEnergySensors,
-    sortedEnvironmentalSensors,
-    sortedFans,
-    sortedGeneralSensors,
-    sortedHazardSensors,
-    sortedLights,
-    sortedLocks,
-    sortedMediaPlayers,
-    sortedMotionSensors,
-    sortedSwitches,
-    sortedVacuums,
+    setEditMode,
+    setEditingBreakpoint,
+    sortedBatterySensors: isActiveFilter ? [] : sortedBatterySensors,
+    sortedCameras: isActiveFilter ? [] : sortedCameras,
+    sortedClimates: isActiveFilter ? activeClimatesList : sortedClimates,
+    sortedContactSensors: activeDomainTab === 'active' && !isEditMode ? activeContactList : sortedContactSensors,
+    sortedCovers: isActiveFilter ? activeCoversList : sortedCovers,
+    sortedEnergySensors: isActiveFilter ? [] : sortedEnergySensors,
+    sortedEnvironmentalSensors: isActiveFilter ? [] : sortedEnvironmentalSensors,
+    sortedFans: isActiveFilter ? activeFansList : sortedFans,
+    sortedGeneralSensors: isActiveFilter ? [] : sortedGeneralSensors,
+    sortedHazardSensors: isActiveFilter ? activeHazardList : sortedHazardSensors,
+    sortedLights: isActiveFilter ? activeLightsList : sortedLights,
+    sortedLocks: isActiveFilter ? activeLocksList : sortedLocks,
+    sortedMediaPlayers: isActiveFilter ? activeMediaList : sortedMediaPlayers,
+    sortedMotionSensors: isActiveFilter ? activeMotionList : sortedMotionSensors,
+    sortedSwitches: isActiveFilter ? activeSwitchesList : sortedSwitches,
+    sortedVacuums: isActiveFilter ? activeVacuumsList : sortedVacuums,
     switchLockCoverSpans,
     switchesCount,
     tileLayoutMode,
     totalEntityCount,
     totalLightsCount,
-    unclaimedBatterySensors,
+    unclaimedBatterySensors: visibleBatterySensors,
     unlockedLocksCount,
     updateEntityState
   };

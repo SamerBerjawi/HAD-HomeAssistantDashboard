@@ -28,9 +28,10 @@ import {
 } from '../lib/entityClassifiers';
 import { resolveAssetUrl } from '../utils/assetUrl';
 import { useEditMode } from '../contexts/EditModeContext';
+import { getEffectiveFavoriteAreas, resolveLayoutScope } from '../services/layoutScope';
 
 export function useRoomsData() {
-  const { config } = useUserConfig();
+  const { config, currentUser } = useUserConfig();
   const { isEditMode } = useEditMode();
   const {
     resolvedEntities,
@@ -107,8 +108,28 @@ export function useRoomsData() {
       }
     }
 
+    // Include manually pinned entities from config.rooms.areaOverrides[areaId].extraEntityIds
+    const overrides = config.rooms?.areaOverrides;
+    if (overrides) {
+      for (const [areaId, ov] of Object.entries(overrides)) {
+        const extras = ov?.extraEntityIds;
+        if (!extras || extras.length === 0) continue;
+        const list = (map[areaId] ??= []);
+        const present = new Set(list.map((e) => e.entity_id));
+        for (const eid of extras) {
+          if (present.has(eid)) continue;
+          const entity = resolvedEntities[eid];
+          if (!entity || entity.disabled_by) continue;
+          const isHidden = hiddenEntitySet.has(eid) || Boolean(entity.hidden);
+          if (!isEditMode && isHidden) continue;
+          present.add(eid);
+          list.push(isHidden && !entity.hidden ? { ...entity, hidden: true } : entity);
+        }
+      }
+    }
+
     return map;
-  }, [resolvedEntities, rawDevices, isEditMode, hiddenEntitySet]);
+  }, [resolvedEntities, rawDevices, isEditMode, hiddenEntitySet, config.rooms?.areaOverrides]);
 
   // 2. Build Floor Name Lookup (with custom icon & accent color)
   const floorMap = useMemo(() => {
@@ -369,7 +390,9 @@ export function useRoomsData() {
       const effectiveColor = customArea?.customColor || customArea?.color || area.color;
       const rawBg = customArea?.backgroundImageUrl || customArea?.picture || area.picture;
       const resolvedBg = resolveAssetUrl(rawBg, config.updatedAt);
-      const isFavorite = Boolean(config.rooms?.favoriteAreas?.includes(area.area_id));
+      const scope = resolveLayoutScope(config, currentUser);
+      const effectiveFavorites = getEffectiveFavoriteAreas(config, scope);
+      const isFavorite = effectiveFavorites.includes(area.area_id);
 
       return {
         areaId: area.area_id,
@@ -415,14 +438,14 @@ export function useRoomsData() {
     }
 
     return filtered;
-  }, [activeAreas, entitiesByArea, floorMap, config.rooms, config.areas, config.updatedAt, isEditMode]);
+  }, [activeAreas, entitiesByArea, floorMap, config, currentUser, isEditMode]);
 
   // 4. Organize Areas Hierarchically by Floor (Descending Level Order or custom floorOrder) with custom floor styling
   const floorDataList: FloorData[] = useMemo(() => {
     const hiddenFloorSet = new Set(config.rooms?.hiddenFloors || []);
-    let floors = activeFloors;
+    let floors = [...activeFloors];
     if (!isEditMode) {
-      floors = activeFloors.filter((f) => !hiddenFloorSet.has(f.floor_id));
+      floors = floors.filter((f) => !hiddenFloorSet.has(f.floor_id));
     }
 
     // Sort floors according to custom floorOrder or fallback to level descending
@@ -471,7 +494,7 @@ export function useRoomsData() {
     }
 
     return result;
-  }, [activeFloors, areasDataList, config.rooms, config.floors]);
+  }, [activeFloors, areasDataList, config.rooms, config.floors, isEditMode]);
 
   // 5. Compute Global House State Summary & Natural Language Sentence
   const houseSummary: HouseStateSummary = useMemo(() => {

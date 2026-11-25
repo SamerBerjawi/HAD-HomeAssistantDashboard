@@ -7,12 +7,18 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { Button as AriaButton } from 'react-aria-components';
 import {
   Stack,
   Buildings,
   Tree,
   HouseLine,
-  SquaresFour
+  SquaresFour,
+  Lightning,
+  Star,
+  PencilSimpleLine,
+  ArrowCounterClockwise,
+  CheckCircle
 } from '@phosphor-icons/react';
 import { useRoomsData } from '../../hooks/useRoomsData';
 import AreaTile from '../rooms/AreaTile';
@@ -27,7 +33,10 @@ import GridTile, { GridColSpan } from '../layout/GridTile';
 import { sortTilesForBento, getComputedTileSpans, sortItemsForHybrid, TileLayoutMode } from '../../utils/bentoLayout';
 import { useUserConfig } from '../../contexts/ConfigContext';
 import { useEditMode } from '../../contexts/EditModeContext';
+import { useClassicLayoutScope } from '../../hooks/useClassicLayoutScope';
+import { buildRoomPath } from '../../services/appShell';
 import AdaptiveSectionTabs, { SectionTabItem } from '../common/AdaptiveSectionTabs';
+import { ClassicLayoutScopeBar } from '../common/ClassicLayoutScopeBar';
 
 interface RoomsViewProps {
   darkMode?: boolean;
@@ -35,8 +44,17 @@ interface RoomsViewProps {
 
 export default function RoomsView({ darkMode = true }: RoomsViewProps) {
   const isLoading = useAutoLayoutStore((s) => s.isLoading);
-  const { config } = useUserConfig();
-  const { isEditMode, activeBreakpoint, activeLayoutOverrides } = useEditMode();
+  const { config, updateConfig } = useUserConfig();
+  const {
+    isEditMode,
+    setEditMode,
+    activeBreakpoint,
+    editingBreakpoint,
+    setEditingBreakpoint,
+    activeLayoutOverrides,
+    resetBreakpointOverrides
+  } = useEditMode();
+  const layoutScope = useClassicLayoutScope();
   const {
     areasDataList = [],
     floorDataList = [],
@@ -54,8 +72,32 @@ export default function RoomsView({ darkMode = true }: RoomsViewProps) {
   const selectedAreaId = useAutoLayoutStore((s) => s.selectedAreaId);
   const setSelectedAreaId = useAutoLayoutStore((s) => s.setSelectedAreaId);
 
-  // Active Floor Tab Filter for dense Mobile Navigation: 'all' | floorId
+  const openRoom = (areaId: string | null) => {
+    setSelectedAreaId(areaId);
+    const targetPath = buildRoomPath(areaId);
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ tab: 'rooms', ...(areaId ? { areaId } : {}) }, '', targetPath);
+    }
+  };
+
+  // Active Floor Tab Filter: 'all' | 'active' | 'favorites' | floorId
   const [selectedFloorId, setSelectedFloorId] = useState<string>('all');
+
+  const isAreaActive = (a: (typeof areasDataList)[number]) =>
+    a.activeLightsCount > 0 ||
+    a.activeSwitchesCount > 0 ||
+    a.activeFansCount > 0 ||
+    a.activeMediaPlayersCount > 0 ||
+    a.unlockedLocksCount > 0 ||
+    a.sensors.doorsOpenCount > 0 ||
+    a.sensors.windowsOpenCount > 0 ||
+    a.sensors.motionDetected ||
+    a.sensors.presenceDetected ||
+    a.sensors.waterLeakDetected ||
+    a.sensors.smokeDetected;
+
+  const activeAreasCount = useMemo(() => areasDataList.filter(isAreaActive).length, [areasDataList]);
+  const favoriteAreasCount = useMemo(() => areasDataList.filter((a) => a.isFavorite).length, [areasDataList]);
 
   // Selected Area for Drill-down View
   const selectedArea = useMemo(() => {
@@ -66,6 +108,16 @@ export default function RoomsView({ darkMode = true }: RoomsViewProps) {
   // Filtered Floors list based on selectedFloorId
   const visibleFloors = useMemo(() => {
     if (selectedFloorId === 'all') return floorDataList || [];
+    if (selectedFloorId === 'active') {
+      return (floorDataList || [])
+        .map((f) => ({ ...f, areas: f.areas.filter(isAreaActive) }))
+        .filter((f) => f.areas.length > 0);
+    }
+    if (selectedFloorId === 'favorites') {
+      return (floorDataList || [])
+        .map((f) => ({ ...f, areas: f.areas.filter((a) => a.isFavorite) }))
+        .filter((f) => f.areas.length > 0);
+    }
     return (floorDataList || []).filter((f) => f.floorId === selectedFloorId);
   }, [floorDataList, selectedFloorId]);
 
@@ -78,7 +130,26 @@ export default function RoomsView({ darkMode = true }: RoomsViewProps) {
         icon: SquaresFour,
         badge: (areasDataList || []).length,
         color: '#6366f1'
-      }
+      },
+      {
+        id: 'active',
+        label: 'Active',
+        icon: Lightning,
+        badge: activeAreasCount,
+        badgeColor: activeAreasCount > 0 ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold' : undefined,
+        color: '#f59e0b'
+      },
+      ...(favoriteAreasCount > 0
+        ? [
+            {
+              id: 'favorites',
+              label: 'Favorites',
+              icon: Star,
+              badge: favoriteAreasCount,
+              color: '#ec4899'
+            }
+          ]
+        : [])
     ];
 
     (floorDataList || []).forEach((floor) => {
@@ -120,8 +191,10 @@ export default function RoomsView({ darkMode = true }: RoomsViewProps) {
       <React.Suspense fallback={<ViewLoadingState title="Loading Living Area..." />}>
         <AreaDetailView
           area={selectedArea}
+          allAreas={areasDataList.map((a) => ({ areaId: a.areaId, name: a.name }))}
+          onSelectArea={(nextId) => openRoom(nextId)}
           darkMode={darkMode}
-          onBack={() => setSelectedAreaId(null)}
+          onBack={() => openRoom(null)}
           onToggleLights={toggleAreaLights}
           onToggleLocks={toggleAreaLocks}
           onToggleEntityLock={toggleEntityLock}
@@ -160,8 +233,70 @@ export default function RoomsView({ darkMode = true }: RoomsViewProps) {
 
   return (
     <div className="w-full flex-1 flex flex-col gap-5 animate-fadeIn pb-16">
+      {isEditMode ? (
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3 backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
+              <PencilSimpleLine size={16} weight="bold" className="text-sky-500" />
+              <span>Customize Rooms</span>
+              <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-extrabold uppercase text-sky-600 dark:text-sky-300">
+                {editingBreakpoint}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(['mobile', 'laptop', 'desktop'] as const).map((bp) => (
+                <AriaButton
+                  key={bp}
+                  onPress={() => setEditingBreakpoint(bp)}
+                  className={`rounded-xl px-2.5 py-1 text-xs font-bold capitalize transition-all cursor-pointer ${
+                    editingBreakpoint === bp
+                      ? 'bg-sky-500 text-white shadow-xs'
+                      : 'bg-white/40 text-slate-700 hover:bg-white/70 dark:bg-white/10 dark:text-slate-300'
+                  }`}
+                >
+                  {bp === 'laptop' ? 'tablet' : bp}
+                </AriaButton>
+              ))}
+              {(['compact', 'hybrid', 'full'] as const).map((mode) => {
+                const currentMode = config?.rooms?.tileLayout || (config?.rooms?.fullWidthTiles ? 'full' : 'compact');
+                return (
+                  <AriaButton
+                    key={mode}
+                    onPress={() => void updateConfig({ rooms: { tileLayout: mode } })}
+                    className={`rounded-xl px-2.5 py-1 text-xs font-bold capitalize transition-all cursor-pointer ${
+                      currentMode === mode
+                        ? 'bg-indigo-500 text-white shadow-xs'
+                        : 'bg-white/40 text-slate-700 hover:bg-white/70 dark:bg-white/10 dark:text-slate-300'
+                    }`}
+                  >
+                    {mode}
+                  </AriaButton>
+                );
+              })}
+              <AriaButton
+                onPress={() => void resetBreakpointOverrides(areasDataList.map((a) => a.areaId))}
+                className="inline-flex items-center gap-1 rounded-xl bg-white/40 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-white/70 dark:bg-white/10 dark:text-slate-200 cursor-pointer"
+              >
+                <ArrowCounterClockwise size={13} weight="bold" />
+                Reset
+              </AriaButton>
+              <AriaButton
+                onPress={() => setEditMode(false)}
+                className="inline-flex items-center gap-1 rounded-xl bg-sky-500 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-sky-400 cursor-pointer"
+              >
+                <CheckCircle size={13} weight="bold" />
+                Done
+              </AriaButton>
+            </div>
+          </div>
+          <div className="border-t border-sky-500/20 pt-2">
+            <ClassicLayoutScopeBar layoutScope={layoutScope} compact />
+          </div>
+        </div>
+      ) : null}
+
       {/* Clean Floating Floor Filter Tabs (No grey container) */}
-      {floorDataList.length > 1 && (
+      {(floorDataList.length > 0 || floorTabs.length > 1) && (
         <div className="w-full max-w-full min-w-0">
           <AdaptiveSectionTabs
             tabs={floorTabs}
@@ -171,6 +306,12 @@ export default function RoomsView({ darkMode = true }: RoomsViewProps) {
           />
         </div>
       )}
+
+      {visibleFloors.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-slate-300/80 bg-white/30 p-8 text-center text-xs font-medium text-slate-500 dark:border-white/10 dark:bg-white/[0.02] dark:text-slate-400">
+          {selectedFloorId === 'active' ? 'No rooms currently have active lights, switches, motion, or open doors.' : 'No rooms match this filter.'}
+        </div>
+      ) : null}
 
       {/* Hierarchical Floor Sections in VirtualGrid */}
       <div className="flex flex-col gap-8">
@@ -282,14 +423,18 @@ export default function RoomsView({ darkMode = true }: RoomsViewProps) {
                           colStart={span.colStart}
                           tabletColStart={span.tabletColStart}
                           desktopColStart={span.desktopColStart}
-                          onClick={() => setSelectedAreaId(area.areaId)}
+                          onClick={() => {
+                            if (!isEditMode) openRoom(area.areaId);
+                          }}
                         >
                           <AreaTile
                             area={area}
                             darkMode={darkMode}
                             colSpan={span.colSpan}
                             rowSpan={span.rowSpan}
-                            onSelectArea={(areaId) => setSelectedAreaId(areaId)}
+                            onSelectArea={(areaId) => {
+                              if (!isEditMode) openRoom(areaId);
+                            }}
                             onToggleLights={toggleAreaLights}
                             onToggleSwitches={toggleAreaSwitches}
                             onToggleFans={toggleAreaFans}

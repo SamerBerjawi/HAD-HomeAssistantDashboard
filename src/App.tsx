@@ -99,7 +99,7 @@ const RoomsHeaderSentence = lazy(() => import('./components/rooms/RoomsHeaderSen
 const MediaHeaderSentence = lazy(() => import('./components/media/MediaHeaderSentence'));
 const VacuumsHeaderSentence = lazy(() => import('./components/vacuums/VacuumsHeaderSentence'));
 
-import { hasAnyKey } from './services/appShell';
+import { buildRoomPath, hasAnyKey } from './services/appShell';
 import { useAppTheme } from './hooks/app/useAppTheme';
 import { useActiveTab } from './hooks/app/useActiveTab';
 import { useShellOverlays } from './hooks/app/useShellOverlays';
@@ -305,7 +305,12 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (activeTab === 'rooms') setSelectedAreaId(null);
+                      if (activeTab === 'rooms') {
+                        setSelectedAreaId(null);
+                        if (window.location.pathname !== '/rooms') {
+                          window.history.pushState({ tab: 'rooms' }, '', buildRoomPath(null));
+                        }
+                      }
                       if (activeTab === 'settings') setSelectedSettingsSection(null);
                     }}
                     className="p-1.5 -ml-1 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 dark:hover:bg-white/10 transition-all cursor-pointer active:scale-90 mr-0.5"
@@ -370,7 +375,7 @@ export default function App() {
                 />
 
                 {/* Edit Mode Toggle (Single edit button in page header) */}
-                {(activeTab === 'overview' || activeTab === 'settings') && (
+                {(activeTab === 'overview' || activeTab === 'rooms' || activeTab === 'settings') && (
                   <button
                     type="button"
                     onClick={toggleEditMode}

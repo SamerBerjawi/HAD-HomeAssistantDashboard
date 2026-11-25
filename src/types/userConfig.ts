@@ -28,6 +28,8 @@ export interface UserLayoutOverlay {
   favoriteAreas?: string[];
   defaultOverviewTab?: string;
   roomDefaultViews?: Record<string, 'all' | 'now'>;
+  classicOverview?: OverviewConfig;
+  classicResponsiveLayoutOverrides?: ResponsiveLayoutOverrides;
 }
 
 export interface BreakpointLayoutOverride {

@@ -7,6 +7,7 @@
  */
 
 import DialogShell from '../ui/DialogShell';
+import NasBackupsPanel from './NasBackupsPanel';
 import React, { useRef } from 'react';
 import {
   DownloadSimple,
@@ -184,6 +185,9 @@ export default function BackupRestoreSection({
           </div>
         )}
       </div>
+
+      {/* 2.5 Admin NAS Rolling Snapshots */}
+      <NasBackupsPanel />
 
       {/* 3. Factory Reset Zone */}
       <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-between gap-3">

@@ -9,6 +9,8 @@ import { AreaData } from '../../../types/rooms';
 
 export interface AreaDetailViewProps {
   area: AreaData;
+  allAreas?: { areaId: string; name: string }[];
+  onSelectArea?: (areaId: string) => void;
   darkMode?: boolean;
   onBack: () => void;
   onToggleLights: (areaId: string, targetState?: boolean) => void;
@@ -29,4 +31,4 @@ export interface AreaDetailViewProps {
 }
 
 
-export type DomainTab = 'all' | 'lights' | 'climate' | 'switches' | 'media' | 'sensors';
+export type DomainTab = 'all' | 'active' | 'lights' | 'climate' | 'switches' | 'media' | 'sensors';

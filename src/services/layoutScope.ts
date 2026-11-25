@@ -5,7 +5,15 @@
  * and `config.rooms`) or their personal overlay (`config.userLayouts[userId]`), based on the
  * Admin `layoutSharing.shareLayoutsWithUsers` checkbox and the user's personal fork toggle.
  */
-import type { LayoutMode, UserDashboardConfig, UserLayoutOverlay } from '../types/userConfig';
+import type {
+  BreakpointLayoutOverride,
+  LayoutBreakpoint,
+  LayoutMode,
+  OverviewConfig,
+  ResponsiveLayoutOverrides,
+  UserDashboardConfig,
+  UserLayoutOverlay
+} from '../types/userConfig';
 
 export type LayoutEditTarget = 'shared' | 'personal';
 
@@ -190,6 +198,10 @@ export function buildForkToPersonalPatch(
     ...(effective.proOverviewLayout ? { proOverviewLayout: structuredClone(effective.proOverviewLayout) } : {}),
     ...(effective.proRooms ? { proRooms: structuredClone(effective.proRooms) } : {}),
     ...(effective.proAreaLayouts ? { proAreaLayouts: structuredClone(effective.proAreaLayouts) } : {}),
+    ...(config.overview ? { classicOverview: structuredClone(config.overview) } : {}),
+    ...(config.responsiveLayoutOverrides
+      ? { classicResponsiveLayoutOverrides: structuredClone(config.responsiveLayoutOverrides) }
+      : {}),
     favoriteAreas: [...(config.rooms?.favoriteAreas ?? [])]
   };
   return {
@@ -213,8 +225,83 @@ export function buildRevertToSharedPatch(userId: string): Partial<UserDashboardC
         roomModes: null as unknown as Record<string, LayoutMode>,
         proOverviewLayout: null as unknown as Record<string, unknown>,
         proRooms: null as unknown as Record<string, unknown>,
-        proAreaLayouts: null as unknown as Record<string, unknown>
+        proAreaLayouts: null as unknown as Record<string, unknown>,
+        classicOverview: null as unknown as OverviewConfig,
+        classicResponsiveLayoutOverrides: null as unknown as ResponsiveLayoutOverrides
       }
+    }
+  };
+}
+
+/** Returns effective Classic Overview config (`config.overview` or `userLayouts[uid].classicOverview`). */
+export function getEffectiveClassicOverview(
+  config: UserDashboardConfig,
+  scope: LayoutScopeState
+): OverviewConfig {
+  const overlay = scope.userId ? config.userLayouts?.[scope.userId] : undefined;
+  if (!scope.shareEnabled) {
+    return overlay?.classicOverview ?? {};
+  }
+  if (scope.activeTarget === 'personal' && overlay?.classicOverview) {
+    return overlay.classicOverview;
+  }
+  return config.overview ?? {};
+}
+
+/** Returns effective Classic responsive tile overrides for the active user scope. */
+export function getEffectiveResponsiveLayoutOverrides(
+  config: UserDashboardConfig,
+  scope: LayoutScopeState
+): ResponsiveLayoutOverrides {
+  const overlay = scope.userId ? config.userLayouts?.[scope.userId] : undefined;
+  if (!scope.shareEnabled) {
+    return overlay?.classicResponsiveLayoutOverrides ?? {};
+  }
+  if (scope.activeTarget === 'personal' && overlay?.classicResponsiveLayoutOverrides) {
+    return overlay.classicResponsiveLayoutOverrides;
+  }
+  return config.responsiveLayoutOverrides ?? {};
+}
+
+/** Builds a scoped patch updating Classic Overview config in shared or personal storage. */
+export function buildScopedClassicOverviewPatch(
+  scope: LayoutScopeState,
+  nextOverview: OverviewConfig
+): Partial<UserDashboardConfig> {
+  if ((scope.activeTarget === 'personal' || !scope.canEditShared) && scope.userId) {
+    return {
+      userLayouts: {
+        [scope.userId]: {
+          ...(scope.shareEnabled ? { useSharedLayout: false } : {}),
+          classicOverview: nextOverview
+        }
+      }
+    };
+  }
+  return { overview: nextOverview };
+}
+
+/** Builds a scoped patch updating Classic responsive overrides for one breakpoint. */
+export function buildScopedResponsiveOverridesPatch(
+  scope: LayoutScopeState,
+  breakpoint: LayoutBreakpoint,
+  bpMap: Record<string, BreakpointLayoutOverride | null>
+): Partial<UserDashboardConfig> {
+  if ((scope.activeTarget === 'personal' || !scope.canEditShared) && scope.userId) {
+    return {
+      userLayouts: {
+        [scope.userId]: {
+          ...(scope.shareEnabled ? { useSharedLayout: false } : {}),
+          classicResponsiveLayoutOverrides: {
+            [breakpoint]: bpMap as Record<string, BreakpointLayoutOverride>
+          }
+        }
+      }
+    };
+  }
+  return {
+    responsiveLayoutOverrides: {
+      [breakpoint]: bpMap as Record<string, BreakpointLayoutOverride>
     }
   };
 }
