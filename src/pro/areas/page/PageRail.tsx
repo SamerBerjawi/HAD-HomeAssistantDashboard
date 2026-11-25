@@ -36,9 +36,13 @@ interface RailProps extends PageProps {
   inset?: boolean;
   /** More to set while customizing (the real page: each car's picture). */
   editExtras?: ReactNode;
+  /** Top-of-page panel shown while editing (deprecated when bottom ProEditBar handles editing). */
+  editPanel?: ReactNode;
+  /** Hide inline RoomEditBar when the page mounts the bottom ProEditBar in edit mode. */
+  hideEditBar?: boolean;
 }
 
-export default function PageRail({ views = false, editor, view: viewProp, onView, inset = true, editExtras, ...props }: RailProps) {
+export default function PageRail({ views = false, editor, view: viewProp, onView, inset = true, editExtras, editPanel, hideEditBar = false, ...props }: RailProps) {
   const { room, device, model, renderTile } = props;
   const [ownView, setOwnView] = useState<RoomView>('all');
   const view = viewProp ?? ownView;
@@ -91,6 +95,7 @@ export default function PageRail({ views = false, editor, view: viewProp, onView
     <div className="@container min-w-0 flex-1">
       {!room.items.length ? <EmptyRoom room={room.name} href={room.haUrl} /> : null}
       {room.items.length && !sections.length ? <p className="px-1 py-6 text-sm text-muted">Only readings here: they're all on the {phone ? 'top' : 'left'}.</p> : null}
+      {editor.editing && editPanel ? <div className="mb-4">{editPanel}</div> : null}
       <HiddenTray editor={editor} name={nameOf(props)} />
       {editor.editing && editExtras ? <div className="mb-5">{editExtras}</div> : null}
       {views && editor.editing ? <PinnedSection props={props} editor={editor} /> : null}
@@ -133,7 +138,7 @@ export default function PageRail({ views = false, editor, view: viewProp, onView
     const values = readings.map(model).filter((m): m is ReadingTileModel => m.kind === 'reading' && m.available && m.value !== null);
     return (
       <div ref={root} className={cn(inset ? 'px-4 pb-6 pt-3' : 'pb-6')}>
-        <RoomNav room={room} rooms={props.rooms} onRoom={props.onRoom} onBack={props.onBack} right={room.items.length ? <RoomEditBar editor={editor} device={device} compact={!editor.editing} /> : null} />
+        <RoomNav room={room} rooms={props.rooms} onRoom={props.onRoom} onBack={props.onBack} right={room.items.length && !hideEditBar ? <RoomEditBar editor={editor} device={device} compact={!editor.editing} /> : null} />
         <header className="mb-4 mt-1 flex items-center gap-3">
           <div className="w-24 shrink-0">{picture}</div>
           <div className="min-w-0">
@@ -152,7 +157,7 @@ export default function PageRail({ views = false, editor, view: viewProp, onView
             )}
           </div>
         </header>
-        {editor.editing && room.items.length ? <div className="mb-3">{<RoomEditBar editor={editor} device={device} />}</div> : null}
+        {editor.editing && room.items.length && !hideEditBar ? <div className="mb-3">{<RoomEditBar editor={editor} device={device} />}</div> : null}
         {scenes.length ? (
           <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]" style={{ height: 76 }}>
             {scenes.map((k) => (
@@ -182,7 +187,7 @@ export default function PageRail({ views = false, editor, view: viewProp, onView
           <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.02em]">{room.name}</h1>
           <Facts models={all} className="mt-1.5" />
         </div>
-        {room.items.length ? <RoomEditBar editor={editor} device={device} /> : null}
+        {room.items.length && !hideEditBar ? <RoomEditBar editor={editor} device={device} /> : null}
         {scenes.length ? <RailGroup title="Scenes" keys={scenes} renderTile={renderTile} /> : null}
         {readings.length ? <RailGroup title="Readings" keys={readings} renderTile={renderTile} /> : null}
         {index ? (

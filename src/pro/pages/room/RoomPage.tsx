@@ -1,16 +1,14 @@
 /**
- * One room's page (docs/pro-ui/AREA_TILES.md, batch 6 "B + C"; Area page build, phase 4): the
- * Rail frame (picture, name, facts, scenes, readings, section index) with a switch between All
- * (every section) and Now (what is on or needs a look, pinned tiles, the rest folded). One tile per
- * entity, drawn with the owner's chosen concept for its kind, live against Home Assistant. Layouts
- * are saved per room and per device class (`preferences.proAreaLayouts`); the view is remembered
- * per screen. All rooms and the previous / next room follow the Rooms page's order.
+ * One room's page (docs/pro-ui/AREA_TILES.md, batch 6 "B + C"; Area page build, phase 4 + Phase 0):
+ * the Rail frame with All / Now views, unified 3-tier device layouts (`phone` | `tablet` | `desktop`),
+ * non-destructive cross-device editing, Auto vs. Custom mode, and Admin shared vs. personal layouts.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon } from '@hugeicons/core-free-icons';
+import { ArrowLeft01Icon, Settings01Icon } from '@hugeicons/core-free-icons';
 import { useUserConfig } from '@/contexts/ConfigContext';
+import { cn } from '@/lib/utils';
 import { resolveHAImageUrl } from '@/services/haImageService';
 import type { UserDashboardConfig } from '@/types/userConfig';
 import { resolveAssetUrl } from '@/utils/assetUrl';
@@ -22,12 +20,17 @@ import { CarPictureControl } from '../../areas/page/CarPictureControl';
 import { useTileActions } from '../../areas/ha/useTileActions';
 import { ChosenTile } from '../../areas/tiles/chosenTiles';
 import { useAreaLayout } from '../../areas/page/useAreaLayout';
+import type { AreaDevice } from '../../areas/page/roomLayout';
 import { foldAll } from '../../areas/page/PageNow';
 import PageRail from '../../areas/page/PageRail';
 import type { PageItem, PageRoom } from '../../areas/page/pageKit';
+import { ProEditBar } from '../../components/ProEditBar';
+import { useDeviceType } from '../../hooks/useDeviceType';
+import { useLayoutScope } from '../../hooks/useLayoutScope';
+import { useProEditChrome } from '../../store/useProEditChrome';
 import { useHaPicture } from '../../widgets/shared/useHaPicture';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type { RoomItem } from '../../lib/roomsPage';
+import { RoomSettingsSheet } from '../rooms/RoomSettingsSheet';
 import { useRoomView } from './useRoomView';
 
 interface RoomPageProps {
@@ -41,23 +44,50 @@ interface RoomPageProps {
 /** A tile's own changes HA does not keep (a camera switched live, rooms picked for the vacuum). */
 type Patches = Record<string, Partial<TileModel>>;
 
+const DEVICE_MAX_WIDTH: Record<AreaDevice, number | undefined> = { phone: 430, tablet: 1024, desktop: undefined };
+
 export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPageProps) {
   const area = useAutoLayoutStore((s) => s.resolvedAreas.find((a) => a.area_id === areaId) ?? null);
   const areaNames = useAutoLayoutStore((s) => s.resolvedAreas.map((a) => `${a.area_id}\u0000${a.name}`).join('\u0001'));
   const serverUrl = useAutoLayoutStore((s) => s.serverUrl);
-  const device = useMediaQuery('(max-width: 767px)') ? 'phone' : 'wide';
-  const [view, setView] = useRoomView(device);
+  const { device: viewDevice, detected, pinned, setPinned } = useDeviceType();
+  const [editingDevice, setEditingDevice] = useState<AreaDevice | null>(null);
+  const activeDevice: AreaDevice = editingDevice ?? viewDevice;
+  const viewKey = activeDevice === 'phone' ? 'phone' : 'wide';
+  const [view, setView] = useRoomView(viewKey);
+  const { config } = useUserConfig();
+  const roomOverride = config.rooms?.areaOverrides?.[areaId];
   const roomItem = rooms.find((r) => r.areaId === areaId);
-  const photo = useHaPicture(roomItem?.picture ?? area?.picture ?? null);
+  const rawPhoto =
+    roomOverride?.backgroundImageUrl !== undefined
+      ? roomOverride.backgroundImageUrl
+      : roomOverride?.picture !== undefined
+      ? roomOverride.picture
+      : roomItem?.picture ?? area?.picture ?? null;
+  const photo = useHaPicture(rawPhoto || null);
 
   const tiles = useMemo(() => (area ? buildAreaTiles(area, { picture: (p) => resolveHAImageUrl(p, serverUrl) || null }) : []), [area, serverUrl]);
   const byKey = useMemo(() => new Map(tiles.map((t) => [t.key, t])), [tiles]);
   // The layout only cares which tiles there are, so it keeps its identity while states change.
   const itemsKey = tiles.map((t) => `${t.key}:${t.section}:${t.size.phone}${t.size.wide}:${t.focus ?? ''}`).join('|');
   const items = useMemo<PageItem[]>(() => tiles.map(({ key, section, size, focus }) => ({ key, section, size, focus })), [itemsKey]);
-  const editor = useAreaLayout(areaId, items, device, foldAll);
-  const { config } = useUserConfig();
+  const editor = useAreaLayout(areaId, items, activeDevice, foldAll);
+  const { scope, setAdminTarget, toggleShareEnabled, forkToPersonal, revertToShared } = useLayoutScope();
+  const setEditingPage = useProEditChrome((s) => s.setEditingPage);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const carPictures = useMemo(() => readCarPictures(config.preferences), [config.preferences]);
+
+  useEffect(() => {
+    setEditingPage(editor.editing ? 'room' : null);
+  }, [editor.editing, setEditingPage]);
+
+  useEffect(() => () => setEditingPage(null), [setEditingPage]);
+
+  useEffect(() => {
+    if (!editor.editing && editingDevice !== null) {
+      setEditingDevice(null);
+    }
+  }, [editor.editing, editingDevice]);
 
   const [patches, setPatches] = useState<Patches>({});
   useEffect(() => setPatches({}), [areaId]);
@@ -115,30 +145,74 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
   const haBase = serverUrl ? resolveHAImageUrl('/', serverUrl).replace(/\/$/, '') : '';
   const room: PageRoom = {
     id: areaId,
-    name: roomItem?.name ?? area.name,
+    name: roomOverride?.customName || roomOverride?.name || roomItem?.name || area.name,
     photo: photo ? `url(${JSON.stringify(photo)})` : null,
     items,
     haUrl: haBase ? `${haBase}/config/areas/area/${encodeURIComponent(areaId)}` : null
   };
 
   return (
-    <PageRail
-      views
-      inset={false}
-      editor={editor}
-      view={view}
-      onView={setView}
-      room={room}
-      rooms={rooms.map((r) => ({ id: r.areaId, name: r.name }))}
-      onRoom={onOpenRoom}
-      onBack={onBack}
-      model={model}
-      name={name}
-      editExtras={<CarPictures cars={tiles.filter((t) => t.model.kind === 'car' && !t.focus)} chosen={carPictures} />}
-      renderTile={renderTile}
-      actOn={actOn}
-      device={device}
-    />
+    <div className={cn('mx-auto w-full', editor.editing && 'pb-24')} style={{ maxWidth: editor.editing ? DEVICE_MAX_WIDTH[activeDevice] : undefined }}>
+      <PageRail
+        views
+        inset={false}
+        editor={editor}
+        hideEditBar={editor.editing}
+        view={view}
+        onView={setView}
+        room={room}
+        rooms={rooms.map((r) => ({ id: r.areaId, name: r.name }))}
+        onRoom={onOpenRoom}
+        onBack={onBack}
+        model={model}
+        name={name}
+        editExtras={<CarPictures cars={tiles.filter((t) => t.model.kind === 'car' && !t.focus)} chosen={carPictures} />}
+        renderTile={renderTile}
+        actOn={actOn}
+        device={activeDevice}
+      />
+      {editor.editing ? (
+        <ProEditBar
+          pageLabel={room.name}
+          editingDevice={activeDevice}
+          detectedDevice={detected}
+          pinnedDevice={pinned}
+          scope={scope}
+          mode={editor.mode}
+          isDirty={editor.dirty}
+          canUndo={editor.canUndo}
+          canRedo={editor.canRedo}
+          onUndo={editor.undo}
+          onRedo={editor.redo}
+          onCancel={editor.cancel}
+          onSave={editor.save}
+          onReset={editor.reset}
+          onSelectEditingDevice={(next) => setEditingDevice(next)}
+          onSetPinnedDevice={setPinned}
+          onCopyFrom={(src) => editor.copyFromDevice(src)}
+          onAdminTargetChange={(target) => {
+            editor.cancel();
+            setAdminTarget(target);
+          }}
+          onToggleShare={(enabled) => void toggleShareEnabled(enabled)}
+          onForkToPersonal={() => {
+            editor.cancel();
+            void forkToPersonal();
+          }}
+          onRevertToShared={() => {
+            editor.cancel();
+            void revertToShared();
+          }}
+          onResetToAuto={() => void editor.resetToAuto()}
+          primaryAction={{
+            label: 'Room',
+            icon: Settings01Icon,
+            onPress: () => setSettingsOpen(true)
+          }}
+        />
+      ) : null}
+      <RoomSettingsSheet areaId={areaId} isOpen={settingsOpen} onOpenChange={setSettingsOpen} />
+    </div>
   );
 }
 

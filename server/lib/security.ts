@@ -61,7 +61,7 @@ export function validateCameraSourceUrl(value: unknown): string | null {
 const OBJECT_SECTIONS = [
   'theme', 'mobility', 'vacuums', 'rooms', 'entities', 'cameras', 'network', 'energy',
   'navigation', 'preferences', 'profile', 'areas', 'floors', 'labels', 'canvas', 'overview',
-  'layoutOverrides', 'responsiveLayoutOverrides'
+  'layoutOverrides', 'responsiveLayoutOverrides', 'layoutSharing', 'userLayouts'
 ] as const;
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -101,6 +101,25 @@ export function validateDashboardConfigShape(body: unknown): string | null {
       const reason = validateCameraSourceUrl(src.rtspUrl);
       // A redacted URL (see redactCredentialsInText) is resolved against the stored value later
       if (reason) return `cameras.sources.${id}: ${reason}`;
+    }
+  }
+
+  const layoutSharing = body.layoutSharing;
+  if (isPlainObject(layoutSharing)) {
+    if (
+      layoutSharing.shareLayoutsWithUsers !== undefined &&
+      typeof layoutSharing.shareLayoutsWithUsers !== 'boolean'
+    ) {
+      return 'layoutSharing.shareLayoutsWithUsers must be a boolean';
+    }
+  }
+
+  const userLayouts = body.userLayouts;
+  if (isPlainObject(userLayouts)) {
+    for (const [uid, entry] of Object.entries(userLayouts)) {
+      if (entry !== undefined && entry !== null && !isPlainObject(entry)) {
+        return `userLayouts.${uid} must be an object`;
+      }
     }
   }
   return null;

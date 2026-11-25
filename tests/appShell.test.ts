@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   VALID_TABS,
+  buildRoomPath,
+  getRoomIdFromLocation,
   getTabFromLocation,
   getTabFromUrl,
   hasAnyKey,
@@ -27,10 +29,20 @@ describe('getTabFromLocation', () => {
     expect(getTabFromLocation('', '/Settings/')).toBe('settings');
     expect(getTabFromLocation('?code=abc&state=xyz', '//media')).toBe('media');
   });
-  it('falls back to overview for root, unknown or nested paths', () => {
+  it('falls back to overview for root or unknown nested paths, and resolves /rooms/:areaId to rooms', () => {
     expect(getTabFromLocation('', '/')).toBe('overview');
     expect(getTabFromLocation('', '/unknown')).toBe('overview');
-    expect(getTabFromLocation('', '/rooms/kitchen')).toBe('overview');
+    expect(getTabFromLocation('', '/unknown/nested')).toBe('overview');
+    expect(getTabFromLocation('', '/rooms/kitchen')).toBe('rooms');
+    expect(getTabFromLocation('', '/rooms/living%20room/extra')).toBe('overview');
+  });
+  it('extracts and builds room URLs cleanly', () => {
+    expect(getRoomIdFromLocation('/rooms')).toBeNull();
+    expect(getRoomIdFromLocation('/rooms/kitchen')).toBe('kitchen');
+    expect(getRoomIdFromLocation('/rooms/Living%20Room/')).toBe('Living Room');
+    expect(getRoomIdFromLocation('/overview/kitchen')).toBeNull();
+    expect(buildRoomPath(null)).toBe('/rooms');
+    expect(buildRoomPath('Living Room')).toBe('/rooms/Living%20Room');
   });
   it('accepts every valid tab as a path', () => {
     for (const tab of VALID_TABS) expect(getTabFromLocation('', `/${tab}`)).toBe(tab);

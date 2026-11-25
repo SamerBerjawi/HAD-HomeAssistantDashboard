@@ -2,8 +2,23 @@
 import { isJsonObject } from './configTypes';
 import type { JsonObject, ServerConfig } from './configTypes';
 
-// Server-side recursive deep merge utility for plain objects (arrays are wholesale replaced, undefined skipped)
-export function deepMergeConfig(base: JsonObject = {}, partial: JsonObject = {}): JsonObject {
+const OVERVIEW_DEVICE_KEYS = new Set(['phone', 'tablet', 'desktop']);
+const AREA_DEVICE_KEYS = new Set(['phone', 'tablet', 'desktop', 'wide']);
+
+function isAtomicBucket(path: readonly string[], key: string): boolean {
+  if (key === 'sources') return true;
+  if (key === 'styles') return true;
+  const parent = path[path.length - 1];
+  const grandparent = path[path.length - 2];
+  if (parent === 'proOverviewLayout' && OVERVIEW_DEVICE_KEYS.has(key)) return true;
+  if (grandparent === 'proAreaLayouts' && AREA_DEVICE_KEYS.has(key)) return true;
+  if (parent === 'proRooms' && OVERVIEW_DEVICE_KEYS.has(key)) return true;
+  if (key === 'sizes' && path.includes('proRooms')) return true;
+  return false;
+}
+
+// Server-side recursive deep merge utility for plain objects (arrays and atomic layout buckets are wholesale replaced, undefined skipped)
+export function deepMergeConfig(base: JsonObject = {}, partial: JsonObject = {}, path: readonly string[] = []): JsonObject {
   const result: JsonObject = { ...(base || {}) };
   for (const [key, value] of Object.entries(partial || {})) {
     if (value === undefined) continue;
@@ -11,16 +26,16 @@ export function deepMergeConfig(base: JsonObject = {}, partial: JsonObject = {})
       delete result[key];
       continue;
     }
-    if (key === 'sources' && typeof value === 'object' && !Array.isArray(value)) {
-      // Wholesale replace camera sources dictionary so deleted sources are not resurrected
-      result[key] = { ...value };
+    if (isAtomicBucket(path, key) && typeof value === 'object' && !Array.isArray(value)) {
+      // Wholesale replace atomic maps/device buckets so deleted or reset keys are not resurrected
+      result[key] = deepMergeConfig({}, value as JsonObject, [...path, key]);
     } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
       const existing = result[key];
       const baseVal: JsonObject =
         existing !== null && typeof existing === 'object' && !Array.isArray(existing)
           ? (existing as JsonObject)
           : {};
-      result[key] = deepMergeConfig(baseVal, value as JsonObject);
+      result[key] = deepMergeConfig(baseVal, value as JsonObject, [...path, key]);
     } else {
       result[key] = value;
     }
@@ -67,6 +82,8 @@ interface MaterialConfigProbe {
   cameras?: { favoriteCameras?: unknown; sources?: unknown };
   preferences?: unknown;
   profile?: unknown;
+  layoutSharing?: unknown;
+  userLayouts?: unknown;
 }
 
 // Material Data Checker: inspects if configuration has meaningful user customizations
@@ -114,9 +131,11 @@ export function hasMaterialDashboardConfig(input: unknown): boolean {
     if (data.cameras.sources && typeof data.cameras.sources === 'object' && Object.keys(data.cameras.sources).length > 0) return true;
   }
 
-  // Check preferences / profile
+  // Check preferences / profile / layoutSharing / userLayouts
   if (data.preferences && typeof data.preferences === 'object' && Object.keys(data.preferences).length > 0) return true;
   if (data.profile && typeof data.profile === 'object' && Object.keys(data.profile).length > 0) return true;
+  if (data.layoutSharing && typeof data.layoutSharing === 'object' && Object.keys(data.layoutSharing).length > 0) return true;
+  if (data.userLayouts && typeof data.userLayouts === 'object' && Object.keys(data.userLayouts).length > 0) return true;
 
   return false;
 }
@@ -173,4 +192,47 @@ export function cameraSourcesChanged(currentConfig: ServerConfig | null, targetC
   const before = JSON.stringify(currentConfig?.cameras?.sources ?? {});
   const after = JSON.stringify(target ?? {});
   return before !== after;
+}
+
+/** Changing layoutSharing settings (such as shareLayoutsWithUsers) requires a Home Assistant administrator. */
+export function layoutSharingChanged(currentConfig: ServerConfig | null, targetConfig: JsonObject): boolean {
+  const target = (targetConfig as ServerConfig).layoutSharing;
+  if (target === undefined) return false;
+  const currentShare = currentConfig?.layoutSharing?.shareLayoutsWithUsers ?? true;
+  const nextShare = target === null ? true : (target.shareLayoutsWithUsers ?? currentShare);
+  if (nextShare !== currentShare) return true;
+  if (target !== null && JSON.stringify(currentConfig?.layoutSharing ?? {}) !== JSON.stringify(target)) {
+    // Only flag if fields beyond echoing default shareLayoutsWithUsers changed
+    const beforeNorm = { shareLayoutsWithUsers: currentShare, ...(currentConfig?.layoutSharing ?? {}) };
+    const afterNorm = { shareLayoutsWithUsers: currentShare, ...target };
+    return JSON.stringify(beforeNorm) !== JSON.stringify(afterNorm);
+  }
+  return false;
+}
+
+/**
+ * Returns true if targetConfig modifies a userLayouts entry that does not belong to `userId`.
+ * Non-admins may only write to their own `userLayouts[userId]` entry (echoing unchanged sibling entries is allowed).
+ */
+export function unauthorizedUserLayoutsModified(
+  currentConfig: ServerConfig | null,
+  targetConfig: JsonObject,
+  userId: string | null | undefined
+): boolean {
+  const target = (targetConfig as ServerConfig).userLayouts;
+  if (target === undefined || target === null) return target === null && Boolean(currentConfig?.userLayouts && Object.keys(currentConfig.userLayouts).length > 0);
+  if (!isJsonObject(target)) return false;
+  const current = currentConfig?.userLayouts ?? {};
+  for (const [uid, entry] of Object.entries(target)) {
+    if (uid === userId) continue;
+    const before = current[uid];
+    if (entry === null) {
+      if (before !== undefined) return true;
+      continue;
+    }
+    if (JSON.stringify(before ?? null) !== JSON.stringify(entry)) {
+      return true;
+    }
+  }
+  return false;
 }

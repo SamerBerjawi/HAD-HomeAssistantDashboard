@@ -11,6 +11,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowUpRight01Icon, BulbIcon, DoorIcon, DropletIcon, FavouriteIcon, FlashIcon, Motion01Icon, MusicNote03Icon, ThermometerIcon } from '@hugeicons/core-free-icons';
 import { useUserConfig } from '@/contexts/ConfigContext';
 import { cn } from '@/lib/utils';
+import { useLayoutScope } from '../../hooks/useLayoutScope';
 import { areaSummaryLine, findArea, toggleFavorite, type ProAreaItem, type ProAreasModel } from '../../lib/overviewAreas';
 import { ToggleSwitch } from '../controls/ControlParts';
 import { useDomainEntities } from '../shared/entities';
@@ -24,8 +25,9 @@ import { areaIcon, tempText, useAreaActions } from './concepts/shared';
 const EMPTY: string[] = [];
 
 export default function AreasSheet({ model: m, itemId, onClose }: WidgetSheetProps<ProAreasModel>) {
-  const { config, updateConfig } = useUserConfig();
-  const favorites = config.rooms?.favoriteAreas ?? EMPTY;
+  const { updateConfig } = useUserConfig();
+  const { scope, effectiveFavorites } = useLayoutScope();
+  const favorites = effectiveFavorites;
   const [picked, setPicked] = useState<string | null>(itemId ?? null);
   const area: ProAreaItem | null = findArea(m, picked) ?? m.favorites[0] ?? m.floors[0]?.areas[0] ?? null;
   const picture = useHaPicture(area?.picture ?? null);
@@ -33,7 +35,16 @@ export default function AreasSheet({ model: m, itemId, onClose }: WidgetSheetPro
   const { call, setOptimistic } = useServiceCall();
   const lightEntities = useDomainEntities('light');
   const lights = useMemo(() => (area ? lightEntities.filter((e) => area.lightIds.includes(e.entity_id)) : []), [area, lightEntities]);
-  const setFavorite = (id: string) => updateConfig((prev) => ({ ...prev, rooms: { ...prev.rooms, favoriteAreas: toggleFavorite(prev.rooms?.favoriteAreas ?? [], id) } }));
+  const setFavorite = (id: string) => {
+    const nextFavs = toggleFavorite(favorites, id);
+    if ((scope.activeTarget === 'personal' || !scope.canEditShared) && scope.userId) {
+      void updateConfig({
+        userLayouts: { [scope.userId]: { ...(scope.shareEnabled ? { useSharedLayout: false } : {}), favoriteAreas: nextFavs } }
+      });
+      return;
+    }
+    void updateConfig((prev) => ({ rooms: { favoriteAreas: nextFavs } } as Partial<typeof prev>));
+  };
   const quick = area && !m.favorites.some((f) => f.areaId === area.areaId) ? [...m.favorites, area] : m.favorites;
   const lightsOn = (area?.lightsOn ?? 0) > 0;
 

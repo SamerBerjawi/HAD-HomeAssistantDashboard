@@ -5,6 +5,17 @@
  * in so the widget is never empty. Pure: no React, no store.
  */
 import type { HAFloor, ResolvedArea } from '@/types';
+import type { UserDashboardConfig } from '@/types/userConfig';
+
+export type AreaOverrideEntry = UserDashboardConfig['rooms']['areaOverrides'][string];
+export type AreaOverrideMap = Readonly<Record<string, AreaOverrideEntry | undefined>>;
+
+export interface BuildAreasOptions {
+  floorOrder?: readonly string[];
+  hiddenFloors?: readonly string[];
+  areaOrder?: readonly string[];
+  overrides?: AreaOverrideMap;
+}
 
 export interface ProAreaItem {
   areaId: string;
@@ -48,18 +59,34 @@ const NO_FLOOR_LEVEL = Number.MAX_SAFE_INTEGER;
 
 const num = (v: number | undefined | null) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-export function buildAreaItem(area: ResolvedArea, floorName: string | null, isFavorite: boolean): ProAreaItem {
+function readEntityReading(area: ResolvedArea, entityId: string | null | undefined): number | null {
+  if (!entityId) return null;
+  const entity = area.entities?.find((e) => e.entity_id === entityId);
+  if (!entity) return null;
+  const n = Number(entity.state);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function buildAreaItem(area: ResolvedArea, floorName: string | null, isFavorite: boolean, override?: AreaOverrideEntry): ProAreaItem {
   const s = area.summary;
   const lightIds = (area.entitiesByDomain?.light ?? []).map((e) => e.entity_id);
+  const pictureChoice =
+    override?.backgroundImageUrl !== undefined
+      ? override.backgroundImageUrl
+      : override?.picture !== undefined
+      ? override.picture
+      : area.picture || area.bannerImage || null;
+  const customTemp = readEntityReading(area, override?.primaryTempEntityId);
+  const customHumid = readEntityReading(area, override?.primaryHumidityEntityId);
   return {
     areaId: area.area_id,
-    name: area.name,
-    icon: area.icon || '',
-    picture: area.picture || area.bannerImage || null,
+    name: override?.customName || override?.name || area.name,
+    icon: override?.customIcon || override?.icon || area.icon || '',
+    picture: pictureChoice || null,
     floorId: area.floor_id ?? null,
     floorName,
-    temperature: num(s?.currentTempAvg),
-    humidity: num(s?.currentHumidityAvg),
+    temperature: customTemp ?? num(s?.currentTempAvg),
+    humidity: customHumid ?? num(s?.currentHumidityAvg),
     lightsOn: s?.lightsOn ?? 0,
     totalLights: s?.totalLights ?? lightIds.length,
     lightIds,
@@ -71,12 +98,25 @@ export function buildAreaItem(area: ResolvedArea, floorName: string | null, isFa
   };
 }
 
-export function buildAreasModel(areas: readonly ResolvedArea[], floors: readonly HAFloor[], favoriteIds: readonly string[] = [], hiddenIds: readonly string[] = []): ProAreasModel {
+export function buildAreasModel(
+  areas: readonly ResolvedArea[],
+  floors: readonly HAFloor[],
+  favoriteIds: readonly string[] = [],
+  hiddenIds: readonly string[] = [],
+  options: BuildAreasOptions = {}
+): ProAreasModel {
+  const { floorOrder = [], hiddenFloors = [], areaOrder = [], overrides } = options;
   const hidden = new Set(hiddenIds);
+  const hiddenFloorSet = new Set(hiddenFloors);
   const floorById = new Map(floors.map((f) => [f.floor_id, f]));
-  const visible = areas.filter((a) => !hidden.has(a.area_id));
+  const areaRank = (id: string) => (areaOrder.includes(id) ? areaOrder.indexOf(id) : areaOrder.length);
+  const visible = areas
+    .filter((a) => !hidden.has(a.area_id) && !(a.floor_id && hiddenFloorSet.has(a.floor_id)))
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => areaRank(x.a.area_id) - areaRank(y.a.area_id) || x.i - y.i)
+    .map((x) => x.a);
   const favSet = new Set(favoriteIds);
-  const items = visible.map((a) => buildAreaItem(a, (a.floor_id && floorById.get(a.floor_id)?.name) || null, favSet.has(a.area_id)));
+  const items = visible.map((a) => buildAreaItem(a, (a.floor_id && floorById.get(a.floor_id)?.name) || null, favSet.has(a.area_id), overrides?.[a.area_id]));
   const byId = new Map(items.map((i) => [i.areaId, i]));
 
   // Favourites keep the user's order.
@@ -95,7 +135,9 @@ export function buildAreasModel(areas: readonly ResolvedArea[], floors: readonly
     }
     group.areas.push(item);
   }
-  const grouped = [...groups.values()].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+  const floorRank = (f: ProAreaFloor) =>
+    f.floorId === null ? Number.MAX_SAFE_INTEGER : floorOrder.includes(f.floorId) ? floorOrder.indexOf(f.floorId) : floorOrder.length;
+  const grouped = [...groups.values()].sort((a, b) => floorRank(a) - floorRank(b) || a.level - b.level || a.name.localeCompare(b.name));
 
   return { favorites, favoritesAreDefault, floors: grouped, totalCount: items.length };
 }

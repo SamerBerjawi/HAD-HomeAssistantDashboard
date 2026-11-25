@@ -19,8 +19,27 @@ export function mergeDelta(
   return mergePlainDelta(base, delta) as Partial<UserDashboardConfig>;
 }
 
+const OVERVIEW_DEVICE_KEYS = new Set(['phone', 'tablet', 'desktop']);
+const AREA_DEVICE_KEYS = new Set(['phone', 'tablet', 'desktop', 'wide']);
+
+function isAtomicBucket(path: readonly string[], key: string): boolean {
+  if (key === 'sources') return true;
+  if (key === 'styles') return true;
+  const parent = path[path.length - 1];
+  const grandparent = path[path.length - 2];
+  if (parent === 'proOverviewLayout' && OVERVIEW_DEVICE_KEYS.has(key)) return true;
+  if (grandparent === 'proAreaLayouts' && AREA_DEVICE_KEYS.has(key)) return true;
+  if (parent === 'proRooms' && OVERVIEW_DEVICE_KEYS.has(key)) return true;
+  if (key === 'sizes' && path.includes('proRooms')) return true;
+  return false;
+}
+
 // Recursive worker: nested sections are plain objects, not whole configs
-function mergePlainDelta(base: Record<string, any>, delta: Record<string, any>): Record<string, any> {
+function mergePlainDelta(
+  base: Record<string, any>,
+  delta: Record<string, any>,
+  path: readonly string[] = []
+): Record<string, any> {
   const result: Record<string, any> = { ...base };
 
   for (const [key, value] of Object.entries(delta)) {
@@ -30,15 +49,15 @@ function mergePlainDelta(base: Record<string, any>, delta: Record<string, any>):
       continue;
     }
 
-    if (key === 'sources' && typeof value === 'object' && !Array.isArray(value)) {
-      // Wholesale replace camera sources dictionary so deleted sources are not resurrected
-      result[key] = { ...value };
+    if (isAtomicBucket(path, key) && typeof value === 'object' && !Array.isArray(value)) {
+      // Wholesale replace atomic maps/device buckets so deleted or reset keys are not resurrected
+      result[key] = mergePlainDelta({}, value, [...path, key]);
     } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
       const baseVal =
         result[key] !== null && typeof result[key] === 'object' && !Array.isArray(result[key])
           ? result[key]
           : {};
-      result[key] = mergePlainDelta(baseVal, value);
+      result[key] = mergePlainDelta(baseVal, value, [...path, key]);
     } else {
       result[key] = value;
     }
@@ -63,6 +82,8 @@ interface MaterialConfigProbe {
   overview?: { tileOrder?: unknown; hiddenTiles?: unknown; hiddenFromAllTiles?: unknown; tileSizes?: unknown; hideBadges?: unknown };
   preferences?: unknown;
   profile?: unknown;
+  layoutSharing?: unknown;
+  userLayouts?: unknown;
 }
 
 /**
@@ -116,6 +137,8 @@ export function hasMaterialDashboardConfig(input: unknown): boolean {
 
   if (data.preferences && typeof data.preferences === 'object' && Object.keys(data.preferences).length > 0) return true;
   if (data.profile && typeof data.profile === 'object' && Object.keys(data.profile).length > 0) return true;
+  if (data.layoutSharing && typeof data.layoutSharing === 'object' && Object.keys(data.layoutSharing).length > 0) return true;
+  if (data.userLayouts && typeof data.userLayouts === 'object' && Object.keys(data.userLayouts).length > 0) return true;
 
   return false;
 }
@@ -263,10 +286,21 @@ export function mergeConfig(
       ...safeBase.energy,
       ...(partial.energy || {})
     },
-    preferences: {
-      ...(safeBase.preferences || {}),
-      ...(partial.preferences || {})
-    },
+    preferences: mergePlainDelta(
+      safeBase.preferences || {},
+      (partial.preferences || {}) as Record<string, any>,
+      ['preferences']
+    ) as UserDashboardConfig['preferences'],
+    layoutSharing: mergePlainDelta(
+      safeBase.layoutSharing || DEFAULT_USER_CONFIG.layoutSharing || { shareLayoutsWithUsers: true },
+      (partial.layoutSharing || {}) as Record<string, any>,
+      ['layoutSharing']
+    ) as UserDashboardConfig['layoutSharing'],
+    userLayouts: mergePlainDelta(
+      safeBase.userLayouts || {},
+      (partial.userLayouts || {}) as Record<string, any>,
+      ['userLayouts']
+    ) as UserDashboardConfig['userLayouts'],
     profile: {
       ...(safeBase.profile || {}),
       ...(partial.profile || {})

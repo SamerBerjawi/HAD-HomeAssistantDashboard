@@ -30,6 +30,26 @@ describe('roomActions', () => {
   it('drops actions the user switched off', () => {
     expect(roomActions(room({ totalLights: 2, fanIds: ['fan.a'] }), new Set(['fan'] as const))).toEqual(['fan']);
   });
+  it('honors per-room customQuickActions ordering and filters missing device capabilities', () => {
+    expect(
+      roomActions(
+        room({
+          totalLights: 2,
+          coverIds: ['cover.garage'],
+          fanIds: ['fan.a'],
+          customQuickActions: ['cover', 'media', 'lights']
+        })
+      )
+    ).toEqual(['cover', 'lights']);
+    expect(
+      roomActions(
+        room({
+          totalLights: 2,
+          customQuickActions: []
+        })
+      )
+    ).toEqual([]);
+  });
 });
 
 describe('autoTileSize', () => {

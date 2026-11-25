@@ -49,4 +49,22 @@ describe('Areas model', () => {
     expect(AREAS_STATES.find((s) => s.id === 'evening')?.model.favorites).toHaveLength(4);
     expect(AREAS_STATES.find((s) => s.id === 'none')?.model.totalCount).toBe(0);
   });
+
+  it('syncs with Rooms floorOrder, hiddenFloors, areaOrder, and areaOverrides', () => {
+    const m = buildAreasModel(AREAS, floors, [], [], {
+      floorOrder: ['up', 'down'],
+      hiddenFloors: [],
+      areaOrder: ['kitchen', 'living'],
+      overrides: {
+        kitchen: { customName: 'Chef Kitchen', customIcon: 'kitchen' }
+      }
+    });
+    expect(m.floors.map((f) => f.floorId)).toEqual(['up', 'down', null]);
+    expect(m.floors[1].areas.map((a) => a.areaId)).toEqual(['kitchen', 'living']);
+    expect(findArea(m, 'kitchen')).toMatchObject({ name: 'Chef Kitchen', icon: 'kitchen' });
+
+    const withHiddenFloor = buildAreasModel(AREAS, floors, [], [], { hiddenFloors: ['up'] });
+    expect(findArea(withHiddenFloor, 'bed')).toBeNull();
+    expect(withHiddenFloor.floors.map((f) => f.floorId)).toEqual(['down', null]);
+  });
 });

@@ -3,6 +3,9 @@ import { DEFAULT_USER_CONFIG, type UserDashboardConfig } from '@/types/userConfi
 import {
   appendToFlow,
   buildDefaultDeviceLayout,
+  copyDeviceLayout,
+  deviceLayoutPatch,
+  deviceLayoutResetPatch,
   flowPlacements,
   moveInFlow,
   readingOrder,
@@ -184,5 +187,16 @@ describe('overviewLayout', () => {
     const grown = resizeInFlow(base, 'a', 'l', 4);
     expect(grown.find((p) => p.i === 'a')).toEqual({ i: 'a', x: 0, y: 0, size: 'l' });
     expect(readingOrder(appendToFlow(base, 'z', 's', 4)).map((p) => p.i)).toEqual(['a', 'b', 'c', 'z']);
+  });
+
+  it('builds granular patches and adapts layouts across device types', () => {
+    const desktop = buildDefaultDeviceLayout(WIDGETS, 'desktop');
+    const copiedToPhone = copyDeviceLayout(desktop, WIDGETS, 'phone');
+    for (const p of Object.values(copiedToPhone.items).flat()) {
+      expect(p!.x + cellsFor(p!.size, 2).w).toBeLessThanOrEqual(2);
+    }
+    const patch = deviceLayoutPatch('phone', copiedToPhone);
+    expect(patch.preferences?.proOverviewLayout).toMatchObject({ version: 1, phone: copiedToPhone });
+    expect(deviceLayoutResetPatch('phone').preferences?.proOverviewLayout).toEqual({ phone: null });
   });
 });

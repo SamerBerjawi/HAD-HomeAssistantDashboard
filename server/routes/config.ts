@@ -10,26 +10,45 @@ import {
   restoreRedactedCameraUrls,
   validateDashboardConfigShape
 } from '../lib/security';
-import { cameraSourcesChanged, checkConfigWriteGuards, deepMergeConfig, isValidDashboardConfig } from '../lib/configRules';
+import {
+  cameraSourcesChanged,
+  checkConfigWriteGuards,
+  deepMergeConfig,
+  isValidDashboardConfig,
+  layoutSharingChanged,
+  unauthorizedUserLayoutsModified
+} from '../lib/configRules';
+import { isJsonObject } from '../lib/configTypes';
 import type { JsonObject, PersistedConfig } from '../lib/configTypes';
 import type { ConfigStore } from '../services/configStore';
+import type { HaUserInfo } from '../auth/haAuth';
 
 export interface ConfigRoutesDeps {
   requireHAAuth: express.RequestHandler;
   isHaAdmin: (token: string) => Promise<boolean>;
+  getHaUser?: (token: string) => Promise<HaUserInfo | null>;
   configStore: ConfigStore;
   /** Called after a save that changed camera sources (registers streams with go2rtc). */
   onCameraSourcesChanged: () => void;
 }
 
 export function registerConfigRoutes(app: express.Express, deps: ConfigRoutesDeps) {
-  const { requireHAAuth, isHaAdmin, configStore, onCameraSourcesChanged } = deps;
+  const { requireHAAuth, isHaAdmin, getHaUser, configStore, onCameraSourcesChanged } = deps;
+
+  async function resolveRequestUser(token: string): Promise<HaUserInfo | null> {
+    if (getHaUser) return getHaUser(token);
+    const admin = await isHaAdmin(token);
+    return { id: '', name: 'Home Assistant User', isAdmin: admin };
+  }
 
   // Set to track connected SSE clients for real-time push configuration updates
   const sseClients = new Set<express.Response>();
 
-  function broadcastConfigUpdate(serverVersion: number) {
-    const payload = `event: config_updated\ndata: ${JSON.stringify({ serverVersion })}\n\n`;
+  function broadcastConfigUpdate(
+    serverVersion: number,
+    meta?: { scope?: 'shared' | 'user'; userId?: string }
+  ) {
+    const payload = `event: config_updated\ndata: ${JSON.stringify({ serverVersion, ...(meta || {}) })}\n\n`;
     for (const client of sseClients) {
       try {
         client.write(payload);
@@ -94,10 +113,12 @@ export function registerConfigRoutes(app: express.Express, deps: ConfigRoutesDep
       }
       if (!persisted) persisted = await configStore.readPersistentConfig();
       if (persisted) {
+        const currentUser = getHaUser ? await getHaUser(req.haToken ?? '').catch(() => null) : null;
         return res.json({
           success: true,
           config: redactConfigForClient(persisted.config),
-          serverVersion: persisted.serverVersion
+          serverVersion: persisted.serverVersion,
+          ...(currentUser && currentUser.id ? { currentUser } : {})
         });
       }
 
@@ -214,14 +235,47 @@ export function registerConfigRoutes(app: express.Express, deps: ConfigRoutesDep
         restoreRedactedCameraUrls(targetConfig, currentConfig);
         applyPinOnWrite(targetConfig, currentConfig);
 
+        // Resolve verified HA user only when privileged or user-scoped sections are touched
+        const needsUserCheck =
+          cameraSourcesChanged(currentConfig, targetConfig) ||
+          layoutSharingChanged(currentConfig, targetConfig) ||
+          targetConfig.userLayouts !== undefined;
+        const haUser = needsUserCheck ? await resolveRequestUser(req.haToken ?? '') : null;
+
         // Only a change to the camera sources needs admin rights; ordinary saves echo them back
-        if (cameraSourcesChanged(currentConfig, targetConfig) && !(await isHaAdmin(req.haToken ?? ''))) {
+        if (cameraSourcesChanged(currentConfig, targetConfig) && !haUser?.isAdmin) {
           return {
             conflict: false,
             statusCode: 403,
             payload: {
               success: false,
               error: 'Forbidden: changing camera sources requires a Home Assistant administrator'
+            }
+          };
+        }
+
+        if (layoutSharingChanged(currentConfig, targetConfig) && !haUser?.isAdmin) {
+          return {
+            conflict: false,
+            statusCode: 403,
+            payload: {
+              success: false,
+              error: 'Forbidden: changing layout sharing settings requires a Home Assistant administrator'
+            }
+          };
+        }
+
+        if (
+          targetConfig.userLayouts !== undefined &&
+          !haUser?.isAdmin &&
+          unauthorizedUserLayoutsModified(currentConfig, targetConfig, haUser?.id)
+        ) {
+          return {
+            conflict: false,
+            statusCode: 403,
+            payload: {
+              success: false,
+              error: 'Forbidden: cannot modify another user\'s layout'
             }
           };
         }
@@ -267,7 +321,15 @@ export function registerConfigRoutes(app: express.Express, deps: ConfigRoutesDep
 
       // Broadcast real-time SSE event to all connected devices if write succeeded
       if (result.statusCode === 200 && result.payload?.serverVersion) {
-        broadcastConfigUpdate(result.payload.serverVersion);
+        let broadcastMeta: { scope: 'shared' | 'user'; userId?: string } = { scope: 'shared' };
+        const topKeys = Object.keys(targetConfig).filter((k) => k !== 'updatedAt' && k !== 'version');
+        if (topKeys.length === 1 && topKeys[0] === 'userLayouts' && isJsonObject(targetConfig.userLayouts)) {
+          const uids = Object.keys(targetConfig.userLayouts);
+          if (uids.length === 1) {
+            broadcastMeta = { scope: 'user', userId: uids[0] };
+          }
+        }
+        broadcastConfigUpdate(result.payload.serverVersion, broadcastMeta);
         if (targetConfig.cameras?.sources !== undefined) {
           onCameraSourcesChanged();
         }

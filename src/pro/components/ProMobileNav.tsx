@@ -6,6 +6,7 @@ import { Menu01Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import GlassSurface from '../ui/reactbits/GlassSurface';
 import { SidebarNavRow } from '../ui/untitledui/SidebarSectionDividers';
+import { useProEditChrome } from '../store/useProEditChrome';
 import { PRO_NAV_GROUPS, PRO_SETTINGS_ITEM, useVisibleNavGroups } from './proNav';
 import { AccountMenu, ConnectionStatusChip, ThemeToggleButton } from './ProAccountControls';
 
@@ -63,8 +64,11 @@ export default function ProMobileNav({ page, darkMode, onNavigate, onToggleTheme
   const [moreOpen, setMoreOpen] = useState(false);
   const isTablet = useMediaQuery('(min-width: 640px)');
   const groups = useVisibleNavGroups();
+  const editingPage = useProEditChrome((s) => s.editingPage);
   const [tabGroup, ...sheetGroups] = groups;
   const inSheet = !TAB_IDS.has(page);
+
+  if (editingPage) return null;
 
   const go = (id: string) => {
     setMoreOpen(false);

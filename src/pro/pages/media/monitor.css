@@ -1,0 +1,13 @@
+.ms-D { display: grid; gap: 18px; padding: 18px; }
+.ms-D .ms-room { color: var(--muted); }
+.ms-D .ms-identity { display: grid; grid-template-columns: minmax(84px,36%) 1fr; align-items: center; gap: 14px; }
+.ms-D .ms-cover { height: auto; aspect-ratio: 1; border-radius: 8px; }
+.ms-D .ms-track h4 { font-size: 1.65rem; }
+.ms-D .ms-action, .ms-D > button { justify-self: start; }
+.ms-D .ms-track { min-width: 0; overflow-wrap: anywhere; }
+.ms-D .ms-track h4 { font-weight: 750; line-height: 1.06; letter-spacing: -.045em; }
+.ms-D .ms-track p { margin-top: 6px; font-size: .875rem; }
+.ms-D .ms-room { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 650; }
+.ms-D .ms-cover { display: grid; place-items: center; overflow: hidden; height: 100%; width: 100%; background: var(--accent); color: white; }
+.ms-D .ms-cover img { width: 100%; height: 100%; object-fit: cover; }
+.ms-D .ms-cover svg { width: 40%; height: 40%; }

@@ -32,6 +32,7 @@ export const HERO = {
 export type HeroTone = keyof typeof HERO;
 
 interface DetailSheetProps {
+  page?: "media" | "overview";
   /** The sheet's name for screen readers ("Lights details"). */
   title: string;
   onClose: () => void;
@@ -41,7 +42,7 @@ interface DetailSheetProps {
   children?: ReactNode;
 }
 
-export function DetailSheet({ title, onClose, hero, toolbar, children }: DetailSheetProps) {
+export function DetailSheet({ page = "overview", title, onClose, hero, toolbar, children }: DetailSheetProps) {
   const desktop = useMediaQuery('(min-width: 768px)');
   const onOpenChange = (open: boolean) => {
     if (!open) onClose();
@@ -58,7 +59,7 @@ export function DetailSheet({ title, onClose, hero, toolbar, children }: DetailS
     return (
       <Drawer.Backdrop isOpen onOpenChange={onOpenChange}>
         <Drawer.Content placement="right">
-          <Drawer.Dialog aria-label={title} className="pro flex h-full w-[36rem] max-w-[100vw] flex-col bg-background" data-page="overview">
+          <Drawer.Dialog aria-label={title} className="pro flex h-full w-[36rem] max-w-[100vw] flex-col bg-background" data-page={page}>
             <Drawer.Body className="min-h-0 flex-1 overflow-y-auto p-3 pb-5">{body}</Drawer.Body>
           </Drawer.Dialog>
         </Drawer.Content>
@@ -68,7 +69,7 @@ export function DetailSheet({ title, onClose, hero, toolbar, children }: DetailS
   return (
     <Drawer.Backdrop isOpen onOpenChange={onOpenChange}>
       <Drawer.Content placement="bottom">
-        <Drawer.Dialog aria-label={title} className="pro max-h-[92dvh] pb-[max(16px,env(safe-area-inset-bottom))]" data-page="overview">
+        <Drawer.Dialog aria-label={title} className="pro max-h-[92dvh] pb-[max(16px,env(safe-area-inset-bottom))]" data-page={page}>
           <Drawer.Handle />
           <Drawer.Body className="overflow-y-auto px-3 pt-1">{body}</Drawer.Body>
         </Drawer.Dialog>

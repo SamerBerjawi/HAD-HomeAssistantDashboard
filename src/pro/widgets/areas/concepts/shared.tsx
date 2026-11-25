@@ -43,8 +43,29 @@ const ICON_WORDS: [RegExp, IconSvgElement][] = [
   [/hall|entry|stair|landing|door/, StairsIcon]
 ];
 
-/** An icon for an area from its registry icon or name. */
+export const ROOM_ICONS: readonly { id: string; label: string; icon: IconSvgElement }[] = [
+  { id: 'home', label: 'Room', icon: Home01Icon },
+  { id: 'sofa', label: 'Living', icon: Sofa01Icon },
+  { id: 'bed', label: 'Bedroom', icon: BedIcon },
+  { id: 'child', label: 'Kids', icon: ChildIcon },
+  { id: 'kitchen', label: 'Kitchen', icon: KitchenUtensilsIcon },
+  { id: 'bath', label: 'Bathroom', icon: BathtubIcon },
+  { id: 'office', label: 'Office', icon: LaptopIcon },
+  { id: 'tv', label: 'Media', icon: Tv01Icon },
+  { id: 'garage', label: 'Garage', icon: GarageIcon },
+  { id: 'parking', label: 'Driveway', icon: CarParking01Icon },
+  { id: 'garden', label: 'Garden', icon: Plant01Icon },
+  { id: 'laundry', label: 'Laundry', icon: WashingMachineIcon },
+  { id: 'gym', label: 'Gym', icon: Dumbbell01Icon },
+  { id: 'stairs', label: 'Hallway', icon: StairsIcon }
+];
+
+const ROOM_ICON_BY_ID = new Map<string, IconSvgElement>(ROOM_ICONS.map((r) => [r.id, r.icon]));
+
+/** An icon for an area from its custom/registry icon id or name. */
 export function areaIcon(a: Pick<ProAreaItem, 'icon' | 'name'>): IconSvgElement {
+  const exact = ROOM_ICON_BY_ID.get(a.icon.trim().toLowerCase());
+  if (exact) return exact;
   const text = `${a.icon} ${a.name}`.toLowerCase();
   return ICON_WORDS.find(([re]) => re.test(text))?.[1] ?? Home01Icon;
 }

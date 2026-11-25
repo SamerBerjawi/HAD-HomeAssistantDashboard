@@ -1,10 +1,11 @@
 /**
- * Shared parts of the Rooms page (docs/pro-ui/ROOMS.md): room colours, page options
+ * Shared parts of the Rooms page (docs/pro-ui/ROOMS.md): room colours, per-device page options
  * (`preferences.proRooms`) and the temperature format.
  */
+import type { DeviceType } from '../../lib/overviewLayout';
 import { QUICK_ACTIONS, type QuickAction, type TileSizeChoice } from '../../lib/roomTiles';
 
-export { areaIcon as roomIcon } from '../../widgets/areas/concepts/shared';
+export { areaIcon as roomIcon, ROOM_ICONS } from '../../widgets/areas/concepts/shared';
 
 /** Colours offered for a room (hex, saved in `rooms.areaOverrides[id].customColor`, shared with the classic page). */
 export const ROOM_COLORS = [
@@ -29,6 +30,8 @@ export interface RoomsPagePrefs {
   cardSize: 'large' | 'compact' | 'standard';
   /** Tile size per room, by area id ("auto" or missing = automatic). */
   sizes: Record<string, TileSizeChoice>;
+  /** Default landing filter ("remember" | "all" | "active" | "favourites" | floorId). */
+  defaultFilter: string;
   /** The big number on standard and large tiles. */
   metric: 'temperature' | 'humidity';
   showSummary: boolean;
@@ -48,7 +51,7 @@ export interface RoomsPagePrefs {
   showPictures: boolean;
   animations: boolean;
 }
-export type RoomsToggle = Exclude<keyof RoomsPagePrefs, 'cardSize' | 'sizes' | 'metric'>;
+export type RoomsToggle = Exclude<keyof RoomsPagePrefs, 'cardSize' | 'sizes' | 'metric' | 'defaultFilter'>;
 
 /** The switches in Customize, in order, with what each one does. */
 export const ROOMS_TOGGLES: { key: RoomsToggle; group: 'page' | 'cards' | 'actions'; label: string; hint?: string }[] = [
@@ -83,6 +86,7 @@ export const enabledActions = (p: RoomsPagePrefs) => new Set(QUICK_ACTIONS.filte
 export const DEFAULT_ROOMS_PREFS: RoomsPagePrefs = {
   cardSize: 'large',
   sizes: {},
+  defaultFilter: 'remember',
   metric: 'temperature',
   ...(Object.fromEntries(ROOMS_TOGGLES.map((t) => [t.key, true])) as Record<RoomsToggle, boolean>),
   showPictures: false
@@ -96,13 +100,52 @@ export function rawRoomsPrefs(preferences: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
 }
 
-export function readRoomsPrefs(preferences: unknown): RoomsPagePrefs {
-  const v = rawRoomsPrefs(preferences) as Partial<RoomsPagePrefs>;
-  const sizes: Record<string, TileSizeChoice> = {};
-  for (const [id, c] of Object.entries(v.sizes ?? {})) if (SIZE_CHOICES.has(c)) sizes[id] = c;
-  const out: RoomsPagePrefs = { ...DEFAULT_ROOMS_PREFS, cardSize: v.cardSize === 'compact' || v.cardSize === 'standard' ? v.cardSize : 'large', sizes, metric: v.metric === 'humidity' ? 'humidity' : 'temperature' };
+function parseRoomsPrefsSlice(slice: Record<string, unknown>, base: RoomsPagePrefs): RoomsPagePrefs {
+  const v = slice as Partial<RoomsPagePrefs>;
+  const sizes: Record<string, TileSizeChoice> = { ...base.sizes };
+  if (v.sizes && typeof v.sizes === 'object' && !Array.isArray(v.sizes)) {
+    const nextSizes: Record<string, TileSizeChoice> = {};
+    for (const [id, c] of Object.entries(v.sizes)) {
+      if (SIZE_CHOICES.has(c)) nextSizes[id] = c;
+    }
+    // Slice sizes replace inherited root sizes when present on a device bucket.
+    Object.keys(sizes).forEach((k) => delete sizes[k]);
+    Object.assign(sizes, nextSizes);
+  }
+  const out: RoomsPagePrefs = {
+    ...base,
+    cardSize: v.cardSize === 'compact' || v.cardSize === 'standard' || v.cardSize === 'large' ? v.cardSize : base.cardSize,
+    sizes,
+    defaultFilter: typeof v.defaultFilter === 'string' && v.defaultFilter.trim() ? v.defaultFilter : base.defaultFilter,
+    metric: v.metric === 'humidity' || v.metric === 'temperature' ? v.metric : base.metric
+  };
   for (const t of ROOMS_TOGGLES) if (typeof v[t.key] === 'boolean') out[t.key] = v[t.key] as boolean;
   return out;
+}
+
+export function readRoomsPrefs(preferences: unknown, device?: DeviceType): RoomsPagePrefs {
+  const raw = rawRoomsPrefs(preferences);
+  // Start from defaults overlaid with legacy flat keys (if any exist on root).
+  const rootFlat = parseRoomsPrefsSlice(raw, DEFAULT_ROOMS_PREFS);
+  if (!device) return rootFlat;
+  const perDevice = raw[device];
+  if (perDevice && typeof perDevice === 'object' && !Array.isArray(perDevice)) {
+    return parseRoomsPrefsSlice(perDevice as Record<string, unknown>, rootFlat);
+  }
+  return rootFlat;
+}
+
+export function roomsPrefsPatch(device: DeviceType, prefs: RoomsPagePrefs): Record<string, unknown> {
+  return {
+    version: 2,
+    [device]: prefs
+  };
+}
+
+export function roomsPrefsResetPatch(device: DeviceType): Record<string, unknown> {
+  return {
+    [device]: null
+  };
 }
 
 /** Temperature for a card: "21.5°". */

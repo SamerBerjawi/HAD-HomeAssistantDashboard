@@ -90,7 +90,7 @@ Decided (see the Decision log for dates):
   React Bits Glass Surface (7.3).
 - **One accent per page**, set by `data-page` on the shell in `src/pro/pro.css`:
   Overview blue (hue 254), Rooms teal (192), Energy orange (52, dark foreground),
-  Security violet (300). Other pages: pending.
+  Security violet (300), Media fuchsia (330), Mobility emerald (155). Other pages: pending.
 - Font: Plus Jakarta Sans Variable (UI), JetBrains Mono Variable (numbers or code where needed).
   Tabular numbers on.
 - Priority device: **phone first**. Every component must work at 375 px with a 16 px gutter and
@@ -469,6 +469,14 @@ Implementation notes:
 - Production page: `src/pro/pages/ProEnergy.tsx` (wired into `src/pro/ProApp.tsx`), reading `useEnergyData`, `useEnergyComparison`, and `useAutoLayoutStore`, and publishing to `useEnergyStore`.
 - Energy Studio (`src/pro/pages/energy/studio/`) stays dev-only behind `import.meta.env.DEV` at `/?studio=energy` and is excluded from `dist-pro/`.
 
+### 7.10 Media page — structure approved (2026-11-24)
+
+Now playing precedes Players by room. A quiet home opens directly on the directory. The floor filter applies only to the directory. Player details open from either section. See MEDIA.md for responsive behaviour. The Media accent is fuchsia (hue 330). The first Now playing concepts were rejected as too similar. B is the front-runner. Compare it with a theme-aware, artwork-led monitor with seekable timed playback and a station-led radio view. The owner approved D · Playback monitor for Now playing and A · Room list for Players by room in the Media Studio workflow.
+
+### 7.11 Mobility page — Garage structure approved (2026-11-24)
+
+Cars and bikes have separate Garages. Open a lone vehicle directly, use Car and Bike tabs for one of each, and open grouped bays first when either category contains multiple vehicles. Selecting a bay opens that vehicle and provides a return to all bays. See MOBILITY.md. Accent: emerald (hue 155). Bay direction: combine A’s marked parking space with B’s charge and range dial; D · Garage dial approved for production. The individual car Garage uses C · Garage door, with vehicle name and location on the shutter and current state, range and battery below.
+
 ## 8. Page roadmap
 
 | # | Item | Status |
@@ -648,6 +656,18 @@ Append only. One row per decision. Newest at the bottom.
 | 2026-11-23 | Energy: full-width Sankey & Usage | `flow` (`Where it went` / Sankey) and `usage` (`Usage over time`) both set to full width (`desktopSpan: 'full'` / `col-span-12`) across Desktop and Tablet so device labels in Sankey have full breathing room | Owner. `src/pro/lib/energyPage.ts`, `src/pro/pages/ProEnergy.tsx`, `src/pro/pages/energy/studio/EnergyPagePreview.tsx` |
 | 2026-11-23 | Security: studio kickoff & responsive structure | Build Security Studio (`/?studio=security`, added to `/overview?studio` hub) with 3 distinct A/B/C concepts across all 5 core sections (`Alarm`, `Attention`, `Cameras`, `Activity`, `Devices`) + edge states; one scrolling page ≥ 768 px, Alarm pinned above `SmoothTab` tabs on phone (< 768 px); keep purple accent (`hue 300`, added `--accent-soft*` tokens). Production `ProSecurity.tsx` untouched until picks approved | Owner. `docs/pro-ui/SECURITY.md`, `src/pro/pages/security/studio/*`, `src/pro/studio/studioRegistry.ts` |
 | 2026-11-24 | Security: studio picks chosen & built | Alarm hero **A** (Shield Halo Console), Needs attention **B** (Perimeter Radar Matrix), Cameras **A** (Theater Stage + Filmstrip), Recent activity **C** (Compact Audit Ledger), Device groups **B** (Interactive Tile Deck); **always press-and-hold for critical actions** (arming Away/Vacation, code-free disarm when armed, unlocking locks, opening garages, testing sirens); phone `< 768 px` pins Alarm above Kokonut `SmoothTab` tabs | Owner, 5/5 from Security Studio. Built in `src/pro/pages/ProSecurity.tsx` & `src/pro/components/security/*`, `docs/pro-ui/SECURITY.md` |
+| 2026-11-24 | Media page structure | A · Now playing first, then Players by room, with responsive player details | Owner. MEDIA.md |
+| 2026-11-24 | Media Now playing review | Rework the three studio concepts into distinct compositions. No production pick. | Owner. MEDIA.md |
+| 2026-11-24 | Media monitor refinement | Preview all three refinements together beside original B. | Owner. MEDIA.md |
+| 2026-11-24 | Media accent | Fuchsia, hue 330 | Owner, option 1. MEDIA.md |
+| 2026-11-24 | Media Now playing | D · Playback monitor approved for production. Players by room remains open. | Owner. MEDIA.md |
+| 2026-11-24 | Media directory | A · Room list, compact player rows grouped by floor and room. Rows open player details. | Owner. MEDIA.md |
+| 2026-11-24 | Mobility Garage | Direct entry for a lone vehicle, separate tabs for one of each, grouped bays first when either category has multiple vehicles. | Owner. MOBILITY.md |
+| 2026-11-24 | Mobility accent | Emerald, hue 155, across both vehicle types. | Owner, option 1. MOBILITY.md |
+| 2026-11-24 | Mobility bays | Combine Garage floor (A) and Range dial (B) as studio concept D. | Owner. MOBILITY.md |
+| 2026-11-24 | Mobility bay chosen | D · Garage dial for cars and bikes. | Owner. MOBILITY.md |
+| 2026-11-24 | Mobility car header review | Preview all three concepts side by side. Production pick pending. | Owner. MOBILITY.md |
+| 2026-11-24 | Mobility car header chosen | C · Garage door for the individual car Garage. | Owner. MOBILITY.md |
 
 ## 10. Notes for other agents
 

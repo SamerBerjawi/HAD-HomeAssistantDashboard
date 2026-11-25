@@ -4,9 +4,9 @@
  * StudioHub and StudioNavBar render directly from this list.
  */
 import type { IconSvgElement } from '@hugeicons/react';
-import { FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon } from '@hugeicons/core-free-icons';
+import { Car01Icon, MusicNote01Icon, FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon } from '@hugeicons/core-free-icons';
 
-export type StudioId = 'widgets' | 'areas' | 'rooms' | 'energy' | 'security';
+export type StudioId = 'widgets' | 'areas' | 'rooms' | 'energy' | 'security' | 'media' | 'mobility';
 
 export interface StudioEntry {
   id: StudioId;
@@ -15,7 +15,7 @@ export interface StudioEntry {
   subtitle: string;
   query: string;
   icon: IconSvgElement;
-  pageAccent: 'overview' | 'rooms' | 'energy' | 'security';
+  pageAccent: 'overview' | 'rooms' | 'energy' | 'security' | 'media' | 'mobility';
   status: 'Shipped' | 'In review' | 'Redesigning';
   statusTone: 'success' | 'accent' | 'warning';
   highlights: string[];
@@ -69,6 +69,19 @@ export const STUDIOS: readonly StudioEntry[] = [
     status: 'Shipped',
     statusTone: 'success',
     highlights: ['11 Energy sections', 'Bespoke charts & SVGs', 'Assembled responsive page']
+  },
+  {
+    id: 'mobility', title: 'Mobility Studio', shortTitle: 'Mobility',
+    subtitle: 'Compare garage bays for cars and bikes across different household fleets.',
+    query: 'mobility', icon: Car01Icon, pageAccent: 'mobility',
+    status: 'In review', statusTone: 'accent', highlights: ['Vehicle bays', 'Simulated vehicles']
+  },
+  {
+    id: 'media', title: 'Media Studio', shortTitle: 'Media',
+    subtitle: 'Compare Now playing layouts for speakers and TVs.',
+    query: 'media', icon: MusicNote01Icon, pageAccent: 'media',
+    status: 'In review', statusTone: 'accent',
+    highlights: ['Now playing', 'Simulated playback']
   },
   {
     id: 'security',

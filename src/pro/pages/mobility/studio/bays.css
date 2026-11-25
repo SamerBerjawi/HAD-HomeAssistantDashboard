@@ -1,0 +1,6 @@
+.mob-studio svg { display:inline-block; vertical-align:middle; flex-shrink:0; }
+.mob-A { grid-template-columns:1fr auto; gap:8px; }
+.mob-B { grid-template-columns:auto 1fr; gap:18px; }
+.mob-C { grid-template-columns:auto 1fr auto; gap:12px; border-radius:4px; background:#14271e; color:#eef8ed; }
+.mob-C b { font-family:'JetBrains Mono Variable',monospace; color:#a8edbf; }
+.mob-board-icon svg { width:30px; }

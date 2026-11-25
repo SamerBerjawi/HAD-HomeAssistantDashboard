@@ -16,9 +16,9 @@ export const QUICK_ACTIONS: readonly QuickAction[] = ['lights', 'climate', 'medi
 /** Quick actions per tile size: compact tiles carry none, so they stay calm. */
 export const ACTIONS_PER_SIZE: Record<TileSize, number> = { compact: 0, standard: 2, expanded: 3 };
 
-type ActionRoom = Pick<RoomItem, 'totalLights' | 'thermostat' | 'media' | 'fanIds' | 'coverIds' | 'scenes'>;
+type ActionRoom = Pick<RoomItem, 'totalLights' | 'thermostat' | 'media' | 'fanIds' | 'coverIds' | 'scenes' | 'customQuickActions'>;
 
-/** The quick actions a room really has (an entity behind each), most wanted first. */
+/** The quick actions a room really has (an entity behind each), most wanted first (or overridden per room). */
 export function roomActions(r: ActionRoom, enabled: ReadonlySet<QuickAction> = new Set(QUICK_ACTIONS)): QuickAction[] {
   const has: Record<QuickAction, boolean> = {
     lights: r.totalLights > 0,
@@ -28,6 +28,9 @@ export function roomActions(r: ActionRoom, enabled: ReadonlySet<QuickAction> = n
     cover: r.coverIds.length > 0,
     scenes: r.scenes.length > 0
   };
+  if (Array.isArray(r.customQuickActions)) {
+    return r.customQuickActions.filter((a) => QUICK_ACTIONS.includes(a) && has[a]);
+  }
   return QUICK_ACTIONS.filter((a) => has[a] && enabled.has(a));
 }
 

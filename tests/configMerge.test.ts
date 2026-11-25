@@ -117,4 +117,66 @@ describe('mergeConfig', () => {
     expect(result.overview?.hideBadges).toBe(true);
     expect(result.overview?.tileOrder).toEqual(['a']);
   });
+
+  it('deep-merges preferences and userLayouts across concurrent devices/users without clobbering', () => {
+    const base = mergeConfig(DEFAULT_USER_CONFIG, {
+      preferences: { proOverviewLayout: { version: 1, desktop: { sectionOrder: ['lights'], collapsed: [], hidden: [], items: {} } } },
+      userLayouts: { alice: { overviewMode: 'custom' } }
+    } as unknown as Partial<UserDashboardConfig>);
+    const merged = mergeConfig(base, {
+      preferences: { proOverviewLayout: { version: 1, phone: { sectionOrder: ['rooms'], collapsed: [], hidden: [], items: {} } } },
+      userLayouts: { bob: { overviewMode: 'auto' } }
+    } as unknown as Partial<UserDashboardConfig>);
+    const ov = (merged.preferences as any).proOverviewLayout;
+    expect(ov.desktop.sectionOrder).toEqual(['lights']);
+    expect(ov.phone.sectionOrder).toEqual(['rooms']);
+    expect(merged.userLayouts?.alice?.overviewMode).toBe('custom');
+    expect(merged.userLayouts?.bob?.overviewMode).toBe('auto');
+  });
+
+  it('replaces atomic layout buckets wholesale so deleted/reset keys do not resurrect', () => {
+    const base = mergeConfig(DEFAULT_USER_CONFIG, {
+      preferences: {
+        proRooms: {
+          version: 2,
+          sizes: { kitchen: 'expanded', bath: 'compact' },
+          phone: { cardSize: 'compact', sizes: { kitchen: 'compact', bath: 'standard' } },
+          desktop: { cardSize: 'large', sizes: { living: 'expanded' } }
+        },
+        proOverviewLayout: {
+          version: 1,
+          phone: { sectionOrder: ['lights'], collapsed: [], hidden: ['alarm'], items: {}, styles: { lights: 'glow' } }
+        },
+        proAreaLayouts: {
+          version: 1,
+          kitchen: { phone: { sectionOrder: ['lights'], order: { lights: ['light.a'] }, sizes: { 'light.a': 'w' }, hidden: [], collapsed: [], pinned: [] } }
+        }
+      }
+    } as unknown as Partial<UserDashboardConfig>);
+
+    const updated = mergeConfig(base, {
+      preferences: {
+        proRooms: {
+          sizes: {},
+          phone: { cardSize: 'standard', sizes: { kitchen: 'standard' } }
+        },
+        proOverviewLayout: {
+          version: 1,
+          phone: { sectionOrder: ['rooms'], collapsed: [], hidden: [], items: {}, styles: {} }
+        },
+        proAreaLayouts: {
+          version: 1,
+          kitchen: { phone: { sectionOrder: ['climate'], order: {}, sizes: {}, hidden: [], collapsed: [], pinned: [] } }
+        }
+      }
+    } as unknown as Partial<UserDashboardConfig>);
+
+    const prefs = updated.preferences as any;
+    expect(prefs.proRooms.sizes).toEqual({});
+    expect(prefs.proRooms.phone).toEqual({ cardSize: 'standard', sizes: { kitchen: 'standard' } });
+    expect(prefs.proRooms.desktop).toEqual({ cardSize: 'large', sizes: { living: 'expanded' } });
+    expect(prefs.proOverviewLayout.phone.styles).toEqual({});
+    expect(prefs.proOverviewLayout.phone.hidden).toEqual([]);
+    expect(prefs.proAreaLayouts.kitchen.phone.sizes).toEqual({});
+  });
 });

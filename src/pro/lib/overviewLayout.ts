@@ -407,8 +407,36 @@ export function withDeviceLayout(prev: UserDashboardConfig, device: DeviceType, 
   const next: ProOverviewLayoutConfig = { ...current, version: 1, [device]: layout };
   return {
     ...prev,
-    preferences: { ...(prev.preferences || {}), proOverviewLayout: next } as UserDashboardConfig['preferences']
+    preferences: { ...(prev.preferences || {}), proOverviewLayout: next } as unknown as UserDashboardConfig['preferences']
   };
+}
+
+/** Granular patch setting one device type's Overview layout without spreading unrelated config keys. */
+export function deviceLayoutPatch(device: DeviceType, layout: DeviceLayout): Partial<UserDashboardConfig> {
+  return {
+    preferences: {
+      proOverviewLayout: {
+        version: 1,
+        [device]: layout
+      }
+    }
+  };
+}
+
+/** Granular patch deleting one device type's Overview layout (null marker for server deep-merge). */
+export function deviceLayoutResetPatch(device: DeviceType): Partial<UserDashboardConfig> {
+  return {
+    preferences: {
+      proOverviewLayout: {
+        [device]: null
+      }
+    }
+  };
+}
+
+/** Adapts an existing device layout to another device class (clamping widths & settling placements). */
+export function copyDeviceLayout(source: DeviceLayout, widgets: readonly LayoutWidgetInfo[], targetDevice: DeviceType): DeviceLayout {
+  return normalizeDeviceLayout(structuredClone(source), widgets, targetDevice);
 }
 
 /** Sets one widget's style on this device type's layout (the page saves it with the rest). */
@@ -424,7 +452,7 @@ export function withoutDeviceLayout(prev: UserDashboardConfig, device: DeviceTyp
   delete next[device];
   return {
     ...prev,
-    preferences: { ...(prev.preferences || {}), proOverviewLayout: next } as UserDashboardConfig['preferences']
+    preferences: { ...(prev.preferences || {}), proOverviewLayout: next } as unknown as UserDashboardConfig['preferences']
   };
 }
 

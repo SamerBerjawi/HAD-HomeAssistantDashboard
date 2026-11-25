@@ -151,6 +151,11 @@ export class RemoteStorageDriver implements IConfigStorageDriver {
   private lastKnownServerVersion: number | null = null;
   private lastSavedSignature: string | null = null;
   private isReplaying = false;
+  private lastLoadedCurrentUser: { id: string; name: string; isAdmin: boolean } | null = null;
+
+  public getCurrentUser(): { id: string; name: string; isAdmin: boolean } | null {
+    return this.lastLoadedCurrentUser;
+  }
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -183,6 +188,13 @@ export class RemoteStorageDriver implements IConfigStorageDriver {
             if (response.ok) {
               const data = await response.json();
               if (data && data.success && data.config) {
+                if (data.currentUser && typeof data.currentUser === 'object' && typeof data.currentUser.id === 'string') {
+                  this.lastLoadedCurrentUser = {
+                    id: data.currentUser.id,
+                    name: typeof data.currentUser.name === 'string' ? data.currentUser.name : 'Home Assistant User',
+                    isAdmin: Boolean(data.currentUser.isAdmin)
+                  };
+                }
                 return {
                   config: data.config,
                   serverVersion: data.serverVersion !== undefined ? Number(data.serverVersion) : undefined

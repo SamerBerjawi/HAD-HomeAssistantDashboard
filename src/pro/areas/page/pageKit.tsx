@@ -4,12 +4,12 @@
  * a section heading.
  */
 import type { ReactNode } from 'react';
-import { Button } from '@heroui/react';
+import { Button, Dropdown, Label } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, ArrowRight01Icon, DashboardSquare01Icon, DropletIcon, ArrowUp01Icon, ArrowDown01Icon, BulbIcon, TemperatureIcon } from '@hugeicons/core-free-icons';
+import { ArrowLeft01Icon, ArrowRight01Icon, DashboardSquare01Icon, DropletIcon, ArrowUp01Icon, ArrowDown01Icon, BulbIcon, TemperatureIcon, Tick02Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import type { CarTileModel, TileAction, TileModel, TileSize } from '../tileTypes';
-import { hide, moveBy, moveOnto, moveSection, setSize, togglePin, type Device, type RoomItem, type SectionId } from './roomLayout';
+import { hide, moveBy, moveOnto, moveSection, setSize, togglePin, type AnyDevice, type RoomItem, type SectionId } from './roomLayout';
 import { roomFacts } from './roomSummary';
 import type { GridEditing } from './RoomGrid';
 import type { RoomEditor } from './useRoomEditor';
@@ -43,10 +43,10 @@ export interface PageProps {
   renderTile: (key: string, size: TileSize) => ReactNode;
   /** A tile's action, by tile key. */
   actOn: (key: string, a: TileAction) => void;
-  device: Device;
+  device: AnyDevice;
 }
 
-/** All rooms ‹ › previous / next room (in the Rooms page's order; none past the ends). */
+/** All rooms + quick-jump picker + ‹ › previous / next room (in the Rooms page's order). */
 export function RoomNav({ room, rooms, onRoom, onBack, right, light }: Pick<PageProps, 'room' | 'rooms' | 'onRoom' | 'onBack'> & { right?: ReactNode; light?: boolean }) {
   const i = rooms.findIndex((r) => r.id === room.id);
   const prev = i > 0 ? rooms[i - 1] : null;
@@ -60,6 +60,27 @@ export function RoomNav({ room, rooms, onRoom, onBack, right, light }: Pick<Page
       <span className="flex-1" />
       {rooms.length > 1 ? (
         <>
+          <Dropdown>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`Jump to room (currently ${room.name})`}
+              className="h-8 max-w-[140px] min-w-0 gap-1 rounded-full px-2.5 text-xs font-medium opacity-85 sm:max-w-[200px]"
+            >
+              <span className="truncate">{room.name}</span>
+              <HugeiconsIcon icon={ArrowDown01Icon} size={13} className="shrink-0" />
+            </Button>
+            <Dropdown.Popover placement="bottom end" className="max-h-[60dvh] min-w-52 overflow-y-auto">
+              <Dropdown.Menu aria-label="Jump to room" onAction={(key) => onRoom(String(key))}>
+                {rooms.map((r) => (
+                  <Dropdown.Item key={r.id} id={r.id} textValue={r.id === room.id ? `${r.name}, current room` : r.name}>
+                    <HugeiconsIcon icon={Tick02Icon} size={15} className={r.id === room.id ? 'shrink-0 text-[var(--accent)]' : 'invisible shrink-0'} aria-hidden="true" />
+                    <Label className="truncate">{r.name}</Label>
+                  </Dropdown.Item>
+                ))}
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
           <Button isIconOnly size="sm" variant="ghost" isDisabled={!prev} aria-label={prev ? `Previous room: ${prev.name}` : 'No previous room'} onPress={() => prev && onRoom(prev.id)} className="size-8 min-w-0 rounded-full">
             <HugeiconsIcon icon={ArrowLeft01Icon} size={16} />
           </Button>

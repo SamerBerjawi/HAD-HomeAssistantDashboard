@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HAFloor, ResolvedArea } from '@/types';
 import { assignRoomColors, buildRoomsPage, hexHue, roomLightColor, roomStatusLine } from '@/pro/lib/roomsPage';
+import { readRoomsPrefs, roomsPrefsPatch } from '@/pro/pages/rooms/shared';
 
 const floors: HAFloor[] = [
   { floor_id: 'first', name: 'First floor', level: 1 },
@@ -108,5 +109,74 @@ describe('roomsPage', () => {
     expect(roomLightColor([on({ color: '#ffffff' }), on({ color_temp_kelvin: 2700 })])).toBeNull();
     expect(roomLightColor([on({ color_temp: 160 })])).toBe('rgb(205 222 255)');
     expect(roomLightColor([{ state: 'off', attributes: { rgb_color: [255, 0, 0] } }])).toBeNull();
+  });
+
+  it('applies per-room overrides (name, icon, picture, primary temp sensor, primaryMetric, quickActions)', () => {
+    const customAreas = [
+      {
+        ...area('living_room', 'ground', { currentTempAvg: 20, currentHumidityAvg: 45 }, 2),
+        entities: [
+          { entity_id: 'sensor.wall_temp', domain: 'sensor', name: 'Wall', state: '23.4', attributes: { device_class: 'temperature' } },
+          { entity_id: 'sensor.bath_hum', domain: 'sensor', name: 'Humid', state: '62', attributes: { device_class: 'humidity' } }
+        ]
+      } as unknown as ResolvedArea
+    ];
+    const m = buildRoomsPage(customAreas, floors, [], [], {
+      overrides: {
+        living_room: {
+          customName: 'Lounge',
+          customIcon: 'sofa',
+          customColor: '#3e63dd',
+          backgroundImageUrl: '/api/assets/room_living.png',
+          primaryTempEntityId: 'sensor.wall_temp',
+          primaryHumidityEntityId: 'sensor.bath_hum',
+          primaryMetric: 'humidity',
+          quickActions: ['lights', 'cover']
+        }
+      }
+    });
+    const lounge = m.rooms[0];
+    expect(lounge.name).toBe('Lounge');
+    expect(lounge.icon).toBe('sofa');
+    expect(lounge.color).toBe('#3e63dd');
+    expect(lounge.customColor).toBe(true);
+    expect(lounge.picture).toBe('/api/assets/room_living.png');
+    expect(lounge.temperature).toBe(23.4);
+    expect(lounge.humidity).toBe(62);
+    expect(lounge.primaryMetric).toBe('humidity');
+    expect(lounge.customQuickActions).toEqual(['lights', 'cover']);
+  });
+
+  it('reads per-device proRooms prefs with legacy flat fallback and builds granular patches', () => {
+    const prefs = {
+      proRooms: {
+        version: 2,
+        cardSize: 'standard',
+        showPictures: true,
+        phone: {
+          cardSize: 'compact',
+          defaultFilter: 'active',
+          sizes: { kitchen: 'compact' },
+          showMood: false
+        },
+        desktop: {
+          cardSize: 'large',
+          defaultFilter: 'favourites',
+          sizes: { living_room: 'expanded' }
+        }
+      }
+    };
+    const phone = readRoomsPrefs(prefs, 'phone');
+    expect(phone.cardSize).toBe('compact');
+    expect(phone.defaultFilter).toBe('active');
+    expect(phone.sizes).toEqual({ kitchen: 'compact' });
+    expect(phone.showPictures).toBe(true);
+    expect(phone.showMood).toBe(false);
+
+    const tablet = readRoomsPrefs(prefs, 'tablet');
+    expect(tablet.cardSize).toBe('standard');
+    expect(tablet.defaultFilter).toBe('remember');
+
+    expect(roomsPrefsPatch('phone', phone)).toEqual({ version: 2, phone });
   });
 });

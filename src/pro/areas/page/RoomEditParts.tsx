@@ -7,9 +7,17 @@ import { Button } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { DashboardSquareEditIcon, LinkSquare02Icon, PlusSignIcon, ViewIcon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
+import type { AnyDevice } from './roomLayout';
 import type { RoomEditor } from './useRoomEditor';
 
-export function RoomEditBar({ editor, device, compact }: { editor: RoomEditor; device: 'phone' | 'wide'; compact?: boolean }) {
+const DEVICE_NAMES: Record<AnyDevice, string> = {
+  phone: 'Phone layout',
+  tablet: 'Tablet layout',
+  desktop: 'Desktop layout',
+  wide: 'Tablet & desktop layout'
+};
+
+export function RoomEditBar({ editor, device, compact }: { editor: RoomEditor; device: AnyDevice; compact?: boolean }) {
   if (!editor.editing) {
     return (
       <Button size="sm" variant="tertiary" onPress={editor.begin} isIconOnly={compact} aria-label="Customize this room" className={compact ? 'size-9 min-w-0 rounded-full' : ''}>
@@ -20,7 +28,7 @@ export function RoomEditBar({ editor, device, compact }: { editor: RoomEditor; d
   }
   return (
     <div role="toolbar" aria-label="Customize this room" className="flex flex-wrap items-center gap-2">
-      <span className="mr-1 text-xs text-muted">{device === 'phone' ? 'Phone layout' : 'Tablet & desktop layout'}</span>
+      <span className="mr-1 text-xs text-muted">{DEVICE_NAMES[device]}</span>
       <Button size="sm" variant="ghost" onPress={editor.reset}>
         Reset
       </Button>

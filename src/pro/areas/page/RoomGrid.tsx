@@ -5,12 +5,13 @@
  * cards. Dragging reorders live inside the grid; the keyboard can do the same from the handle
  * (Space, arrows, Space) or the menu.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { Button, Dropdown, Header, Label } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowLeft01Icon, ArrowRight01Icon, DragDropVerticalIcon, MoreHorizontalIcon, PinIcon, PinOffIcon, Tick02Icon, ViewOffSlashIcon } from '@hugeicons/core-free-icons';
+import { useUserConfig } from '@/contexts/ConfigContext';
 import { cn } from '@/lib/utils';
 import { TILE_SIZE_LABEL, TILE_SIZES, type TileSize } from '../tileTypes';
 
@@ -54,16 +55,27 @@ export function RoomGrid({ keys, sizeOf, renderTile, editing, className }: RoomG
 }
 
 function EditGrid({ keys, sizeOf, renderTile, editing, className }: RoomGridProps & { editing: GridEditing }) {
+  const { setDragActive } = useUserConfig();
   const [active, setActive] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  useEffect(() => () => setDragActive?.(false), [setDragActive]);
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
-      onDragStart={(e) => setActive(String(e.active.id))}
+      onDragStart={(e) => {
+        setActive(String(e.active.id));
+        setDragActive?.(true);
+      }}
       onDragOver={(e) => e.over && e.active.id !== e.over.id && editing.onMoveOnto(String(e.active.id), String(e.over.id))}
-      onDragEnd={() => setActive(null)}
-      onDragCancel={() => setActive(null)}
+      onDragEnd={() => {
+        setActive(null);
+        setDragActive?.(false);
+      }}
+      onDragCancel={() => {
+        setActive(null);
+        setDragActive?.(false);
+      }}
       accessibility={{ screenReaderInstructions: { draggable: 'To move a tile, press Space, use the arrow keys, then press Space again to drop it. Escape cancels.' } }}
     >
       {/* No sorting strategy: the grid reflows for real as the order changes, so tiles of different sizes never overlap. */}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLayout, flatOrder, hide, isDirty, moveBy, moveOnto, moveSection, readAreaLayout, reconcile, sectionOf, setSize, show, togglePin, visibleSections, withAreaLayout, type RoomItem } from '@/pro/areas/page/roomLayout';
+import { areaLayoutPatch, areaLayoutResetPatch, copyRoomLayout, defaultLayout, flatOrder, hide, isDirty, moveBy, moveOnto, moveSection, readAreaLayout, reconcile, sectionOf, setSize, show, togglePin, visibleSections, withAreaLayout, type RoomItem } from '@/pro/areas/page/roomLayout';
 import { isActive, isAlert, roomFacts, roomSentence } from '@/pro/areas/page/roomSummary';
 import { LIGHT_STATES, MEDIA_STATES, OPENING_STATES, READING_STATES, SAFETY_STATES, LOCK_STATES } from '@/pro/areas/studio/areaStates';
 
@@ -95,6 +95,21 @@ describe('saved layouts', () => {
     expect(readAreaLayout(both, 'living_room', 'phone')?.sizes['light.a']).toBe('s');
     expect(readAreaLayout(both, 'kitchen', 'wide')).toBeNull();
     expect((both as { proOverviewLayout: unknown }).proOverviewLayout).toEqual({ version: 1 });
+  });
+
+  it('falls back from tablet/desktop to legacy wide layout, creates granular patches, and copies between devices', () => {
+    const wideLayout = defaultLayout(ITEMS, 'wide');
+    const prefs = withAreaLayout({}, 'kitchen', 'wide', wideLayout);
+    expect(readAreaLayout(prefs, 'kitchen', 'tablet')).toEqual(wideLayout);
+    expect(readAreaLayout(prefs, 'kitchen', 'desktop')).toEqual(wideLayout);
+
+    const copiedPhone = copyRoomLayout(wideLayout, ITEMS, 'phone');
+    expect(copiedPhone.order).toEqual(wideLayout.order);
+
+    const patch = areaLayoutPatch('kitchen', 'tablet', wideLayout) as any;
+    expect(patch.preferences.proAreaLayouts).toEqual({ version: 1, kitchen: { tablet: wideLayout } });
+    const resetPatch = areaLayoutResetPatch('kitchen', 'tablet') as any;
+    expect(resetPatch.preferences.proAreaLayouts).toEqual({ kitchen: { tablet: null } });
   });
 });
 

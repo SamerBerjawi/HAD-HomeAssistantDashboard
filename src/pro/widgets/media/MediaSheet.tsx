@@ -24,7 +24,7 @@ import { useMediaSelection } from './useMediaModel';
 const CHIP = 'h-8 gap-1.5 rounded-full px-3 text-xs';
 const isTv = (p: ProMediaPlayerItem) => /tv|television|shield|chromecast|apple tv/i.test(`${p.deviceKindLabel} ${p.name}`);
 
-export default function MediaSheet({ model: m, itemId, onClose }: WidgetSheetProps<ProMediaOverviewModel>) {
+export default function MediaSheet({ model: m, itemId, onClose, page }: WidgetSheetProps<ProMediaOverviewModel> & { page?: "media" | "overview" }) {
   const serverUrl = useAutoLayoutStore((s) => s.serverUrl) ?? '';
   const select = useMediaSelection((s) => s.select);
   const a = useMediaActions(m);
@@ -49,6 +49,7 @@ export default function MediaSheet({ model: m, itemId, onClose }: WidgetSheetPro
 
   return (
     <DetailSheet
+      page={page}
       title="Media details"
       onClose={onClose}
       hero={

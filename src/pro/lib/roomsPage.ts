@@ -4,8 +4,10 @@
  * widget's room item (`buildAreaItem`) so both read rooms the same way. Pure: no React, no store.
  */
 import type { HAFloor, ResolvedArea, ResolvedEntity } from '@/types';
-import { buildAreaItem, type ProAreaItem } from './overviewAreas';
+import type { AreaPrimaryMetric } from '@/types/userConfig';
+import { buildAreaItem, type AreaOverrideEntry, type AreaOverrideMap, type ProAreaItem } from './overviewAreas';
 import { buildThermostatItem, type ProThermostatItem } from './overviewThermostat';
+import { QUICK_ACTIONS, type QuickAction } from './roomTiles';
 import { lastMotionAt, roomAir, type RoomAir } from './roomsInsights';
 
 export type RoomSignal = 'lights' | 'media' | 'motion' | 'open' | 'climate' | 'cleaning' | 'battery';
@@ -45,6 +47,10 @@ export interface RoomItem extends ProAreaItem {
   coversOpen: number;
   /** The room's main media player (the playing one, else the first that is on), for play/pause. */
   media: RoomMedia | null;
+  /** Optional per-room metric override (auto/temperature/humidity/power/air_quality/none). */
+  primaryMetric?: AreaPrimaryMetric;
+  /** Optional per-room quick action override (null/undefined = follow page defaults). */
+  customQuickActions?: QuickAction[] | null;
 }
 
 export interface RoomMedia {
@@ -65,6 +71,8 @@ export interface RoomsPageOptions {
   areaOrder?: readonly string[];
   /** Colours the user chose, by room id (hex). */
   colors?: Readonly<Record<string, string>>;
+  /** Full per-room overrides (`rooms.areaOverrides`). */
+  overrides?: AreaOverrideMap;
 }
 
 export interface RoomsFloor {
@@ -109,7 +117,7 @@ const avg = (vals: number[]) => (vals.length ? Math.round((vals.reduce((a, b) =>
 
 /** The extra room facts, on top of the Areas widget's item. */
 export type RoomFacts = Pick<RoomItem, 'climateActive' | 'targetTemp' | 'cleaning' | 'lowBattery' | 'switchesOn' | 'deviceCount'> &
-  Partial<Pick<RoomItem, 'lightColor' | 'scenes' | 'thermostat' | 'air' | 'lastMotion' | 'fanIds' | 'fansOn' | 'coverIds' | 'coversOpen' | 'media'>>;
+  Partial<Pick<RoomItem, 'lightColor' | 'scenes' | 'thermostat' | 'air' | 'lastMotion' | 'fanIds' | 'fansOn' | 'coverIds' | 'coversOpen' | 'media' | 'primaryMetric' | 'customQuickActions'>>;
 
 /** Signals and activity from a room's facts (also used for fixtures). */
 export function finishRoom(base: ProAreaItem, facts: RoomFacts): RoomItem {
@@ -244,12 +252,15 @@ export function roomMedia(players: readonly Pick<ResolvedEntity, 'entity_id' | '
   return { entityId: p.entity_id, playing: p.state === 'playing', title: typeof title === 'string' && title.trim() ? title : null };
 }
 
-export function buildRoomItem(area: ResolvedArea, floorName: string | null, isFavorite: boolean): RoomItem {
+export function buildRoomItem(area: ResolvedArea, floorName: string | null, isFavorite: boolean, override?: AreaOverrideEntry): RoomItem {
   const s = area.summary;
   const by = area.entitiesByDomain ?? {};
   const thermostats = (by.climate ?? []).map(buildThermostatItem);
   const thermostat = thermostats.find((t) => t.action === 'heating' || t.action === 'cooling') ?? thermostats.find((t) => t.action !== 'off') ?? thermostats[0] ?? null;
-  return finishRoom(buildAreaItem(area, floorName, isFavorite), {
+  const customQuickActions = Array.isArray(override?.quickActions)
+    ? override.quickActions.filter((a): a is QuickAction => QUICK_ACTIONS.includes(a as QuickAction)).slice(0, 3)
+    : undefined;
+  return finishRoom(buildAreaItem(area, floorName, isFavorite, override), {
     climateActive: (s?.climatesActive ?? 0) > 0,
     targetTemp: num(s?.targetTempAvg),
     cleaning: (s?.activeCleaners ?? 0) > 0,
@@ -265,7 +276,9 @@ export function buildRoomItem(area: ResolvedArea, floorName: string | null, isFa
     fansOn: (by.fan ?? []).filter((e) => e.state === 'on').length,
     coverIds: (by.cover ?? []).map((e) => e.entity_id),
     coversOpen: (by.cover ?? []).filter((e) => OPEN_COVER.has(e.state)).length,
-    media: roomMedia(by.media_player ?? [])
+    media: roomMedia(by.media_player ?? []),
+    ...(override?.primaryMetric ? { primaryMetric: override.primaryMetric } : {}),
+    ...(customQuickActions !== undefined ? { customQuickActions } : {})
   });
 }
 
@@ -324,7 +337,13 @@ export function buildRoomsPage(
   hiddenIds: readonly string[] = [],
   options: Omit<RoomsPageOptions, 'favoriteIds' | 'hiddenIds'> = {}
 ): RoomsPageModel {
-  const { floorOrder = [], hiddenFloors = [], areaOrder = [], colors = {} } = options;
+  const { floorOrder = [], hiddenFloors = [], areaOrder = [], colors = {}, overrides } = options;
+  const resolvedColors: Record<string, string> = {};
+  for (const [id, o] of Object.entries(overrides ?? {})) {
+    const c = o?.customColor || o?.color;
+    if (c) resolvedColors[id] = c;
+  }
+  Object.assign(resolvedColors, colors);
   const hidden = new Set(hiddenIds);
   const hiddenFloor = new Set(hiddenFloors);
   const fav = new Set(favoriteIds);
@@ -336,12 +355,16 @@ export function buildRoomsPage(
     .map((x) => x.a);
   // Colours over every room, hidden ones too, so hiding a room doesn't recolour the others.
   const palette = assignRoomColors(
-    ordered.map((a) => ({ areaId: a.area_id, name: a.name })),
-    colors
+    ordered.map((a) => ({ areaId: a.area_id, name: overrides?.[a.area_id]?.customName || overrides?.[a.area_id]?.name || a.name })),
+    resolvedColors
   );
   const rooms = ordered
     .filter((a) => !hidden.has(a.area_id) && !(a.floor_id && hiddenFloor.has(a.floor_id)))
-    .map((a) => ({ ...buildRoomItem(a, (a.floor_id && floorName.get(a.floor_id)) || null, fav.has(a.area_id)), color: palette.get(a.area_id) ?? '', customColor: Boolean(colors[a.area_id]) }));
+    .map((a) => ({
+      ...buildRoomItem(a, (a.floor_id && floorName.get(a.floor_id)) || null, fav.has(a.area_id), overrides?.[a.area_id]),
+      color: palette.get(a.area_id) ?? '',
+      customColor: Boolean(resolvedColors[a.area_id])
+    }));
   return assembleRoomsPage(rooms, floors, floorOrder);
 }
 

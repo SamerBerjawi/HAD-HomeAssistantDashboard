@@ -1,0 +1,16 @@
+.mh-door { overflow:hidden; border-radius:18px; background:var(--surface); color:var(--foreground); }
+.mh-door h3 { font-size:1.55rem; font-weight:750; line-height:1.1; }
+.mh-car { width:90px; height:70px; color:var(--accent); }
+.mh-range { display:block; font-size:2rem; line-height:1; letter-spacing:-.04em; }
+.mh-range small { display:block; font-size:.85rem; letter-spacing:normal; margin-top:5px; }
+.mh-charge,.mh-state,.mh-location { display:inline-flex; align-items:center; gap:4px; font-size:.85rem; }
+.mh-shutter { position:relative; min-height:158px; padding:18px; background:repeating-linear-gradient(0deg,var(--pro-accent-soft) 0 12px,var(--separator) 13px,transparent 15px); }
+.mh-shutter .mh-car { display:block; margin:0 auto; width:130px; height:80px; }
+.mh-threshold { padding:14px 18px; }
+.mh-threshold h4 .mh-state { font-size:1.65rem; font-weight:750; }
+.mh-threshold > div { display:flex; align-items:center; gap:16px; margin-top:8px; }
+.mh-threshold .mh-range,.mh-threshold .mh-range small { display:inline; font-size:1rem; }
+@container (min-width:600px) {
+  .mh-door { display:grid; grid-template-columns:3fr 2fr; }
+  .mh-threshold { align-self:center; }
+}

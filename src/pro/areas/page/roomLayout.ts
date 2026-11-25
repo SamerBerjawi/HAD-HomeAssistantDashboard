@@ -8,6 +8,8 @@ import type { TileModel, TileSize } from '../tileTypes';
 
 export type SectionId = 'scenes' | 'lights' | 'air' | 'climate' | 'media' | 'security' | 'machines' | 'power';
 export type Device = 'phone' | 'wide';
+export type AreaDevice = 'phone' | 'tablet' | 'desktop';
+export type AnyDevice = AreaDevice | Device;
 
 export const SECTION_ORDER: readonly SectionId[] = ['scenes', 'lights', 'climate', 'air', 'media', 'security', 'machines', 'power'];
 export const SECTION_TITLE: Record<SectionId, string> = {
@@ -69,13 +71,17 @@ export interface RoomLayout {
   pinned: string[];
 }
 
-export function defaultLayout(items: readonly RoomItem[], device: Device): RoomLayout {
+export function itemDefaultSize(item: RoomItem, device: AnyDevice): TileSize {
+  return device === 'phone' ? item.size.phone : item.size.wide;
+}
+
+export function defaultLayout(items: readonly RoomItem[], device: AnyDevice): RoomLayout {
   const order: RoomLayout['order'] = {};
   for (const it of items) (order[it.section] ??= []).push(it.key);
   return {
     sectionOrder: SECTION_ORDER.filter((s) => order[s]?.length),
     order,
-    sizes: Object.fromEntries(items.map((it) => [it.key, it.size[device]])),
+    sizes: Object.fromEntries(items.map((it) => [it.key, itemDefaultSize(it, device)])),
     hidden: items.filter((it) => it.hidden).map((it) => it.key),
     collapsed: [],
     pinned: []
@@ -135,7 +141,7 @@ export const isDirty = (a: RoomLayout, b: RoomLayout) => JSON.stringify(a) !== J
  * to the end of their section with their default size, a new section takes its default place.
  * Anything the owner set (order, sizes, hidden, pins, folds) is kept for the tiles still here.
  */
-export function reconcile(saved: RoomLayout | null | undefined, items: readonly RoomItem[], device: Device): RoomLayout {
+export function reconcile(saved: RoomLayout | null | undefined, items: readonly RoomItem[], device: AnyDevice): RoomLayout {
   const fresh = defaultLayout(items, device);
   if (!saved || typeof saved !== 'object') return fresh;
   const here = new Map(items.map((it) => [it.key, it]));
@@ -173,21 +179,60 @@ const SIZES = new Set(['xs', 's', 'w', 't', 'l']);
 const isSize = (v: unknown): v is TileSize => typeof v === 'string' && SIZES.has(v);
 
 /** `preferences.proAreaLayouts`: per area, one layout per device class (like `proOverviewLayout`). */
-export type AreaLayoutsConfig = { version: 1 } & Record<string, Partial<Record<Device, RoomLayout>> | number>;
+export type AreaLayoutsConfig = { version: 1 } & Record<string, Partial<Record<AnyDevice, RoomLayout>> | number>;
 
-export function readAreaLayout(preferences: unknown, areaId: string, device: Device): RoomLayout | null {
+export function readAreaLayout(preferences: unknown, areaId: string, device: AnyDevice): RoomLayout | null {
   const all = (preferences as { proAreaLayouts?: AreaLayoutsConfig } | undefined)?.proAreaLayouts;
   const area = all && typeof all === 'object' ? all[areaId] : null;
-  return area && typeof area === 'object' ? (area[device] ?? null) : null;
+  if (!area || typeof area !== 'object') return null;
+  const areaObj = area as Partial<Record<AnyDevice, RoomLayout>>;
+  if (areaObj[device]) return areaObj[device] ?? null;
+  // Backward-compatible fallback: legacy 'wide' layout seeds tablet/desktop if not separately saved yet
+  if (device === 'tablet' || device === 'desktop') {
+    return areaObj.wide ?? null;
+  }
+  return null;
 }
 
 /**
  * The preferences with one area's layout for one device replaced. The config's deep merge keeps
  * stale `sizes` keys of tiles that left (arrays are replaced); `reconcile` drops them on read.
  */
-export function withAreaLayout<P extends Record<string, unknown> | undefined>(preferences: P, areaId: string, device: Device, layout: RoomLayout): Record<string, unknown> {
+export function withAreaLayout<P extends Record<string, unknown> | undefined>(preferences: P, areaId: string, device: AnyDevice, layout: RoomLayout): Record<string, unknown> {
   const prefs = (preferences ?? {}) as Record<string, unknown>;
   const all = (prefs.proAreaLayouts as AreaLayoutsConfig | undefined) ?? { version: 1 };
-  const area = typeof all[areaId] === 'object' ? (all[areaId] as Partial<Record<Device, RoomLayout>>) : {};
+  const area = typeof all[areaId] === 'object' ? (all[areaId] as Partial<Record<AnyDevice, RoomLayout>>) : {};
   return { ...prefs, proAreaLayouts: { ...all, version: 1, [areaId]: { ...area, [device]: layout } } };
+}
+
+/** Granular patch setting one area + device layout without spreading unrelated config keys. */
+export function areaLayoutPatch(areaId: string, device: AnyDevice, layout: RoomLayout): Record<string, unknown> {
+  return {
+    preferences: {
+      proAreaLayouts: {
+        version: 1,
+        [areaId]: {
+          [device]: layout
+        }
+      }
+    }
+  };
+}
+
+/** Granular patch deleting one area + device layout (null marker for server deep-merge). */
+export function areaLayoutResetPatch(areaId: string, device: AnyDevice): Record<string, unknown> {
+  return {
+    preferences: {
+      proAreaLayouts: {
+        [areaId]: {
+          [device]: null
+        }
+      }
+    }
+  };
+}
+
+/** Adapts an existing room layout to another device class, validating tile keys and sizes. */
+export function copyRoomLayout(source: RoomLayout, items: readonly RoomItem[], targetDevice: AnyDevice): RoomLayout {
+  return reconcile(structuredClone(source), items, targetDevice);
 }

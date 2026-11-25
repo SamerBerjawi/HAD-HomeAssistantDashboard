@@ -57,11 +57,26 @@ function airText(r: RoomItem): string | null {
   return null;
 }
 
+function powerText(watts: number): string | null {
+  if (!(watts > 0)) return null;
+  return watts >= 1000 ? `${(watts / 1000).toFixed(1)} kW` : `${watts} W`;
+}
+
 export function tileFacts(r: RoomItem, prefs: RoomsPagePrefs, size: TileSize): TileFacts {
   const ambient = roomAmbient(r, prefs.lightColorGlow);
   const t = r.temperature !== null ? temp(r.temperature) : null;
   const h = r.humidity !== null ? `${Math.round(r.humidity)}%` : null;
-  const big = prefs.metric === 'humidity' ? (h ?? t) : (t ?? h);
+  const metric = r.primaryMetric && r.primaryMetric !== 'auto' ? r.primaryMetric : prefs.metric;
+  const big =
+    metric === 'none'
+      ? null
+      : metric === 'humidity'
+      ? (h ?? t)
+      : metric === 'power'
+      ? powerText(r.powerWatts)
+      : metric === 'air_quality'
+      ? airText(r)
+      : (t ?? h);
   const word =
     r.openContacts > 0 ? `${r.openContacts} open` : r.mediaPlaying > 0 ? 'Playing' : r.lightsOn > 0 ? 'Lit' : r.motion ? 'Motion' : r.totalLights > 0 ? 'All off' : 'Quiet';
   const th = r.thermostat;

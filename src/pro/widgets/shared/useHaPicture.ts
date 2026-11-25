@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadHAImageBlob } from '@/services/haImageService';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
+import { resolveAssetUrl } from '@/utils/assetUrl';
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000];
 
@@ -23,6 +24,10 @@ export function useHaPicture(raw?: string | null, serverUrlOverride?: string | n
     }
     if (raw.startsWith('data:') || raw.startsWith('blob:')) {
       setUrl(raw);
+      return;
+    }
+    if (raw.startsWith('/api/assets/') || raw.startsWith('/data/assets/')) {
+      setUrl(resolveAssetUrl(raw) || raw);
       return;
     }
     // A failed load (token mid-refresh, HA restarting) comes back empty and isn't cached, so try

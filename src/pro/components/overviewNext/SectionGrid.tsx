@@ -1,8 +1,9 @@
-import { useMemo, useRef, type CSSProperties, type ReactNode, type Ref } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode, type Ref } from 'react';
 import GridLayout, { useContainerWidth, type Layout, type LayoutItem } from 'react-grid-layout';
 import { gridBounds, minMaxSize, type LayoutConstraint } from 'react-grid-layout/core';
 import { GridBackground } from 'react-grid-layout/extras';
 import 'react-grid-layout/css/styles.css';
+import { useUserConfig } from '@/contexts/ConfigContext';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { cellsFor, readingOrder, resizeInFlow, sizeForCells, snapToAllowedSize, type LayoutPlacement, type WidgetSize } from '../../lib/overviewLayout';
 import { makeSettleCompactor } from './flowCompactor';
@@ -51,6 +52,7 @@ export function SectionGrid(props: SectionGridProps) {
 
 /** Its own component: the container is measured when edit mode opens (useContainerWidth measures on mount). */
 function EditGrid({ placements, cols, allowedSizes, onChange, renderCard }: SectionGridProps) {
+  const { setDragActive } = useUserConfig();
   const finePointer = useMediaQuery('(pointer: fine)');
   const { width, containerRef, mounted } = useContainerWidth({ measureBeforeMount: true });
   // The card in hand and where every card was before the drag, read by the compactor.
@@ -65,11 +67,14 @@ function EditGrid({ placements, cols, allowedSizes, onChange, renderCard }: Sect
       ),
     []
   );
+  useEffect(() => () => setDragActive?.(false), [setDragActive]);
   const grab = (_l: Layout, _old: LayoutItem | null, item: LayoutItem | null) => {
     active.current = item?.i ?? null;
+    setDragActive?.(true);
   };
   const release = () => {
     active.current = null;
+    setDragActive?.(false);
   };
 
   const constraints = useMemo<LayoutConstraint[]>(
