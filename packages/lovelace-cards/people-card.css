@@ -170,3 +170,31 @@ ha-card {
     height: 38px;
   }
 }
+
+ha-card { position: relative; }
+.heading { padding-inline-end: 32px; }
+.expand, .sheet-close { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.expand { --mdc-icon-size: 19px; }
+.expand:hover, .sheet-close:hover { background: #8882; }
+dialog { box-sizing: border-box; width: min(550px, 100vw); max-width: 100vw; max-height: 90dvh; padding: 20px; border: 0; border-radius: 24px; background: var(--card-background-color, #fff); color: var(--primary-text-color, #222); overflow: auto; overscroll-behavior: contain; }
+dialog::backdrop { background: #0009; }
+dialog header { padding: 20px; padding-right: 48px; border-radius: 20px; color: white; background: linear-gradient(125deg,#137bd0,#233d91); }
+dialog header[data-tone="home"] { background: linear-gradient(125deg,#197a58,#105347); }
+dialog header[data-tone="night"] { background: linear-gradient(125deg,#475578,#26304d); }
+.sheet-close { color: white; font-size: 25px; top: 28px; right: 28px; }
+dialog h2 { margin: 6px 0; font-size: 1.7rem; }
+dialog h3 { font-size: .9rem; margin: 20px 4px 8px; color: var(--secondary-text-color); }
+dialog nav { display:flex; flex-wrap:wrap; gap:5px; margin: 14px 0; }
+dialog button { font:inherit; color:inherit; cursor:pointer; }
+dialog nav button { border:0; border-radius:20px; background:#8882; padding:6px 12px; }
+dialog nav button[aria-pressed="true"] { background:#2387ef28; color:var(--primary-color); }
+dialog section { background:#8882; border-radius:16px; overflow:hidden; }
+dialog section p, dialog section button, dialog section a { box-sizing:border-box; display:flex; align-items:center; gap:10px; padding:12px; margin:0; width:100%; background:transparent; border:0; border-bottom:1px solid #8882; text-align:start; }
+dialog section span:last-child { margin-inline-start:auto; }
+dialog section a { color:var(--primary-color); }
+.sheet-face { position:relative; display:grid; place-items:center; flex:none; width:34px; height:34px; border-radius:50%; background:#8883; overflow:hidden; }
+.sheet-face img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.people-map { height:260px; border-radius:16px; isolation:isolate; }
+.people-pin span { display:grid; place-items:center; width:100%; height:100%; border-radius:50%; color:white; font-weight:bold; box-shadow:0 0 0 3px #15151575; }
+.pin-home { background:#008260; } .pin-away { background:#53627a; }
+@media(max-width:600px) { dialog { margin:auto 0 0; width:100%; border-radius:24px 24px 0 0; padding-bottom:max(20px,env(safe-area-inset-bottom)); } }

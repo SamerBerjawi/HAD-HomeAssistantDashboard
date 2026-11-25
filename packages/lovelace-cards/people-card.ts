@@ -1,5 +1,6 @@
 import { personInitials } from '../../src/pro/lib/overviewPills';
 import { presenceWarmth } from '../../src/pro/lib/presencePortraits';
+import { PeopleSheet } from './people-sheet';
 import css from './people-card.css';
 
 const tag = 'at-home-people-card';
@@ -12,9 +13,11 @@ interface PeopleConfig {
 }
 
 interface EntityState {
+  last_updated?: string;
   entity_id: string;
   state: string;
   attributes: {
+    latitude?: number; longitude?: number; battery_level?: number; battery?: number; source?: string; device_name?: string;
     friendly_name?: string;
     entity_picture?: string;
   };
@@ -62,10 +65,10 @@ function memberOf(hass: HomeAssistant, id: string) {
     zoneName || (entity && hass.formatEntityState?.(entity)) ||
     (tone === 'unknown' ? (entity ? 'Unknown' : 'Unavailable') : entity?.state) || 'Unknown';
 
-  return { id, name, status, tone, available: Boolean(entity), picture: pictureUrl(entity?.attributes.entity_picture) };
+  return { id, name, status, tone, updated: entity?.last_updated, attributes: entity?.attributes, available: Boolean(entity), picture: pictureUrl(entity?.attributes.entity_picture) };
 }
 
-type Member = ReturnType<typeof memberOf>;
+export type Member = ReturnType<typeof memberOf>;
 
 function element<K extends keyof HTMLElementTagNameMap>(tagName: K, className: string, text?: string) {
   const node = document.createElement(tagName);
@@ -107,6 +110,8 @@ function portrait(member: Member) {
 class PeopleCard extends HTMLElement {
   private config?: PeopleConfig;
   private homeAssistant?: HomeAssistant;
+  private readonly sheet = new PeopleSheet();
+  private readonly expand = element('button', 'expand');
   private signature?: string;
   private readonly shadow = this.attachShadow({ mode: 'open' });
   private readonly card = document.createElement('ha-card');
@@ -117,7 +122,16 @@ class PeopleCard extends HTMLElement {
     const style = document.createElement('style');
     style.textContent = css;
     this.card.append(this.content);
-    this.shadow.append(style, this.card);
+    this.expand.type = 'button';
+    this.expand.title = 'Expand People';
+    this.expand.setAttribute('aria-label', 'Expand People');
+    this.expand.setAttribute('aria-haspopup', 'dialog');
+    const icon = document.createElement('ha-icon');
+    icon.setAttribute('icon', 'mdi:arrow-expand-top-right');
+    this.expand.append(icon);
+    this.expand.onclick = () => this.sheet.open();
+    this.card.append(this.expand);
+    this.shadow.append(style, this.card, this.sheet.dialog);
     this.content.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -193,6 +207,7 @@ class PeopleCard extends HTMLElement {
     this.content.setAttribute('aria-label', title || 'People');
     this.card.style.setProperty('--atc-presence-glow', presenceWarmth(homeCount, members.length));
     const heading = element('h2', 'heading', title || headline);
+    this.sheet.update(members, headline);
     const nodes: HTMLElement[] = [heading];
     if (title) nodes.push(element('p', 'summary', headline));
 
