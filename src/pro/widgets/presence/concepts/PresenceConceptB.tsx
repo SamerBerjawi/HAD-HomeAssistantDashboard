@@ -8,13 +8,9 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { UserGroupIcon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import type { ProOverviewPresenceModel } from '../../../lib/overviewPresence';
+import { presenceWarmth } from '../../../lib/presencePortraits';
 import { DetailsButton, WidgetSurface, type DesignedWidgetProps } from '../../shared/WidgetSurface';
 import { awayOf, homeOf, PersonButton, placeOf } from './shared';
-
-function warmth(model: ProOverviewPresenceModel): string {
-  const r = model.totalCount ? model.homeCount / model.totalCount : 0;
-  return `radial-gradient(120% 100% at 0% 100%, hsl(24 95% 62% / ${0.12 + r * 0.38}), transparent 70%), radial-gradient(90% 80% at 100% 0%, hsl(330 80% 70% / ${0.08 + r * 0.2}), transparent 70%)`;
-}
 
 export default function PresenceConceptB({ model, size, onOpenDetails }: DesignedWidgetProps<ProOverviewPresenceModel>) {
   const home = homeOf(model);
@@ -25,7 +21,7 @@ export default function PresenceConceptB({ model, size, onOpenDetails }: Designe
   const headline = model.homeCount === model.totalCount ? 'Everyone is home' : model.homeCount === 0 ? 'Nobody is home' : `${model.homeCount} of ${model.totalCount} home`;
 
   return (
-    <WidgetSurface label="Family presence" className="bg-[#fbf5ef] dark:bg-[#1f1a1d]" style={{ backgroundImage: warmth(model) }}>
+    <WidgetSurface label="Family presence" className="bg-[#fbf5ef] dark:bg-[#1f1a1d]" style={{ backgroundImage: presenceWarmth(model.homeCount, model.totalCount) }}>
       <DetailsButton title="Family presence" onPress={onOpenDetails} />
       <div className="flex h-full min-h-0 flex-col gap-2 p-3.5">
         {model.totalCount === 0 ? (

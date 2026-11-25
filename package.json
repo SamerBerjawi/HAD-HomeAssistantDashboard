@@ -20,7 +20,8 @@
     "test:visual": "playwright test --project=visual-desktop-light --project=visual-desktop-dark --project=visual-mobile-light --project=visual-mobile-dark",
     "test:visual:update": "playwright test --project=visual-desktop-light --project=visual-desktop-dark --project=visual-mobile-light --project=visual-mobile-dark --update-snapshots",
     "dev:pro": "UI=pro tsx server.ts",
-    "build:pro": "vite build --config vite.pro.config.ts && node scripts/compress-dist.cjs dist-pro"
+    "build:pro": "vite build --config vite.pro.config.ts && node scripts/compress-dist.cjs dist-pro",
+    "build:cards": "esbuild packages/lovelace-cards/people-card.ts --bundle --format=esm --target=es2022 --loader:.css=text --minify --outfile=build/at-home-cards/at-home-cards.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
