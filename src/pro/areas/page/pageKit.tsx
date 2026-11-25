@@ -46,8 +46,54 @@ export interface PageProps {
   device: AnyDevice;
 }
 
-/** All rooms + quick-jump picker + ‹ › previous / next room (in the Rooms page's order). */
-export function RoomNav({ room, rooms, onRoom, onBack, right, light }: Pick<PageProps, 'room' | 'rooms' | 'onRoom' | 'onBack'> & { right?: ReactNode; light?: boolean }) {
+/** Tappable room title with dropdown picker to switch directly to another room. */
+export function RoomTitlePicker({
+  room,
+  rooms,
+  onRoom,
+  className
+}: Pick<PageProps, 'room' | 'rooms' | 'onRoom'> & { className?: string }) {
+  if (rooms.length <= 1) {
+    return (
+      <h1 className={cn('min-w-0 truncate text-[24px] font-bold leading-tight tracking-[-0.02em]', className)}>
+        {room.name}
+      </h1>
+    );
+  }
+  return (
+    <Dropdown>
+      <Button
+        variant="ghost"
+        aria-label={`Jump to room (currently ${room.name})`}
+        className={cn('-ml-1.5 h-auto min-w-0 max-w-full justify-start gap-1 rounded-xl px-1.5 py-0.5 text-left', className)}
+      >
+        <h1 className="min-w-0 truncate text-[24px] font-bold leading-tight tracking-[-0.02em]">{room.name}</h1>
+        <HugeiconsIcon icon={ArrowDown01Icon} size={18} className="shrink-0 opacity-70" />
+      </Button>
+      <Dropdown.Popover placement="bottom start" className="max-h-[60dvh] min-w-52 overflow-y-auto">
+        <Dropdown.Menu aria-label="Jump to room" onAction={(key) => onRoom(String(key))}>
+          {rooms.map((r) => (
+            <Dropdown.Item key={r.id} id={r.id} textValue={r.id === room.id ? `${r.name}, current room` : r.name}>
+              <HugeiconsIcon icon={Tick02Icon} size={15} className={r.id === room.id ? 'shrink-0 text-[var(--accent)]' : 'invisible shrink-0'} aria-hidden="true" />
+              <Label className="truncate">{r.name}</Label>
+            </Dropdown.Item>
+          ))}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
+  );
+}
+
+/** All rooms + optional quick-jump picker + ‹ › previous / next room (in the Rooms page's order). */
+export function RoomNav({
+  room,
+  rooms,
+  onRoom,
+  onBack,
+  right,
+  light,
+  hidePicker = false
+}: Pick<PageProps, 'room' | 'rooms' | 'onRoom' | 'onBack'> & { right?: ReactNode; light?: boolean; hidePicker?: boolean }) {
   const i = rooms.findIndex((r) => r.id === room.id);
   const prev = i > 0 ? rooms[i - 1] : null;
   const next = i >= 0 && i < rooms.length - 1 ? rooms[i + 1] : null;
@@ -60,27 +106,29 @@ export function RoomNav({ room, rooms, onRoom, onBack, right, light }: Pick<Page
       <span className="flex-1" />
       {rooms.length > 1 ? (
         <>
-          <Dropdown>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={`Jump to room (currently ${room.name})`}
-              className="h-8 max-w-[140px] min-w-0 gap-1 rounded-full px-2.5 text-xs font-medium opacity-85 sm:max-w-[200px]"
-            >
-              <span className="truncate">{room.name}</span>
-              <HugeiconsIcon icon={ArrowDown01Icon} size={13} className="shrink-0" />
-            </Button>
-            <Dropdown.Popover placement="bottom end" className="max-h-[60dvh] min-w-52 overflow-y-auto">
-              <Dropdown.Menu aria-label="Jump to room" onAction={(key) => onRoom(String(key))}>
-                {rooms.map((r) => (
-                  <Dropdown.Item key={r.id} id={r.id} textValue={r.id === room.id ? `${r.name}, current room` : r.name}>
-                    <HugeiconsIcon icon={Tick02Icon} size={15} className={r.id === room.id ? 'shrink-0 text-[var(--accent)]' : 'invisible shrink-0'} aria-hidden="true" />
-                    <Label className="truncate">{r.name}</Label>
-                  </Dropdown.Item>
-                ))}
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown>
+          {!hidePicker ? (
+            <Dropdown>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`Jump to room (currently ${room.name})`}
+                className="h-8 max-w-[140px] min-w-0 gap-1 rounded-full px-2.5 text-xs font-medium opacity-85 sm:max-w-[200px]"
+              >
+                <span className="truncate">{room.name}</span>
+                <HugeiconsIcon icon={ArrowDown01Icon} size={13} className="shrink-0" />
+              </Button>
+              <Dropdown.Popover placement="bottom end" className="max-h-[60dvh] min-w-52 overflow-y-auto">
+                <Dropdown.Menu aria-label="Jump to room" onAction={(key) => onRoom(String(key))}>
+                  {rooms.map((r) => (
+                    <Dropdown.Item key={r.id} id={r.id} textValue={r.id === room.id ? `${r.name}, current room` : r.name}>
+                      <HugeiconsIcon icon={Tick02Icon} size={15} className={r.id === room.id ? 'shrink-0 text-[var(--accent)]' : 'invisible shrink-0'} aria-hidden="true" />
+                      <Label className="truncate">{r.name}</Label>
+                    </Dropdown.Item>
+                  ))}
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown>
+          ) : null}
           <Button isIconOnly size="sm" variant="ghost" isDisabled={!prev} aria-label={prev ? `Previous room: ${prev.name}` : 'No previous room'} onPress={() => prev && onRoom(prev.id)} className="size-8 min-w-0 rounded-full">
             <HugeiconsIcon icon={ArrowLeft01Icon} size={16} />
           </Button>

@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import ProSidebar from './ProSidebar';
 import ProMobileNav from './ProMobileNav';
 import { ProCompactHeader, ProPageHeader } from './ProPageHeader';
-import { PageHeaderContext, type PageHeaderMeta } from './pageHeaderContext';
+import { PageHeaderContext, ShellNotificationsContext, type PageHeaderMeta } from './pageHeaderContext';
 
 interface ProShellProps {
   page: string;
@@ -30,17 +30,30 @@ export default function ProShell({ page, darkMode, onNavigate, onToggleTheme, on
       <ProSidebar page={page} darkMode={darkMode} onNavigate={onNavigate} onToggleTheme={onToggleTheme} />
 
       <main ref={mainRef} className="flex-1 min-w-0 overflow-y-auto px-4 md:px-8 pb-28 md:pb-10">
-        <ProCompactHeader page={page} meta={meta} visible={compact} onOpenNotifications={onOpenNotifications} />
+        {!meta.hideHeader ? (
+          <ProCompactHeader page={page} meta={meta} visible={compact} onOpenNotifications={onOpenNotifications} />
+        ) : null}
         {/* Top padding lives here, not on <main>: padding on the scroller would offset the sticky bar. */}
-        <div className="mx-auto w-full max-w-5xl flex flex-col gap-6 pt-[max(24px,env(safe-area-inset-top))]">
-          <ProPageHeader
-            page={page}
-            meta={meta}
-            onOpenNotifications={onOpenNotifications}
-            scrollRoot={mainRef}
-            onCompactChange={onCompactChange}
-          />
-          <PageHeaderContext.Provider value={setMeta}>{children}</PageHeaderContext.Provider>
+        <div
+          className={cn(
+            'mx-auto w-full max-w-5xl flex flex-col',
+            meta.hideHeader
+              ? 'gap-3 pt-[max(12px,env(safe-area-inset-top))] md:pt-[max(20px,env(safe-area-inset-top))]'
+              : 'gap-6 pt-[max(24px,env(safe-area-inset-top))]'
+          )}
+        >
+          {!meta.hideHeader ? (
+            <ProPageHeader
+              page={page}
+              meta={meta}
+              onOpenNotifications={onOpenNotifications}
+              scrollRoot={mainRef}
+              onCompactChange={onCompactChange}
+            />
+          ) : null}
+          <ShellNotificationsContext.Provider value={onOpenNotifications}>
+            <PageHeaderContext.Provider value={setMeta}>{children}</PageHeaderContext.Provider>
+          </ShellNotificationsContext.Provider>
         </div>
       </main>
 

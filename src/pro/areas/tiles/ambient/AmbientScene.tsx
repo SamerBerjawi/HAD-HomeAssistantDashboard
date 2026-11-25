@@ -19,11 +19,11 @@ export function AmbientScene({ e: s, size, act }: TileProps<SceneTileModel>) {
   if (size === 'xs') {
     return (
       <Glass label={s.name} style={style} className={cn(dim)}>
-        <div className="flex h-full items-center gap-2.5 px-3">
-          {orb(44)}
+        <div className="flex h-full items-center gap-2 px-2.5">
+          {orb(34)}
           <div className="min-w-0 flex-1">
-            <AName className="line-clamp-1 truncate text-[14px]">{s.name}</AName>
-            <AState className="mt-0.5 text-[12px]">{state}</AState>
+            <AName className="line-clamp-1 truncate text-[13px] leading-tight">{s.name}</AName>
+            <AState className="mt-0.5 text-[11px] leading-tight">{state}</AState>
           </div>
         </div>
       </Glass>

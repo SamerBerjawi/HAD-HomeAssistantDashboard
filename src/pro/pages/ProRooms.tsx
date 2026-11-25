@@ -127,7 +127,7 @@ export default function ProRooms() {
     () => (selectedAreaId ? [] : [{ id: 'customize', label: 'Customize page', icon: PaintBoardIcon, onAction: () => editor.begin() }]),
     [selectedAreaId, editor]
   );
-  useProPageHeader({ menu });
+  useProPageHeader({ menu, hideHeader: Boolean(selectedAreaId) });
 
   if (selectedAreaId) {
     return (

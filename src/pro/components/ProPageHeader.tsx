@@ -50,27 +50,34 @@ interface HeaderActionsProps {
   onOpenNotifications: () => void;
 }
 
-/** Bell (every page) and the per-page ⋮ menu (only when the page provides items). */
-function HeaderActions({ meta, onOpenNotifications }: HeaderActionsProps) {
+/** Notification bell button with unread badge, shared by ProPageHeader and focused sub-views. */
+export function NotificationBellButton({ onPress }: { onPress: () => void }) {
   const { unread } = useHANotificationSummary();
   const bellLabel = unread > 0 ? `Notifications, ${unread} unread` : 'Notifications';
+  return (
+    <Badge.Anchor>
+      <Tooltip delay={0}>
+        <Button isIconOnly variant="ghost" aria-label={bellLabel} onPress={onPress}>
+          <HugeiconsIcon icon={Notification01Icon} size={20} />
+        </Button>
+        <Tooltip.Content placement="bottom">Notifications</Tooltip.Content>
+      </Tooltip>
+      {unread > 0 && (
+        <Badge color="danger" size="sm" placement="top-right">
+          {unread > 99 ? '99+' : unread}
+        </Badge>
+      )}
+    </Badge.Anchor>
+  );
+}
+
+/** Bell (every page) and the per-page ⋮ menu (only when the page provides items). */
+function HeaderActions({ meta, onOpenNotifications }: HeaderActionsProps) {
   const menu = meta.menu ?? [];
 
   return (
     <div className="flex shrink-0 items-center gap-1">
-      <Badge.Anchor>
-        <Tooltip delay={0}>
-          <Button isIconOnly variant="ghost" aria-label={bellLabel} onPress={onOpenNotifications}>
-            <HugeiconsIcon icon={Notification01Icon} size={20} />
-          </Button>
-          <Tooltip.Content placement="bottom">Notifications</Tooltip.Content>
-        </Tooltip>
-        {unread > 0 && (
-          <Badge color="danger" size="sm" placement="top-right">
-            {unread > 99 ? '99+' : unread}
-          </Badge>
-        )}
-      </Badge.Anchor>
+      <NotificationBellButton onPress={onOpenNotifications} />
 
       {menu.length > 0 && (
         <Dropdown>

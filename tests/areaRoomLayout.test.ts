@@ -28,7 +28,8 @@ import {
   withAreaLayout,
   type RoomItem
 } from '@/pro/areas/page/roomLayout';
-import { isActive, isAlert, roomFacts, roomSentence } from '@/pro/areas/page/roomSummary';
+import { isActive, isAlert, roomFacts, roomSentence, roomSentenceParts } from '@/pro/areas/page/roomSummary';
+import { sentenceText } from '@/pro/lib/pageSentences';
 import { LIGHT_STATES, MEDIA_STATES, OPENING_STATES, READING_STATES, SAFETY_STATES, LOCK_STATES } from '@/pro/areas/studio/areaStates';
 
 const item = (key: string, section: RoomItem['section']): RoomItem => ({ key, section, size: { phone: 's', wide: 'w' } });
@@ -217,5 +218,13 @@ describe('room summary', () => {
     expect(roomSentence([off], now)).toBe('All quiet.');
     expect(roomSentence([light, window], now)).toBe('1 light on, window open for 12 min.');
     expect(roomSentence([light, model(SAFETY_STATES, 'smoke')], now).startsWith(model(SAFETY_STATES, 'smoke').name)).toBe(true);
+  });
+
+  it('builds rich sentence chip parts for a room header', () => {
+    const closedDoor = model(OPENING_STATES, 'closed');
+    const playingMedia = model(MEDIA_STATES, 'playing');
+    const parts = roomSentenceParts([light, closedDoor, playingMedia]);
+    expect(sentenceText(parts)).toBe('Right now: 1 light on, doors and windows are closed and 1 player playing');
+    expect(roomSentenceParts([off])).toEqual(['All quiet.']);
   });
 });

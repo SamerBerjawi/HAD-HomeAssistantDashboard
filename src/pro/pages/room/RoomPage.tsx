@@ -32,6 +32,8 @@ import { foldAll } from '../../areas/page/PageNow';
 import PageRail from '../../areas/page/PageRail';
 import type { PageItem, PageRoom } from '../../areas/page/pageKit';
 import { ProEditBar } from '../../components/ProEditBar';
+import { NotificationBellButton } from '../../components/ProPageHeader';
+import { useOpenNotifications } from '../../components/pageHeaderContext';
 import { VisibilityEditorSheet } from '../../components/VisibilityEditorSheet';
 import { withUpdatedRule } from '../../lib/visibilityRules';
 import { useDeviceType } from '../../hooks/useDeviceType';
@@ -63,6 +65,7 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
   const resolvedEntities = useAutoLayoutStore((s) => s.resolvedEntities);
   const areaNames = useAutoLayoutStore((s) => s.resolvedAreas.map((a) => `${a.area_id}\u0000${a.name}`).join('\u0001'));
   const serverUrl = useAutoLayoutStore((s) => s.serverUrl);
+  const openNotifications = useOpenNotifications();
 
   const { device: viewDevice, detected, pinned, setPinned } = useDeviceType();
   const [editingDevice, setEditingDevice] = useState<AreaDevice | null>(null);
@@ -263,6 +266,7 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
         inset={false}
         editor={editor}
         hideEditBar={editor.editing}
+        headerEnd={openNotifications ? <NotificationBellButton onPress={openNotifications} /> : undefined}
         view={view}
         onView={setView}
         room={room}

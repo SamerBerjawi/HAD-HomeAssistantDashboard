@@ -45,16 +45,25 @@ function num(s: AnyState): number | undefined {
 }
 
 /** Renders sentence parts: plain text with inline HeroUI soft chips (icon + value). */
-export function RichSubtitle({ parts }: { parts: SentencePart[] }) {
+export function RichSubtitle({ parts, compact = false }: { parts: SentencePart[]; compact?: boolean }) {
   return (
-    <div className="text-sm leading-8 text-muted" aria-label={sentenceText(parts)}>
+    <div
+      className={compact ? 'text-xs leading-6 text-muted' : 'text-sm leading-8 text-muted'}
+      aria-label={sentenceText(parts)}
+    >
       <span aria-hidden="true">
         {parts.map((p, i) =>
           typeof p === 'string' ? (
             <Fragment key={i}>{p}</Fragment>
           ) : (
-            <Chip key={i} size="sm" variant="soft" color={p.tone} className="mx-0.5 inline-flex gap-1 align-middle">
-              <HugeiconsIcon icon={p.icon} size={14} />
+            <Chip
+              key={i}
+              size="sm"
+              variant="soft"
+              color={p.tone}
+              className={compact ? 'mx-0.5 inline-flex h-5 gap-1 px-1.5 text-[11px] align-middle' : 'mx-0.5 inline-flex gap-1 align-middle'}
+            >
+              <HugeiconsIcon icon={p.icon} size={compact ? 12 : 14} />
               {p.label}
             </Chip>
           )

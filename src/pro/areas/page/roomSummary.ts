@@ -3,6 +3,17 @@
  * header (temperature, humidity, lights on), what is "active now" (on, running or needing
  * attention), and one plain sentence. Pure, so it can be tested and reused by the real page.
  */
+import {
+  Alert02Icon,
+  BulbIcon,
+  CheckmarkCircle02Icon,
+  Door01Icon,
+  MusicNote01Icon,
+  SquareUnlock02Icon,
+  ThermometerIcon,
+  WalkingIcon
+} from '@hugeicons/core-free-icons';
+import { plural, type SentencePart } from '../../lib/pageSentences';
 import type { TileModel } from '../tileTypes';
 
 /** On, running or needing a look: what concept C puts under "Now". */
@@ -65,6 +76,73 @@ export function roomFacts(models: readonly TileModel[]): RoomFacts {
     lightsOn: lights.filter((m) => m.isOn).length,
     lights: lights.length
   };
+}
+
+/** Builds concise chip-styled status parts for one room's compact hero header. */
+export function roomSentenceParts(models: readonly TileModel[]): SentencePart[] {
+  const live = models.filter((m) => m.available);
+  const clauses: SentencePart[][] = [];
+
+  for (const m of live.filter(isAlert)) {
+    const label =
+      m.kind === 'safety'
+        ? `${m.name}: ${m.deviceClass === 'moisture' ? 'leak' : m.deviceClass.replace(/_/g, ' ')}`
+        : m.kind === 'lock'
+        ? `${m.name} jammed`
+        : `${m.name} error`;
+    clauses.push([{ icon: Alert02Icon, label, tone: 'danger' }]);
+  }
+
+  const lightsOn = live.filter((m) => m.kind === 'light' && m.isOn).length;
+  if (lightsOn > 0) {
+    clauses.push([{ icon: BulbIcon, label: plural(lightsOn, 'light'), tone: 'warning' }, ' on']);
+  }
+
+  const openings = live.filter((m) => m.kind === 'opening');
+  const openList = openings.filter((m) => m.isOn);
+  if (openList.length > 0) {
+    clauses.push([{ icon: Door01Icon, label: plural(openList.length, 'opening'), tone: 'warning' }, ' open']);
+  } else if (openings.length > 0) {
+    clauses.push(['doors and windows are ', { icon: CheckmarkCircle02Icon, label: 'closed', tone: 'success' }]);
+  }
+
+  const motionOn = live.some((m) => m.kind === 'motion' && m.isOn);
+  if (motionOn) {
+    clauses.push([{ icon: WalkingIcon, label: 'motion', tone: 'default' }]);
+  }
+
+  const playingCount = live.filter((m) => m.kind === 'media' && m.playing).length;
+  if (playingCount > 0) {
+    clauses.push([{ icon: MusicNote01Icon, label: plural(playingCount, 'player'), tone: 'accent' }, ' playing']);
+  }
+
+  const climateActive = live.find(
+    (m): m is Extract<TileModel, { kind: 'climate' }> =>
+      m.kind === 'climate' && (m.action === 'heating' || m.action === 'cooling') && m.target !== null
+  );
+  if (climateActive) {
+    clauses.push([
+      {
+        icon: ThermometerIcon,
+        label: `${climateActive.action === 'heating' ? 'Heating' : 'Cooling'} ${climateActive.target}°`,
+        tone: 'accent'
+      }
+    ]);
+  }
+
+  const unlockedCount = live.filter((m) => m.kind === 'lock' && m.state === 'unlocked').length;
+  if (unlockedCount > 0) {
+    clauses.push([{ icon: SquareUnlock02Icon, label: `${unlockedCount} unlocked`, tone: 'warning' }]);
+  }
+
+  if (clauses.length === 0) return ['All quiet.'];
+
+  const out: SentencePart[] = ['Right now: '];
+  clauses.forEach((clause, i) => {
+    if (i > 0) out.push(i === clauses.length - 1 ? ' and ' : ', ');
+    out.push(...clause);
+  });
+  return out;
 }
 
 /** One sentence: alerts first, then what is going on, else "All quiet". */
