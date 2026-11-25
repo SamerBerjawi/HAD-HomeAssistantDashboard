@@ -23,6 +23,8 @@ describe('tile actions → HA services', () => {
   it('switches and helpers toggle in their own domain', () => {
     const helper = pick(SWITCH_STATES, 'helper');
     expect(first(helper, { type: 'toggle' })).toMatchObject({ domain: helper.entityId.split('.')[0], service: 'toggle' });
+    const switchAsLight = { ...pick(LIGHT_STATES, 'warm'), entityId: 'switch.floor_lamp' };
+    expect(first(switchAsLight, { type: 'toggle' })).toMatchObject({ domain: 'switch', service: 'toggle', entityId: 'switch.floor_lamp' });
   });
 
   it('fans: 0 % turns off, presets, swing and direction', () => {
@@ -66,6 +68,10 @@ describe('tile actions → HA services', () => {
     const s = tileActionCalls(pick(SCENE_STATES, 'relax'), { type: 'activate' });
     expect(s.calls[0]).toMatchObject({ domain: 'scene', service: 'turn_on' });
     expect(s.local).toEqual({ isOn: true });
+    const sc = tileActionCalls({ ...pick(SCENE_STATES, 'relax'), entityId: 'script.goodnight' }, { type: 'activate' });
+    expect(sc.calls[0]).toMatchObject({ domain: 'script', service: 'turn_on', entityId: 'script.goodnight' });
+    const btn = tileActionCalls({ ...pick(SCENE_STATES, 'relax'), entityId: 'button.chime' }, { type: 'activate' });
+    expect(btn.calls[0]).toMatchObject({ domain: 'button', service: 'press', entityId: 'button.chime' });
     const cam = pick(CAMERA_STATES, 'still');
     expect(tileActionCalls(cam, { type: 'toggle' })).toEqual({ calls: [], local: { live: true } });
   });

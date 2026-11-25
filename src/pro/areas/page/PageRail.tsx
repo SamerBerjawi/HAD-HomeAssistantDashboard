@@ -1,21 +1,32 @@
 /**
- * Page concept B · "Rail" (batch 6), and with `views` the owner's "B + C" (2026-11-21): the same
- * frame with a switch between two views of the room, All (the sections) and Now (C's body: what is
- * on or needs a look, pinned tiles, everything else folded). One layout serves both.
- *
- * Rail: the room's own things leave the grid. Tablet and desktop: a
- * sticky rail on the left holds the room (picture, name, facts), its scenes and its readings as
- * X-small tiles, and an index of the sections; the grid on the right is only what you control and
- * watch. Phone: the rail becomes the header (readings as a line of values, scenes in a row you
- * swipe) and the section index a bar of chips that sticks to the top while you scroll.
+ * Page concept B · "Rail" (batch 6 + Phase 0 + Phase 2.3/2.4 custom sections & editable Rail).
  */
 import { useRef, useState, type ReactNode } from 'react';
 import { Button, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { Home01Icon } from '@hugeicons/core-free-icons';
+import {
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+  Home01Icon,
+  PencilEdit01Icon,
+  PlusSignIcon,
+  ViewIcon,
+  ViewOffSlashIcon
+} from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import type { ReadingTileModel } from '../tileTypes';
-import { SECTION_TITLE, visibleSections, type SectionId } from './roomLayout';
+import {
+  applyRailOrder,
+  deleteRoomSection,
+  editableRoomSections,
+  hide,
+  isCustomRoomSection,
+  reorderRailList,
+  roomSectionTitle,
+  show,
+  visibleSections,
+  type SectionId
+} from './roomLayout';
 import { sectionSummary } from './roomSummary';
 import { RoomGrid } from './RoomGrid';
 import { EmptyRoom, HiddenTray, RoomEditBar } from './RoomEditParts';
@@ -27,22 +38,34 @@ export type RoomView = 'all' | 'now';
 
 interface RailProps extends PageProps {
   editor: RoomEditor;
-  /** B + C: the All / Now switch. */
   views?: boolean;
-  /** The view, when the caller remembers it (the real page: per screen); else kept here. */
   view?: RoomView;
   onView?: (v: RoomView) => void;
-  /** Its own side padding (the studio's stage); the real page sits in the app's padded main. */
   inset?: boolean;
-  /** More to set while customizing (the real page: each car's picture). */
   editExtras?: ReactNode;
-  /** Top-of-page panel shown while editing (deprecated when bottom ProEditBar handles editing). */
   editPanel?: ReactNode;
-  /** Hide inline RoomEditBar when the page mounts the bottom ProEditBar in edit mode. */
   hideEditBar?: boolean;
+  onEditTile?: (key: string) => void;
+  onOpenEntities?: () => void;
+  onAddSection?: () => void;
+  onRenameSection?: (id: SectionId) => void;
 }
 
-export default function PageRail({ views = false, editor, view: viewProp, onView, inset = true, editExtras, editPanel, hideEditBar = false, ...props }: RailProps) {
+export default function PageRail({
+  views = false,
+  editor,
+  view: viewProp,
+  onView,
+  inset = true,
+  editExtras,
+  editPanel,
+  hideEditBar = false,
+  onEditTile,
+  onOpenEntities,
+  onAddSection,
+  onRenameSection,
+  ...props
+}: RailProps) {
   const { room, device, model, renderTile } = props;
   const [ownView, setOwnView] = useState<RoomView>('all');
   const view = viewProp ?? ownView;
@@ -56,11 +79,21 @@ export default function PageRail({ views = false, editor, view: viewProp, onView
     const m = model(k);
     return m.kind === 'scene' || m.kind === 'reading';
   };
-  const sections = visibleSections(l)
+
+  const baseList = editor.editing ? editableRoomSections(l) : visibleSections(l);
+  const sections = baseList
     .map((s) => ({ ...s, keys: s.keys.filter((k) => !isRail(k)) }))
-    .filter((s) => s.keys.length);
-  const scenes = room.items.filter((it) => model(it.key).kind === 'scene' && !l.hidden.includes(it.key)).map((it) => it.key);
-  const readings = room.items.filter((it) => model(it.key).kind === 'reading' && !l.hidden.includes(it.key)).map((it) => it.key);
+    .filter((s) => s.keys.length > 0 || (editor.editing && isCustomRoomSection(l, s.id)));
+
+  const sectionChoices = sections.map((s) => ({ id: s.id, title: roomSectionTitle(l, s.id) }));
+
+  const rawSceneKeys = room.items.filter((it) => model(it.key).kind === 'scene').map((it) => it.key);
+  const rawReadingKeys = room.items.filter((it) => model(it.key).kind === 'reading').map((it) => it.key);
+  const orderedAllScenes = applyRailOrder(rawSceneKeys, l.railScenesOrder);
+  const orderedAllReadings = applyRailOrder(rawReadingKeys, l.railReadingsOrder);
+  const scenes = orderedAllScenes.filter((k) => !l.hidden.includes(k));
+  const readings = orderedAllReadings.filter((k) => !l.hidden.includes(k));
+
   const nowCount = room.items.filter((it) => !isRail(it.key) && !l.hidden.includes(it.key) && itemActive(it, model(it.key))).length;
   const switcher =
     views && room.items.length && !editor.editing ? (
@@ -84,33 +117,117 @@ export default function PageRail({ views = false, editor, view: viewProp, onView
     <nav aria-label="Sections" className={cn(phone ? 'flex gap-1.5 overflow-x-auto [scrollbar-width:none]' : 'flex flex-col gap-0.5')}>
       {sections.map((s) => (
         <Button key={s.id} size="sm" variant={phone ? 'secondary' : 'ghost'} onPress={() => jump(s.id)} className={cn(phone ? 'h-8 shrink-0 rounded-full px-3 text-xs' : 'h-9 justify-between rounded-xl px-3 text-[13px]')}>
-          <span>{SECTION_TITLE[s.id]}</span>
+          <span>{roomSectionTitle(l, s.id)}</span>
           {phone ? null : <span className="text-xs font-normal text-muted">{sectionSummary(s.id, s.keys.map(model)) || s.keys.length}</span>}
         </Button>
       ))}
     </nav>
   ) : null;
+
+  const tileLabel = nameOf(props);
+
+  const editRailCard = editor.editing && (orderedAllScenes.length > 0 || orderedAllReadings.length > 0) ? (
+    <section aria-label="Scenes and readings in rail" className="pro-surface mb-5 flex flex-col gap-3 rounded-2xl p-3">
+      {orderedAllScenes.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-semibold text-muted">Scenes order &amp; visibility</p>
+          {orderedAllScenes.map((k, idx) => {
+            const isHidden = l.hidden.includes(k);
+            return (
+              <div key={k} className="flex items-center gap-1.5 rounded-xl bg-default/40 px-2.5 py-1.5 text-xs">
+                <span className={cn('min-w-0 flex-1 truncate font-medium', isHidden && 'text-muted line-through')}>{tileLabel(k)}</span>
+                <Button isIconOnly size="sm" variant="ghost" isDisabled={idx === 0} aria-label={`Move ${tileLabel(k)} up`} onPress={() => editor.update((x) => ({ ...x, railScenesOrder: reorderRailList(rawSceneKeys, x.railScenesOrder, k, -1) }))} className="size-7 min-w-0">
+                  <HugeiconsIcon icon={ArrowUp01Icon} size={14} />
+                </Button>
+                <Button isIconOnly size="sm" variant="ghost" isDisabled={idx === orderedAllScenes.length - 1} aria-label={`Move ${tileLabel(k)} down`} onPress={() => editor.update((x) => ({ ...x, railScenesOrder: reorderRailList(rawSceneKeys, x.railScenesOrder, k, 1) }))} className="size-7 min-w-0">
+                  <HugeiconsIcon icon={ArrowDown01Icon} size={14} />
+                </Button>
+                {onEditTile ? (
+                  <Button isIconOnly size="sm" variant="ghost" aria-label={`Edit ${tileLabel(k)}`} onPress={() => onEditTile(k)} className="size-7 min-w-0">
+                    <HugeiconsIcon icon={PencilEdit01Icon} size={14} />
+                  </Button>
+                ) : null}
+                <Button isIconOnly size="sm" variant="ghost" aria-label={isHidden ? `Show ${tileLabel(k)}` : `Hide ${tileLabel(k)}`} onPress={() => editor.update((x) => (isHidden ? show(x, k) : hide(x, k)))} className="size-7 min-w-0">
+                  <HugeiconsIcon icon={isHidden ? ViewIcon : ViewOffSlashIcon} size={14} />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      {orderedAllReadings.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-semibold text-muted">Readings order &amp; visibility</p>
+          {orderedAllReadings.map((k, idx) => {
+            const isHidden = l.hidden.includes(k);
+            return (
+              <div key={k} className="flex items-center gap-1.5 rounded-xl bg-default/40 px-2.5 py-1.5 text-xs">
+                <span className={cn('min-w-0 flex-1 truncate font-medium', isHidden && 'text-muted line-through')}>{tileLabel(k)}</span>
+                <Button isIconOnly size="sm" variant="ghost" isDisabled={idx === 0} aria-label={`Move ${tileLabel(k)} up`} onPress={() => editor.update((x) => ({ ...x, railReadingsOrder: reorderRailList(rawReadingKeys, x.railReadingsOrder, k, -1) }))} className="size-7 min-w-0">
+                  <HugeiconsIcon icon={ArrowUp01Icon} size={14} />
+                </Button>
+                <Button isIconOnly size="sm" variant="ghost" isDisabled={idx === orderedAllReadings.length - 1} aria-label={`Move ${tileLabel(k)} down`} onPress={() => editor.update((x) => ({ ...x, railReadingsOrder: reorderRailList(rawReadingKeys, x.railReadingsOrder, k, 1) }))} className="size-7 min-w-0">
+                  <HugeiconsIcon icon={ArrowDown01Icon} size={14} />
+                </Button>
+                {onEditTile ? (
+                  <Button isIconOnly size="sm" variant="ghost" aria-label={`Edit ${tileLabel(k)}`} onPress={() => onEditTile(k)} className="size-7 min-w-0">
+                    <HugeiconsIcon icon={PencilEdit01Icon} size={14} />
+                  </Button>
+                ) : null}
+                <Button isIconOnly size="sm" variant="ghost" aria-label={isHidden ? `Show ${tileLabel(k)}` : `Hide ${tileLabel(k)}`} onPress={() => editor.update((x) => (isHidden ? show(x, k) : hide(x, k)))} className="size-7 min-w-0">
+                  <HugeiconsIcon icon={isHidden ? ViewIcon : ViewOffSlashIcon} size={14} />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </section>
+  ) : null;
+
   // Its own container: the columns follow the grid's width, not the page's (the rail takes some).
   const grid = (
     <div className="@container min-w-0 flex-1">
       {!room.items.length ? <EmptyRoom room={room.name} href={room.haUrl} /> : null}
-      {room.items.length && !sections.length ? <p className="px-1 py-6 text-sm text-muted">Only readings here: they're all on the {phone ? 'top' : 'left'}.</p> : null}
+      {room.items.length && !sections.length && !editor.editing ? <p className="px-1 py-6 text-sm text-muted">Only readings here: they're all on the {phone ? 'top' : 'left'}.</p> : null}
       {editor.editing && editPanel ? <div className="mb-4">{editPanel}</div> : null}
-      <HiddenTray editor={editor} name={nameOf(props)} />
+      {editor.editing && (onAddSection || onOpenEntities) ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {onAddSection ? (
+            <Button size="sm" variant="secondary" onPress={onAddSection} className="h-8 gap-1.5 rounded-full px-3 text-xs">
+              <HugeiconsIcon icon={PlusSignIcon} size={14} />
+              New section
+            </Button>
+          ) : null}
+          {onOpenEntities ? (
+            <Button size="sm" variant="secondary" onPress={onOpenEntities} className="h-8 gap-1.5 rounded-full px-3 text-xs">
+              <HugeiconsIcon icon={PlusSignIcon} size={14} />
+              Add / manage entities
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      <HiddenTray editor={editor} name={tileLabel} />
       {editor.editing && editExtras ? <div className="mb-5">{editExtras}</div> : null}
+      {editRailCard}
       {views && editor.editing ? <PinnedSection props={props} editor={editor} /> : null}
       {sections.map((s, i) => {
         const models = s.keys.map(model);
         const anyOn = s.id === 'lights' && models.some((m) => m.isOn && m.available);
+        const secTitle = roomSectionTitle(l, s.id);
+        const customSec = isCustomRoomSection(l, s.id);
         return (
-          <section key={s.id} data-section={s.id} aria-label={SECTION_TITLE[s.id]} className={cn('mb-6', phone ? 'scroll-mt-14' : 'scroll-mt-4')}>
+          <section key={s.id} data-section={s.id} aria-label={secTitle} className={cn('mb-6', phone ? 'scroll-mt-14' : 'scroll-mt-4')}>
             <SectionHeading
               id={s.id}
-              title={SECTION_TITLE[s.id]}
+              title={secTitle}
               summary={sectionSummary(s.id, models)}
               editor={editor}
               index={i}
               count={sections.length}
+              isCustom={customSec}
+              onRename={customSec && onRenameSection ? () => onRenameSection(s.id) : undefined}
+              onDelete={customSec ? () => editor.update((x) => deleteRoomSection(x, s.id, room.items)) : undefined}
               action={
                 anyOn ? (
                   <Button size="sm" variant="secondary" onPress={() => lightsOff(props, s.keys)} className="h-8 rounded-full px-3 text-xs">
@@ -119,7 +236,27 @@ export default function PageRail({ views = false, editor, view: viewProp, onView
                 ) : undefined
               }
             />
-            <RoomGrid keys={s.keys} sizeOf={(k) => l.sizes[k]} renderTile={renderTile} editing={editor.editing ? gridEditing(editor, nameOf(props), views) : undefined} />
+            {s.keys.length === 0 && editor.editing ? (
+              <div className="flex min-h-20 items-center justify-center rounded-2xl border border-dashed border-[color-mix(in_srgb,currentColor_18%,transparent)] p-4 text-center text-xs text-muted">
+                Empty section — open any tile’s “⋯” menu and choose Move to section.
+              </div>
+            ) : (
+              <RoomGrid
+                keys={s.keys}
+                sizeOf={(k) => l.sizes[k]}
+                renderTile={renderTile}
+                editing={
+                  editor.editing
+                    ? gridEditing(editor, tileLabel, views, {
+                        items: room.items,
+                        sections: sectionChoices,
+                        currentSection: s.id,
+                        onEditTile
+                      })
+                    : undefined
+                }
+              />
+            )}
           </section>
         );
       })}

@@ -11,6 +11,8 @@ export type LayoutMode = 'auto' | 'custom';
 
 export type AreaPrimaryMetric = 'auto' | 'temperature' | 'humidity' | 'power' | 'air_quality' | 'none';
 
+export type EntityDisplayRole = 'auto' | 'light' | 'switch' | 'plug' | 'helper';
+
 export interface LayoutSharingConfig {
   shareLayoutsWithUsers: boolean;
 }
@@ -148,6 +150,7 @@ export interface UserDashboardConfig {
       primaryTempEntityId?: string | null;
       primaryHumidityEntityId?: string | null;
       quickActions?: string[] | null;
+      extraEntityIds?: string[] | null;
       order?: number;
     }>;
   };
@@ -155,7 +158,18 @@ export interface UserDashboardConfig {
     hiddenEntityIds?: string[];
     nameOverrides?: Record<string, string>;
     iconOverrides?: Record<string, string>;
-    customizations?: Record<string, { customName?: string; name?: string; customIcon?: string; icon?: string; hidden?: boolean }>;
+    customizations?: Record<
+      string,
+      {
+        customName?: string;
+        name?: string;
+        customIcon?: string;
+        icon?: string;
+        hidden?: boolean;
+        displayRole?: EntityDisplayRole | null;
+        confirmAction?: boolean | null;
+      }
+    >;
   };
   cameras: {
     defaultStreamType: 'auto' | 'live' | 'snapshot';

@@ -18,29 +18,29 @@ import {
   normalizeDeviceLayout,
   showWidget,
   toggleSectionCollapsed,
+  type AnyOverviewSectionId,
   type DeviceLayout,
   type DeviceType,
   type LayoutWidgetInfo
 } from '../lib/overviewLayout';
 import { canRedo as canRedoHistory, canUndo as canUndoHistory } from '../lib/draftHistory';
-import type { OverviewSectionId } from '../lib/overviewSections';
 import { useOverviewLayoutDraft } from '../store/useOverviewLayoutDraft';
 import { useLayoutScope } from './useLayoutScope';
 
 const COLLAPSED_KEY = (device: DeviceType) => `had.pro.overview.collapsed.${device}`;
 
-function readLocalCollapsed(device: DeviceType): OverviewSectionId[] | null {
+function readLocalCollapsed(device: DeviceType): AnyOverviewSectionId[] | null {
   try {
     const raw = window.localStorage.getItem(COLLAPSED_KEY(device));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as OverviewSectionId[]) : null;
+    return Array.isArray(parsed) ? (parsed as AnyOverviewSectionId[]) : null;
   } catch {
     return null;
   }
 }
 
-function writeLocalCollapsed(device: DeviceType, collapsed: OverviewSectionId[]) {
+function writeLocalCollapsed(device: DeviceType, collapsed: AnyOverviewSectionId[]) {
   try {
     window.localStorage.setItem(COLLAPSED_KEY(device), JSON.stringify(collapsed));
   } catch {}
@@ -68,7 +68,7 @@ export interface OverviewLayoutApi {
   /** Switches this device layout back to dynamic Auto mode and clears its override. */
   resetToAuto: () => Promise<void>;
   /** Collapse in view mode stays device-local; in edit mode it updates the saved default collapsed list. */
-  toggleCollapsed: (section: OverviewSectionId) => void;
+  toggleCollapsed: (section: AnyOverviewSectionId) => void;
 }
 
 export function useOverviewLayout(
@@ -206,7 +206,7 @@ export function useOverviewLayout(
   }, [device, saveScopedPrefs, end]);
 
   const toggleCollapsed = useCallback(
-    (section: OverviewSectionId) => {
+    (section: AnyOverviewSectionId) => {
       if (isEditing) {
         update((l) => toggleSectionCollapsed(l, section));
       } else {

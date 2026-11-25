@@ -1,19 +1,26 @@
 /**
- * One grid of Area tiles (batch 6). View mode: a plain half-row CSS grid (68 px rows, 12 px gaps,
- * 2 / 4 / 6 columns by width), nothing measured. Edit mode: tiles go quiet (inert) under a frame
- * with a drag handle and a "⋯" menu (size, move earlier / later, pin, hide), like the Overview's
- * cards. Dragging reorders live inside the grid; the keyboard can do the same from the handle
- * (Space, arrows, Space) or the menu.
+ * One grid of Area tiles (batch 6 + Phase 2 TouchSensor, Edit Tile, & Move-to-Section).
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { Button, Dropdown, Header, Label } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, ArrowRight01Icon, DragDropVerticalIcon, MoreHorizontalIcon, PinIcon, PinOffIcon, Tick02Icon, ViewOffSlashIcon } from '@hugeicons/core-free-icons';
+import {
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  DragDropVerticalIcon,
+  MoreHorizontalIcon,
+  PencilEdit01Icon,
+  PinIcon,
+  PinOffIcon,
+  Tick02Icon,
+  ViewOffSlashIcon
+} from '@hugeicons/core-free-icons';
 import { useUserConfig } from '@/contexts/ConfigContext';
 import { cn } from '@/lib/utils';
 import { TILE_SIZE_LABEL, TILE_SIZES, type TileSize } from '../tileTypes';
+import type { SectionId } from './roomLayout';
 
 export const SPAN: Record<TileSize, string> = { xs: 'col-span-1 row-span-1', s: 'col-span-1 row-span-2', w: 'col-span-2 row-span-2', t: 'col-span-1 row-span-4', l: 'col-span-2 row-span-4' };
 const CELLS: Record<TileSize, string> = { xs: '1×½', s: '1×1', w: '2×1', t: '1×2', l: '2×2' };
@@ -28,6 +35,11 @@ export interface GridEditing {
   /** Concept C only: pin to the top. */
   pinned?: (key: string) => boolean;
   onPin?: (key: string) => void;
+  /** Phase 2.3/2.4: Move tile across sections and open per-tile Editor sheet. */
+  sections?: readonly { id: SectionId; title: string }[];
+  currentSection?: SectionId;
+  onMoveToSection?: (key: string, target: SectionId) => void;
+  onEditTile?: (key: string) => void;
 }
 
 interface RoomGridProps {
@@ -57,7 +69,11 @@ export function RoomGrid({ keys, sizeOf, renderTile, editing, className }: RoomG
 function EditGrid({ keys, sizeOf, renderTile, editing, className }: RoomGridProps & { editing: GridEditing }) {
   const { setDragActive } = useUserConfig();
   const [active, setActive] = useState<string | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
   useEffect(() => () => setDragActive?.(false), [setDragActive]);
   return (
     <DndContext
@@ -104,7 +120,6 @@ function EditCell({ id, size, first, last, editing, dragging, children }: { id: 
         {children}
       </div>
       <div className="pointer-events-none absolute inset-0 rounded-[26px] ring-2 ring-inset ring-[color-mix(in_srgb,var(--accent)_55%,transparent)] [background:color-mix(in_srgb,var(--accent)_6%,transparent)]" />
-      {/* The controls sit on the corners, half outside the tile, so the tile's own text stays readable. */}
       <div className="absolute -inset-x-2 -top-2 z-10 flex items-center justify-between">
         <span
           {...attributes}
@@ -122,17 +137,20 @@ function EditCell({ id, size, first, last, editing, dragging, children }: { id: 
 
 function TileEditMenu({ id, name, size, first, last, editing }: { id: string; name: string; size: TileSize; first: boolean; last: boolean; editing: GridEditing }) {
   const pinned = editing.pinned?.(id) ?? false;
+  const otherSections = (editing.sections ?? []).filter((s) => s.id !== editing.currentSection);
   return (
     <Dropdown>
       <Button isIconOnly size="sm" variant="secondary" aria-label={`Edit ${name}: ${TILE_SIZE_LABEL[size]}`} className="size-8 min-w-0 rounded-full bg-[var(--surface)] shadow-md ring-1 ring-black/10 dark:ring-white/10">
         <HugeiconsIcon icon={MoreHorizontalIcon} size={17} />
       </Button>
-      <Dropdown.Popover placement="bottom end">
+      <Dropdown.Popover placement="bottom end" className="max-h-[65dvh] overflow-y-auto">
         <Dropdown.Menu
           aria-label={`Edit ${name}`}
           onAction={(key) => {
             const k = String(key);
             if (k.startsWith('size:')) editing.onSize(id, k.slice(5) as TileSize);
+            else if (k.startsWith('move:')) editing.onMoveToSection?.(id, k.slice(5) as SectionId);
+            else if (k === 'editTile') editing.onEditTile?.(id);
             else if (k === 'earlier') editing.onMoveBy(id, -1);
             else if (k === 'later') editing.onMoveBy(id, 1);
             else if (k === 'pin') editing.onPin?.(id);
@@ -159,6 +177,12 @@ function TileEditMenu({ id, name, size, first, last, editing }: { id: string; na
               <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="shrink-0" />
               <Label>Move later</Label>
             </Dropdown.Item>
+            {editing.onEditTile ? (
+              <Dropdown.Item id="editTile" textValue="Edit tile">
+                <HugeiconsIcon icon={PencilEdit01Icon} size={16} className="shrink-0" />
+                <Label>Edit tile…</Label>
+              </Dropdown.Item>
+            ) : null}
             {editing.onPin ? (
               <Dropdown.Item id="pin" textValue={pinned ? 'Unpin' : 'Pin to the top'}>
                 <HugeiconsIcon icon={pinned ? PinOffIcon : PinIcon} size={16} className="shrink-0" />
@@ -170,6 +194,16 @@ function TileEditMenu({ id, name, size, first, last, editing }: { id: string; na
               <Label>Hide</Label>
             </Dropdown.Item>
           </Dropdown.Section>
+          {editing.onMoveToSection && otherSections.length > 0 ? (
+            <Dropdown.Section>
+              <Header>Move to section</Header>
+              {otherSections.map((sec) => (
+                <Dropdown.Item key={sec.id} id={`move:${sec.id}`} textValue={`Move to ${sec.title}`}>
+                  <Label>{sec.title}</Label>
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Section>
+          ) : null}
         </Dropdown.Menu>
       </Dropdown.Popover>
     </Dropdown>

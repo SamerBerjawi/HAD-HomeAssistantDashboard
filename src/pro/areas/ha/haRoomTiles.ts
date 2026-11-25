@@ -11,7 +11,8 @@
  * - The scene run last in the room, within the last two hours, counts as the one that holds.
  */
 import type { ResolvedArea, ResolvedEntity } from '@/types';
-import type { CarTileModel, TileModel, TileSize } from '../tileTypes';
+import type { UserDashboardConfig } from '@/types/userConfig';
+import type { CarTileModel, LightTileModel, TileModel, TileSize } from '../tileTypes';
 import { SECTION_ORDER, sectionOf, type Device, type RoomItem } from '../page/roomLayout';
 import { carModel, carParts, type CarTargets } from './haCar';
 import { toTileModel, type MapContext, type TileHistory } from './haTileModels';
@@ -30,6 +31,10 @@ export interface AreaTileOptions {
   history?: TileHistory;
   picture?: MapContext['picture'];
   tempUnit?: string;
+  /** Explicitly included diagnostic/helper/script or cross-room entities (bypasses auto skip). */
+  extraEntities?: readonly ResolvedEntity[];
+  /** Per-entity customization overrides (`entities.customizations`). */
+  entityCustomizations?: UserDashboardConfig['entities']['customizations'];
 }
 
 /** Default size per kind, phone and wider screens (the owner changes them in Customize). */
@@ -84,12 +89,68 @@ function carFocuses(c: CarTileModel): CarTileModel['focus'][] {
 /** A tile's name in menus and the Hidden tray: a car entity tile says which entity. */
 export const areaTileName = (t: Pick<AreaTile, 'model' | 'focus'>) => (t.focus ? `${t.model.name} · ${CAR_FOCUS_NAME[t.focus]}` : t.model.name);
 
+export function applyEntityCustomization(
+  model: TileModel,
+  custom?: NonNullable<UserDashboardConfig['entities']['customizations']>[string]
+): TileModel {
+  if (!custom) return model;
+  let next: TileModel = model;
+  const customName = custom.customName || custom.name;
+  if (customName) {
+    next = { ...next, name: customName };
+  }
+  if (next.kind === 'switch') {
+    if (custom.displayRole === 'light') {
+      const asLight: LightTileModel = {
+        kind: 'light',
+        entityId: next.entityId,
+        name: next.name,
+        available: next.available,
+        isOn: next.isOn,
+        lastChanged: next.lastChanged,
+        brightness: null,
+        dimmable: false,
+        kelvin: null,
+        minKelvin: 2000,
+        maxKelvin: 6500,
+        supportsTemp: false,
+        rgb: null,
+        supportsColor: false,
+        effect: null
+      };
+      return asLight;
+    }
+    if (custom.displayRole === 'plug' || custom.displayRole === 'switch' || custom.displayRole === 'helper') {
+      return { ...next, role: custom.displayRole };
+    }
+  }
+  return next;
+}
+
 export function buildAreaTiles(area: ResolvedArea, opts: AreaTileOptions = {}): AreaTile[] {
   const now = opts.now ?? Date.now();
-  const entities = (area.entities ?? []).filter((e) => !skip(e));
+  const baseEntities = (area.entities ?? []).filter((e) => !skip(e));
+  const seenEntityIds = new Set(baseEntities.map((e) => e.entity_id));
+  const extraSet = new Set<string>();
+  const entities: ResolvedEntity[] = [...baseEntities];
+  for (const extra of opts.extraEntities ?? []) {
+    extraSet.add(extra.entity_id);
+    if (!seenEntityIds.has(extra.entity_id)) {
+      seenEntityIds.add(extra.entity_id);
+      entities.push(extra);
+    }
+  }
   const byDevice = new Map<string, ResolvedEntity[]>();
   for (const e of entities) if (e.device_id) byDevice.set(e.device_id, [...(byDevice.get(e.device_id) ?? []), e]);
-  const ctxFor = (e: ResolvedEntity): MapContext => ({ room: area.name, now, siblings: e.device_id ? (byDevice.get(e.device_id) ?? []).filter((x) => x !== e) : [], history: opts.history, picture: opts.picture, tempUnit: opts.tempUnit });
+  const ctxFor = (e: ResolvedEntity): MapContext => ({
+    room: area.name,
+    now,
+    siblings: e.device_id ? (byDevice.get(e.device_id) ?? []).filter((x) => x !== e) : [],
+    history: opts.history,
+    picture: opts.picture,
+    tempUnit: opts.tempUnit,
+    forceInclude: extraSet.has(e.entity_id)
+  });
 
   const tiles: AreaTile[] = [];
   const taken = new Set<string>();
@@ -113,9 +174,10 @@ export function buildAreaTiles(area: ResolvedArea, opts: AreaTileOptions = {}): 
 
   for (const e of entities) {
     if (taken.has(e.entity_id)) continue;
-    if (e.domain === 'sensor' && e.device_id && (byDevice.get(e.device_id) ?? []).some((x) => OWNS_READINGS.has(x.domain))) continue;
-    const model = toTileModel(e, ctxFor(e));
-    if (!model) continue;
+    if (!extraSet.has(e.entity_id) && e.domain === 'sensor' && e.device_id && (byDevice.get(e.device_id) ?? []).some((x) => OWNS_READINGS.has(x.domain))) continue;
+    const rawModel = toTileModel(e, ctxFor(e));
+    if (!rawModel) continue;
+    const model = applyEntityCustomization(rawModel, opts.entityCustomizations?.[e.entity_id]);
     tiles.push({ key: e.entity_id, entityId: e.entity_id, section: sectionOf(model.kind), size: defaultSize(model), model });
   }
 

@@ -35,6 +35,11 @@ describe('Overview shell: tabs', () => {
     expect(resolveShellTab('vacuums', tabs)).toBe('all');
     expect(resolveShellTab(null, tabs)).toBe('all');
   });
+  it('uses custom section titles when sectionLabels is passed', () => {
+    const withCustom = [{ section: 'custom:morning', items: [{ i: 'lights' }] }, ...sections];
+    const tabs = buildShellTabs(withCustom, status, { 'custom:morning': 'Morning Routine' });
+    expect(tabs[1]).toEqual({ id: 'custom:morning', label: 'Morning Routine', count: 8, tone: null });
+  });
 });
 
 describe('Overview shell: attention pills', () => {

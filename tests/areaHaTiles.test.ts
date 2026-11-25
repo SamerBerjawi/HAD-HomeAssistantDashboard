@@ -186,4 +186,26 @@ describe('room → tiles', () => {
   it('gives an empty room no tiles', () => {
     expect(buildAreaTiles(area([]), { now: NOW })).toEqual([]);
   });
+
+  it('builds script/button tiles, includes extraEntities bypassing auto skip, and applies entityCustomizations', () => {
+    const scriptEnt = ent('script.goodnight', 'off', { friendly_name: 'Goodnight' });
+    const buttonEnt = ent('button.doorbell', 'unknown', { friendly_name: 'Chime' });
+    const diagSensor = ent('sensor.wifi_rssi', '-58', { device_class: 'signal_strength', unit_of_measurement: 'dBm' }, { isDiagnostic: true });
+    const lampPlug = ent('switch.floor_lamp', 'on', { friendly_name: 'Floor Lamp' });
+
+    const tiles = buildAreaTiles(area([lampPlug, diagSensor]), {
+      now: NOW,
+      extraEntities: [diagSensor, scriptEnt, buttonEnt],
+      entityCustomizations: {
+        'switch.floor_lamp': { customName: 'Reading Lamp', displayRole: 'light' }
+      }
+    });
+
+    const lampTile = tiles.find((t) => t.key === 'switch.floor_lamp');
+    expect(lampTile?.section).toBe('lights');
+    expect(lampTile?.model).toMatchObject({ kind: 'light', name: 'Reading Lamp', isOn: true });
+    expect(tiles.find((t) => t.key === 'sensor.wifi_rssi')?.model).toMatchObject({ kind: 'reading', value: -58, unit: 'dBm' });
+    expect(tiles.find((t) => t.key === 'script.goodnight')?.model.kind).toBe('scene');
+    expect(tiles.find((t) => t.key === 'button.doorbell')?.model.kind).toBe('scene');
+  });
 });

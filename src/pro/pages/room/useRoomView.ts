@@ -1,6 +1,6 @@
 /**
- * The room page's view (All or Now), remembered per screen and device class in localStorage: a
- * convenience for this screen, not part of the shared layout.
+ * The room page's view (All or Now), respecting per-room configured default (`roomDefaultViews[areaId]`)
+ * with device-local fallback in `localStorage`.
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { Device } from '../../areas/page/roomLayout';
@@ -8,7 +8,7 @@ import type { RoomView } from '../../areas/page/PageRail';
 
 const key = (device: Device) => `had.pro.room.view.${device}`;
 
-function read(device: Device): RoomView {
+function readLocal(device: Device): RoomView {
   try {
     return window.localStorage.getItem(key(device)) === 'now' ? 'now' : 'all';
   } catch {
@@ -16,9 +16,21 @@ function read(device: Device): RoomView {
   }
 }
 
-export function useRoomView(device: Device): [RoomView, (v: RoomView) => void] {
-  const [view, setViewState] = useState<RoomView>(() => read(device));
-  useEffect(() => setViewState(read(device)), [device]);
+export function useRoomView(
+  device: Device,
+  areaId?: string,
+  defaultView?: 'all' | 'now' | null
+): [RoomView, (v: RoomView) => void] {
+  const resolveInitial = useCallback(
+    () => (defaultView === 'all' || defaultView === 'now' ? defaultView : readLocal(device)),
+    [defaultView, device]
+  );
+
+  const [view, setViewState] = useState<RoomView>(resolveInitial);
+  useEffect(() => {
+    setViewState(resolveInitial());
+  }, [resolveInitial, areaId]);
+
   const setView = useCallback(
     (v: RoomView) => {
       try {
@@ -30,5 +42,6 @@ export function useRoomView(device: Device): [RoomView, (v: RoomView) => void] {
     },
     [device]
   );
+
   return [view, setView];
 }

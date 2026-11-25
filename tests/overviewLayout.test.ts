@@ -1,15 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_USER_CONFIG, type UserDashboardConfig } from '@/types/userConfig';
 import {
+  allPinnedCardIds,
   appendToFlow,
   buildDefaultDeviceLayout,
   copyDeviceLayout,
+  createOverviewSection,
+  deleteOverviewSection,
   deviceLayoutPatch,
   deviceLayoutResetPatch,
   flowPlacements,
   moveInFlow,
+  moveWidgetToSection,
+  pinCardToSection,
   readingOrder,
+  removePinnedCard,
+  renameOverviewSection,
   resizeInFlow,
+  sectionVisibilityOf,
+  setSectionVisibility,
   cellsFor,
   deviceTypeForWidth,
   getDeviceLayout,
@@ -17,6 +26,7 @@ import {
   normalizeDeviceLayout,
   packPlacements,
   snapToAllowedSize,
+  updateOverviewHeader,
   withDeviceLayout,
   withoutDeviceLayout,
   type LayoutWidgetInfo
@@ -198,5 +208,34 @@ describe('overviewLayout', () => {
     const patch = deviceLayoutPatch('phone', copiedToPhone);
     expect(patch.preferences?.proOverviewLayout).toMatchObject({ version: 1, phone: copiedToPhone });
     expect(deviceLayoutResetPatch('phone').preferences?.proOverviewLayout).toEqual({ phone: null });
+  });
+
+  it('creates, renames, deletes custom sections, moves widgets across sections, pins cards, and persists visibility/header prefs', () => {
+    let layout = buildDefaultDeviceLayout(WIDGETS, 'desktop');
+    const created = createOverviewSection(layout, 'Quick Controls');
+    layout = created.layout;
+    expect(layout.sectionOrder[0]).toBe(created.id);
+
+    layout = renameOverviewSection(layout, created.id, 'Morning');
+    layout = moveWidgetToSection(layout, 'lights', 'lights', created.id, 6, WIDGETS);
+    layout = pinCardToSection(layout, 'entity:light.hall', created.id, 6);
+    layout = setSectionVisibility(layout, created.id, 'tab_only');
+    layout = updateOverviewHeader(layout, { showAttentionPills: false, defaultTab: created.id });
+
+    const normalized = normalizeDeviceLayout(layout, WIDGETS, 'desktop');
+    expect(normalized.customSections).toEqual([{ id: created.id, title: 'Morning' }]);
+    expect(normalized.items[created.id]?.map((p) => p.i)).toEqual(['lights', 'entity:light.hall']);
+    expect(normalized.items.lights).toBeUndefined();
+    expect(allPinnedCardIds(normalized)).toEqual(['entity:light.hall']);
+    expect(sectionVisibilityOf(normalized, created.id)).toBe('tab_only');
+    expect(normalized.header).toEqual({ showAttentionPills: false, defaultTab: created.id });
+
+    const removedPin = removePinnedCard(normalized, 'entity:light.hall', created.id, 6);
+    expect(allPinnedCardIds(removedPin)).toEqual([]);
+
+    const deleted = deleteOverviewSection(removedPin, created.id, WIDGETS, 6);
+    expect(deleted.customSections).toBeUndefined();
+    expect(deleted.items[created.id]).toBeUndefined();
+    expect(deleted.items.lights?.map((p) => p.i)).toEqual(['lights']);
   });
 });

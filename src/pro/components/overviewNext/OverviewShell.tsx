@@ -1,14 +1,5 @@
 /**
- * Overview page shell (rebuild, Phase 4), around the layout engine:
- *
- * - Attention pills: only what needs attention, from each widget's `attention()`; tap = details.
- *   With nothing to show, one quiet "Nothing needs attention" line instead.
- * - Tabs: "All" plus one per section on the page, with counts from each widget's `count()`; a
- *   tab shows only its section, full width; the choice is in the URL (`?tab=`). Editing is
- *   always on "All" (sections are reordered there).
- * - Empty state: a page with no widgets says so and offers Add widgets / Restore the default.
- * - Demo mode: a quiet note that changes stay on this screen (actions work through the demo
- *   simulator in `useServiceCall`).
+ * Overview shell (rebuild, Phase 4 + Phase 2 custom sections, visibility rules & header options).
  */
 import { useCallback, useMemo, type ReactNode } from 'react';
 import { Button } from '@heroui/react';
@@ -18,8 +9,14 @@ import { haWebSocketService } from '@/services/haWebSocket';
 import type { OverviewLayoutApi } from '../../hooks/useOverviewLayout';
 import { useOverviewTab } from '../../hooks/useOverviewTab';
 import { useOpenSheet } from '../../hooks/useSheetParam';
-import { visibleSections } from '../../lib/overviewLayout';
-import type { OverviewSectionId } from '../../lib/overviewSections';
+import {
+  editableSections,
+  isPinnedCardId,
+  sectionTitleOf,
+  sectionVisibilityOf,
+  visibleSections,
+  type AnyOverviewSectionId
+} from '../../lib/overviewLayout';
 import { resolveShellTabId, sectionShowsCards, type ShellPill, type ShellTabId } from '../../lib/overviewShell';
 import { OverviewEngine } from './OverviewEngine';
 import { ShellStatusBar } from './ShellStatusBar';
@@ -31,6 +28,7 @@ interface OverviewShellProps {
   api: OverviewLayoutApi;
   cols: number;
   onAddWidgets: () => void;
+  onRenameSection?: (sectionId: AnyOverviewSectionId) => void;
   /** Customize, beside the tabs (view mode). */
   toolbar?: ReactNode;
 }
@@ -43,7 +41,9 @@ function EmptyOverview({ isEditing, onAdd, onRestore }: { isEditing: boolean; on
       </span>
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">Nothing on your Overview</h2>
-        <p className="max-w-sm text-sm text-muted">{isEditing ? 'Add the widgets you want here, then Save.' : 'Every widget is hidden. Add some back, or start again from the default layout.'}</p>
+        <p className="max-w-sm text-sm text-muted">
+          {isEditing ? 'Add the widgets or entities you want here, then Save.' : 'Every widget is hidden. Add some back, or start again from the default layout.'}
+        </p>
       </div>
       <div className="flex flex-wrap justify-center gap-2">
         <Button size="sm" variant="primary" onPress={onAdd}>
@@ -61,7 +61,7 @@ function EmptyOverview({ isEditing, onAdd, onRestore }: { isEditing: boolean; on
   );
 }
 
-export function OverviewShell({ widgets, api, cols, onAddWidgets, toolbar }: OverviewShellProps) {
+export function OverviewShell({ widgets, api, cols, onAddWidgets, onRenameSection, toolbar }: OverviewShellProps) {
   const open = useOpenSheet();
   const [askedTab, selectTab] = useOverviewTab();
   const byId = useMemo(() => new Map(widgets.map((w) => [w.id, w])), [widgets]);
@@ -70,19 +70,48 @@ export function OverviewShell({ widgets, api, cols, onAddWidgets, toolbar }: Ove
   const sections = useMemo(
     () =>
       visibleSections(api.layout)
-        .map((s) => ({ ...s, items: s.items.filter((p) => byId.has(p.i)) }))
-        .filter((s) => s.items.length > 0),
+        .map((s) => ({ ...s, items: s.items.filter((p) => byId.has(p.i) || isPinnedCardId(p.i)) }))
+        .filter((s) => s.items.length > 0 && sectionVisibilityOf(api.layout, s.section) !== 'hidden'),
     [api.layout, byId]
   );
-  const onPage = useMemo(() => sections.flatMap((s) => s.items.map((p) => byId.get(p.i)!)), [sections, byId]);
-  // The tab depends on which sections exist, not on their counts: the status lives in ShellStatusBar.
-  const tab: ShellTabId = api.isEditing ? 'all' : resolveShellTabId(askedTab, sections);
+
+  const sectionLabels = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const s of api.layout.sectionOrder) {
+      out[s] = sectionTitleOf(api.layout, s);
+    }
+    return out;
+  }, [api.layout]);
+
+  const editList = useMemo(
+    () =>
+      editableSections(api.layout).map((s) => ({
+        ...s,
+        items: s.items.filter((p) => byId.has(p.i) || isPinnedCardId(p.i))
+      })),
+    [api.layout, byId]
+  );
+
+  const onPage = useMemo(
+    () => sections.flatMap((s) => s.items.map((p) => byId.get(p.i)).filter((w): w is EngineWidget => Boolean(w))),
+    [sections, byId]
+  );
+
+  const defaultHeaderTab = api.layout.header?.defaultTab && api.layout.header.defaultTab !== 'all' ? api.layout.header.defaultTab : null;
+  const tab: ShellTabId = api.isEditing ? 'all' : resolveShellTabId(askedTab ?? defaultHeaderTab, sections);
   const watches = onPage.some((w) => w.attention);
-  // Cards on screen report their own status; probes cover the rest (other tabs, collapsed sections).
   const collapsed = api.layout.collapsed;
+
   const offScreen = useMemo(
-    () => sections.filter((s) => !sectionShowsCards(s.section, tab, collapsed)).flatMap((s) => s.items.map((p) => byId.get(p.i)!)),
-    [sections, tab, collapsed, byId]
+    () =>
+      sections
+        .filter((s) => {
+          const vis = sectionVisibilityOf(api.layout, s.section);
+          if (tab === 'all' && vis === 'tab_only') return true;
+          return !sectionShowsCards(s.section, tab, collapsed);
+        })
+        .flatMap((s) => s.items.map((p) => byId.get(p.i)).filter((w): w is EngineWidget => Boolean(w))),
+    [sections, api.layout, tab, collapsed, byId]
   );
 
   const activate = useCallback(
@@ -101,25 +130,37 @@ export function OverviewShell({ widgets, api, cols, onAddWidgets, toolbar }: Ove
     api.resetToDefault();
   };
 
+  const hasVisibleOrEditable = api.isEditing ? editList.length > 0 : sections.length > 0;
+
   return (
     <div className="flex flex-col gap-4">
       <WidgetProbes widgets={offScreen} />
       <ShellStatusBar
         sections={sections}
+        sectionLabels={sectionLabels}
         byId={byId}
         isEditing={api.isEditing}
         isDemo={isDemo}
         watches={watches}
+        showAttentionPills={api.layout.header?.showAttentionPills ?? true}
+        showTabs={api.layout.header?.showTabs ?? true}
         toolbar={toolbar}
         tab={tab}
         onSelectTab={selectTab}
         onActivate={activate}
       />
 
-      {sections.length === 0 ? (
+      {!hasVisibleOrEditable ? (
         <EmptyOverview isEditing={api.isEditing} onAdd={addWidgets} onRestore={restore} />
       ) : (
-        <OverviewEngine widgets={widgets} api={api} cols={cols} onlySection={tab === 'all' ? undefined : (tab as OverviewSectionId)} onOpenSection={selectTab} />
+        <OverviewEngine
+          widgets={widgets}
+          api={api}
+          cols={cols}
+          onlySection={tab === 'all' ? undefined : tab}
+          onOpenSection={selectTab}
+          onRenameSection={onRenameSection}
+        />
       )}
     </div>
   );

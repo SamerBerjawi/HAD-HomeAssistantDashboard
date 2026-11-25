@@ -31,6 +31,8 @@ export interface MapContext {
   picture?: (path: string) => string | null;
   /** The temperature unit of the HA instance. */
   tempUnit?: string;
+  /** True when the entity was explicitly added by the user (permits diagnostic/extra sensors). */
+  forceInclude?: boolean;
 }
 
 /** Binary sensor classes per tile type; sensor classes that make a room reading. */
@@ -374,6 +376,8 @@ export function toTileModel(e: ResolvedEntity, ctx: MapContext): TileModel | nul
     case 'media_player':
       return mediaModel(e, ctx);
     case 'scene':
+    case 'script':
+    case 'button':
       return sceneModel(e, ctx);
     case 'camera':
       return cameraModel(e, ctx);
@@ -385,10 +389,12 @@ export function toTileModel(e: ResolvedEntity, ctx: MapContext): TileModel | nul
       if (OPENING_CLASSES.has(cls)) return openingModel(e, ctx);
       if (MOTION_CLASSES.has(cls)) return motionModel(e, ctx);
       if (SAFETY_CLASSES.has(cls)) return safetyModel(e, ctx);
-      return null;
+      return ctx.forceInclude ? openingModel(e, ctx) : null;
     case 'sensor':
       // A reading with a number, or one that is unavailable (the tile says so); text states are skipped.
-      return READING_CLASSES.has(cls) && (num(e.state) !== null || e.state === 'unavailable') ? readingModel(e, ctx) : null;
+      return (READING_CLASSES.has(cls) || ctx.forceInclude) && (num(e.state) !== null || e.state === 'unavailable')
+        ? readingModel(e, ctx)
+        : null;
     default:
       return null;
   }

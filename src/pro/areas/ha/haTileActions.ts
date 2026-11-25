@@ -57,7 +57,8 @@ export function tileActionCalls(model: TileModel, a: TileAction, targets: CarTar
   const id = model.entityId;
   switch (model.kind) {
     case 'light': {
-      if (a.type === 'toggle') return one(call(id, 'light', 'toggle', {}, { state: model.isOn ? 'off' : 'on' }));
+      const entityDomain = id.split('.')[0] || 'light';
+      if (a.type === 'toggle') return one(call(id, entityDomain, 'toggle', {}, { state: model.isOn ? 'off' : 'on' }));
       if (a.type === 'brightness') {
         const pct = clamp(Math.round(a.pct), 1, 100);
         return one(call(id, 'light', 'turn_on', { brightness_pct: pct }, { state: 'on', attributes: { brightness: Math.round(pct * 2.55) } }));
@@ -136,9 +137,13 @@ export function tileActionCalls(model: TileModel, a: TileAction, targets: CarTar
       if (a.type === 'source') return one(call(id, 'media_player', 'select_source', { source: a.source }, { state: null, attributes: { source: a.source } }));
       return NONE;
     }
-    case 'scene':
+    case 'scene': {
+      if (a.type !== 'activate') return NONE;
+      if (id.startsWith('script.')) return one(call(id, 'script', 'turn_on', {}, { state: 'on' }), { isOn: true });
+      if (id.startsWith('button.')) return one(call(id, 'button', 'press', {}), { isOn: true });
       // Its state becomes the time it ran; that it holds is the page's to say.
-      return a.type === 'activate' ? one(call(id, 'scene', 'turn_on', {}, { state: new Date().toISOString() }), { isOn: true }) : NONE;
+      return one(call(id, 'scene', 'turn_on', {}, { state: new Date().toISOString() }), { isOn: true });
+    }
     case 'camera':
       // Live or still is a choice on the screen, not something HA keeps.
       return a.type === 'toggle' ? { calls: [], local: { live: !model.live } as Partial<TileModel> } : NONE;

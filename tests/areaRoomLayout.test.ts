@@ -1,5 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { areaLayoutPatch, areaLayoutResetPatch, copyRoomLayout, defaultLayout, flatOrder, hide, isDirty, moveBy, moveOnto, moveSection, readAreaLayout, reconcile, sectionOf, setSize, show, togglePin, visibleSections, withAreaLayout, type RoomItem } from '@/pro/areas/page/roomLayout';
+import {
+  applyRailOrder,
+  areaLayoutPatch,
+  areaLayoutResetPatch,
+  copyLayoutPatternToRoom,
+  copyRoomLayout,
+  createRoomSection,
+  defaultLayout,
+  deleteRoomSection,
+  flatOrder,
+  hide,
+  isDirty,
+  moveBy,
+  moveOnto,
+  moveSection,
+  moveTileToSection,
+  readAreaLayout,
+  reconcile,
+  renameRoomSection,
+  reorderRailList,
+  roomSectionTitle,
+  sectionOf,
+  setSize,
+  show,
+  togglePin,
+  visibleSections,
+  withAreaLayout,
+  type RoomItem
+} from '@/pro/areas/page/roomLayout';
 import { isActive, isAlert, roomFacts, roomSentence } from '@/pro/areas/page/roomSummary';
 import { LIGHT_STATES, MEDIA_STATES, OPENING_STATES, READING_STATES, SAFETY_STATES, LOCK_STATES } from '@/pro/areas/studio/areaStates';
 
@@ -110,6 +138,33 @@ describe('saved layouts', () => {
     expect(patch.preferences.proAreaLayouts).toEqual({ version: 1, kitchen: { tablet: wideLayout } });
     const resetPatch = areaLayoutResetPatch('kitchen', 'tablet') as any;
     expect(resetPatch.preferences.proAreaLayouts).toEqual({ kitchen: { tablet: null } });
+  });
+
+  it('supports custom room sections, cross-section moves, rail ordering, and copying patterns to another room', () => {
+    let l = defaultLayout(ITEMS, 'wide');
+    const created = createRoomSection(l, 'Desk');
+    l = created.layout;
+    expect(roomSectionTitle(l, created.id)).toBe('Desk');
+    l = renameRoomSection(l, created.id, 'Workstation');
+    expect(roomSectionTitle(l, created.id)).toBe('Workstation');
+
+    l = moveTileToSection(l, 'light.b', created.id, ITEMS);
+    l = { ...l, railScenesOrder: reorderRailList(['scene.a', 'scene.b'], undefined, 'scene.b', -1) };
+    expect(applyRailOrder(['scene.a', 'scene.b', 'scene.c'], l.railScenesOrder)).toEqual(['scene.b', 'scene.a', 'scene.c']);
+
+    const r = reconcile(l, ITEMS, 'wide');
+    expect(r.order[created.id]).toEqual(['light.b']);
+    expect(r.order.lights).toEqual(['light.a', 'light.c']);
+    expect(r.customSections).toEqual([{ id: created.id, title: 'Workstation' }]);
+
+    const targetItems = [item('light.x', 'lights'), item('lock.x', 'security')];
+    const copied = copyLayoutPatternToRoom(r, targetItems, 'wide');
+    expect(copied.customSections).toEqual([{ id: created.id, title: 'Workstation' }]);
+    expect(copied.order.lights).toEqual(['light.x']);
+
+    const afterDelete = deleteRoomSection(r, created.id, ITEMS);
+    expect(afterDelete.customSections).toBeUndefined();
+    expect(afterDelete.order.lights).toContain('light.b');
   });
 });
 

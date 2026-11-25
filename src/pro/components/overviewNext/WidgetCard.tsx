@@ -6,8 +6,7 @@ import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { cn } from '@/lib/utils';
 import { usePauseOffscreen } from '../../hooks/usePauseOffscreen';
 import { useReportWidgetStatus } from '../../hooks/useWidgetStatus';
-import type { WidgetSize } from '../../lib/overviewLayout';
-import type { OverviewSectionId } from '../../lib/overviewSections';
+import type { AnyOverviewSectionId, WidgetSize } from '../../lib/overviewLayout';
 import { resolveDesign, type WidgetDefinition } from '../../widgets/types';
 import { WidgetCardMenu } from './WidgetCardMenu';
 
@@ -19,15 +18,17 @@ export type EngineWidget = WidgetDefinition<never>;
  */
 export interface CardActions {
   open: (id: string) => void;
-  setSize: (section: OverviewSectionId, id: string, size: WidgetSize, span: number) => void;
-  move: (section: OverviewSectionId, id: string, dir: -1 | 1, span: number) => void;
+  setSize: (section: AnyOverviewSectionId, id: string, size: WidgetSize, span: number) => void;
+  move: (section: AnyOverviewSectionId, id: string, dir: -1 | 1, span: number) => void;
   hide: (widget: EngineWidget, span: number) => void;
   setDesign: (id: string, design: string) => void;
+  moveToSection: (id: string, fromSection: AnyOverviewSectionId, toSection: AnyOverviewSectionId) => void;
 }
 
 export interface WidgetCardProps {
   widget: EngineWidget;
-  section: OverviewSectionId;
+  section: AnyOverviewSectionId;
+  sections?: readonly { id: string; title: string }[];
   /** Columns of the section's grid (resizing and moving re-flow within it). */
   span: number;
   size: WidgetSize;
@@ -49,6 +50,9 @@ interface CardChromeProps {
   onSetSize: (size: WidgetSize) => void;
   onMove: (dir: -1 | 1) => void;
   onHide: () => void;
+  sections?: readonly { id: string; title: string }[];
+  currentSection?: string;
+  onMoveToSection?: (sectionId: string) => void;
   /** Stored style for widgets that offer several. */
   design?: string;
   onSetDesign?: (design: string) => void;
@@ -64,13 +68,14 @@ interface CardChromeProps {
  * for its own model, size, style or edit state, not when another part of the page changes. Its
  * looping animations pause while it is scrolled out of view.
  */
-export const WidgetCard = memo(function WidgetCard({ widget, section, span, size, isEditing, canMoveEarlier, canMoveLater, design, actions }: WidgetCardProps) {
+export const WidgetCard = memo(function WidgetCard({ widget, section, sections, span, size, isEditing, canMoveEarlier, canMoveLater, design, actions }: WidgetCardProps) {
   const id = widget.id;
   const onOpen = useCallback(() => actions.open(id), [actions, id]);
   const onSetSize = useCallback((next: WidgetSize) => actions.setSize(section, id, next, span), [actions, section, id, span]);
   const onMove = useCallback((dir: -1 | 1) => actions.move(section, id, dir, span), [actions, section, id, span]);
   const onHide = useCallback(() => actions.hide(widget, span), [actions, widget, span]);
   const onSetDesign = useCallback((style: string) => actions.setDesign(id, style), [actions, id]);
+  const onMoveToSection = useCallback((toSection: string) => actions.moveToSection(id, section, toSection), [actions, id, section]);
   const pauseRef = usePauseOffscreen<HTMLDivElement>();
   return (
     <div ref={pauseRef} className="h-full min-h-0">
@@ -85,6 +90,9 @@ export const WidgetCard = memo(function WidgetCard({ widget, section, span, size
           onSetSize={onSetSize}
           onMove={onMove}
           onHide={onHide}
+          sections={sections}
+          currentSection={section}
+          onMoveToSection={onMoveToSection}
           design={design}
           onSetDesign={onSetDesign}
         />
@@ -95,7 +103,7 @@ export const WidgetCard = memo(function WidgetCard({ widget, section, span, size
 
 const DRAG_HANDLE = 'pro-drag-handle pro-touch-44 grid size-8 shrink-0 cursor-grab place-items-center rounded-lg active:cursor-grabbing';
 
-function DragHandle({ className }: { className?: string }) {
+export function DragHandle({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
@@ -134,6 +142,9 @@ function DesignedCard({
   onSetSize,
   onMove,
   onHide,
+  sections,
+  currentSection,
+  onMoveToSection,
   onSetDesign,
   DesignBody,
   designId,
@@ -162,6 +173,9 @@ function DesignedCard({
             onSetDesign={onSetDesign}
             onMove={onMove}
             onHide={onHide}
+            sections={sections}
+            currentSection={currentSection}
+            onMoveToSection={onMoveToSection}
           />
         </div>
       ) : null}
@@ -169,7 +183,7 @@ function DesignedCard({
   );
 }
 
-function StandardCard({ widget, model, size, isEditing, canMoveEarlier, canMoveLater, onOpen, onSetSize, onMove, onHide }: CardChromeProps & WithModel) {
+function StandardCard({ widget, model, size, isEditing, canMoveEarlier, canMoveLater, onOpen, onSetSize, onMove, onHide, sections, currentSection, onMoveToSection }: CardChromeProps & WithModel) {
   const Body = widget.Body;
   const subtitle = widget.subtitle?.(model);
   const canOpen = Boolean(widget.Sheet) && !isEditing;
@@ -211,7 +225,19 @@ function StandardCard({ widget, model, size, isEditing, canMoveEarlier, canMoveL
           <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-1.5">{heading}</div>
         )}
         {isEditing ? (
-          <WidgetCardMenu title={widget.title} size={size} sizes={widget.sizes} canMoveEarlier={canMoveEarlier} canMoveLater={canMoveLater} onSetSize={onSetSize} onMove={onMove} onHide={onHide} />
+          <WidgetCardMenu
+            title={widget.title}
+            size={size}
+            sizes={widget.sizes}
+            canMoveEarlier={canMoveEarlier}
+            canMoveLater={canMoveLater}
+            onSetSize={onSetSize}
+            onMove={onMove}
+            onHide={onHide}
+            sections={sections}
+            currentSection={currentSection}
+            onMoveToSection={onMoveToSection}
+          />
         ) : null}
       </header>
       {isEditing ? <p className="relative z-[1] -mt-1 truncate px-1.5 text-sm font-semibold leading-tight">{widget.title}</p> : null}

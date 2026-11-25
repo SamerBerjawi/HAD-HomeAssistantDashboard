@@ -1,12 +1,12 @@
 /**
- * One room's page (docs/pro-ui/AREA_TILES.md, batch 6 "B + C"; Area page build, phase 4 + Phase 0):
- * the Rail frame with All / Now views, unified 3-tier device layouts (`phone` | `tablet` | `desktop`),
- * non-destructive cross-device editing, Auto vs. Custom mode, and Admin shared vs. personal layouts.
+ * One room's page (docs/pro-ui/AREA_TILES.md + Phase 0 + Phase 1 + Phase 2):
+ * Rail frame with All / Now views, custom & auto sections, editable Scenes/Readings rail,
+ * entity picker, per-tile editor, tap safety confirmation, and pattern copy across rooms.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button } from '@heroui/react';
+import { Button, Dropdown, InputGroup, Label, Modal, TextField } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, Settings01Icon } from '@hugeicons/core-free-icons';
+import { ArrowLeft01Icon, Copy01Icon, Settings01Icon } from '@hugeicons/core-free-icons';
 import { useUserConfig } from '@/contexts/ConfigContext';
 import { cn } from '@/lib/utils';
 import { resolveHAImageUrl } from '@/services/haImageService';
@@ -20,7 +20,14 @@ import { CarPictureControl } from '../../areas/page/CarPictureControl';
 import { useTileActions } from '../../areas/ha/useTileActions';
 import { ChosenTile } from '../../areas/tiles/chosenTiles';
 import { useAreaLayout } from '../../areas/page/useAreaLayout';
-import type { AreaDevice } from '../../areas/page/roomLayout';
+import {
+  copyLayoutPatternToRoom,
+  createRoomSection,
+  renameRoomSection,
+  roomSectionTitle,
+  type AreaDevice,
+  type SectionId
+} from '../../areas/page/roomLayout';
 import { foldAll } from '../../areas/page/PageNow';
 import PageRail from '../../areas/page/PageRail';
 import type { PageItem, PageRoom } from '../../areas/page/pageKit';
@@ -31,6 +38,8 @@ import { useProEditChrome } from '../../store/useProEditChrome';
 import { useHaPicture } from '../../widgets/shared/useHaPicture';
 import type { RoomItem } from '../../lib/roomsPage';
 import { RoomSettingsSheet } from '../rooms/RoomSettingsSheet';
+import { RoomEntitiesSheet } from './RoomEntitiesSheet';
+import { TileEditSheet } from './TileEditSheet';
 import { useRoomView } from './useRoomView';
 
 interface RoomPageProps {
@@ -41,20 +50,27 @@ interface RoomPageProps {
   onOpenRoom: (areaId: string) => void;
 }
 
-/** A tile's own changes HA does not keep (a camera switched live, rooms picked for the vacuum). */
 type Patches = Record<string, Partial<TileModel>>;
 
 const DEVICE_MAX_WIDTH: Record<AreaDevice, number | undefined> = { phone: 430, tablet: 1024, desktop: undefined };
+const GUARDED_ACTIONS = new Set<TileAction['type']>(['toggle', 'activate', 'lock', 'cover']);
 
 export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPageProps) {
   const area = useAutoLayoutStore((s) => s.resolvedAreas.find((a) => a.area_id === areaId) ?? null);
+  const resolvedAreas = useAutoLayoutStore((s) => s.resolvedAreas);
+  const resolvedEntities = useAutoLayoutStore((s) => s.resolvedEntities);
   const areaNames = useAutoLayoutStore((s) => s.resolvedAreas.map((a) => `${a.area_id}\u0000${a.name}`).join('\u0001'));
   const serverUrl = useAutoLayoutStore((s) => s.serverUrl);
+
   const { device: viewDevice, detected, pinned, setPinned } = useDeviceType();
   const [editingDevice, setEditingDevice] = useState<AreaDevice | null>(null);
   const activeDevice: AreaDevice = editingDevice ?? viewDevice;
   const viewKey = activeDevice === 'phone' ? 'phone' : 'wide';
-  const [view, setView] = useRoomView(viewKey);
+
+  const { scope, effectivePrefs, setAdminTarget, toggleShareEnabled, forkToPersonal, revertToShared, saveScopedPrefs } = useLayoutScope();
+  const defaultRoomView = effectivePrefs.roomDefaultViews?.[areaId] ?? null;
+  const [view, setView] = useRoomView(viewKey, areaId, defaultRoomView);
+
   const { config } = useUserConfig();
   const roomOverride = config.rooms?.areaOverrides?.[areaId];
   const roomItem = rooms.find((r) => r.areaId === areaId);
@@ -66,15 +82,49 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
       : roomItem?.picture ?? area?.picture ?? null;
   const photo = useHaPicture(rawPhoto || null);
 
-  const tiles = useMemo(() => (area ? buildAreaTiles(area, { picture: (p) => resolveHAImageUrl(p, serverUrl) || null }) : []), [area, serverUrl]);
+  const extraEntityIds = roomOverride?.extraEntityIds ?? [];
+  const extraEntities = useMemo(
+    () =>
+      extraEntityIds
+        .map((id) => resolvedEntities[id])
+        .filter((e): e is NonNullable<typeof e> => Boolean(e)),
+    [extraEntityIds, resolvedEntities]
+  );
+
+  const entityCustomizations = config.entities?.customizations;
+
+  const autoTileEntityIds = useMemo(() => {
+    if (!area) return new Set<string>();
+    const autoTiles = buildAreaTiles(area, { picture: (p) => resolveHAImageUrl(p, serverUrl) || null });
+    return new Set(autoTiles.map((t) => t.entityId));
+  }, [area, serverUrl]);
+
+  const tiles = useMemo(
+    () =>
+      area
+        ? buildAreaTiles(area, {
+            picture: (p) => resolveHAImageUrl(p, serverUrl) || null,
+            extraEntities,
+            entityCustomizations
+          })
+        : [],
+    [area, serverUrl, extraEntities, entityCustomizations]
+  );
+
   const byKey = useMemo(() => new Map(tiles.map((t) => [t.key, t])), [tiles]);
-  // The layout only cares which tiles there are, so it keeps its identity while states change.
-  const itemsKey = tiles.map((t) => `${t.key}:${t.section}:${t.size.phone}${t.size.wide}:${t.focus ?? ''}`).join('|');
+  const itemsKey = tiles.map((t) => `${t.key}:${t.section}:${t.model.name}:${t.size.phone}${t.size.wide}:${t.focus ?? ''}`).join('|');
   const items = useMemo<PageItem[]>(() => tiles.map(({ key, section, size, focus }) => ({ key, section, size, focus })), [itemsKey]);
+
   const editor = useAreaLayout(areaId, items, activeDevice, foldAll);
-  const { scope, setAdminTarget, toggleShareEnabled, forkToPersonal, revertToShared } = useLayoutScope();
   const setEditingPage = useProEditChrome((s) => s.setEditingPage);
+
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [entitiesOpen, setEntitiesOpen] = useState(false);
+  const [editTileKey, setEditTileKey] = useState<string | null>(null);
+  const [sectionDialog, setSectionDialog] = useState<{ mode: 'create' } | { mode: 'rename'; id: SectionId } | null>(null);
+  const [sectionNameInput, setSectionNameInput] = useState('');
+  const [pendingConfirm, setPendingConfirm] = useState<{ key: string; name: string; action: TileAction } | null>(null);
+
   const carPictures = useMemo(() => readCarPictures(config.preferences), [config.preferences]);
 
   useEffect(() => {
@@ -91,6 +141,7 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
 
   const [patches, setPatches] = useState<Patches>({});
   useEffect(() => setPatches({}), [areaId]);
+
   const model = useCallback(
     (key: string): TileModel => {
       const t = byKey.get(key);
@@ -102,31 +153,67 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
     },
     [byKey, patches, carPictures]
   );
+
   const name = useCallback((key: string) => (byKey.get(key) ? areaTileName(byKey.get(key)!) : key), [byKey]);
 
   const onLocal = useCallback(
     (key: string, patch: Partial<TileModel>) =>
       setPatches((all) => {
         const next: Patches = { ...all, [key]: { ...all[key], ...patch } as Partial<TileModel> };
-        // One scene holds at a time: running one ends the others.
-        if (byKey.get(key)?.model.kind === 'scene' && patch.isOn) for (const t of tiles) if (t.key !== key && t.model.kind === 'scene') next[t.key] = { ...next[t.key], isOn: false } as Partial<TileModel>;
+        if (byKey.get(key)?.model.kind === 'scene' && patch.isOn) {
+          for (const t of tiles) if (t.key !== key && t.model.kind === 'scene') next[t.key] = { ...next[t.key], isOn: false } as Partial<TileModel>;
+        }
         return next;
       }),
     [byKey, tiles]
   );
+
   const areaIdOf = useMemo(() => {
-    const ids = new Map(areaNames.split('\u0001').map((pair) => pair.split('\u0000')).map(([id, name]) => [(name ?? '').toLowerCase(), id]));
+    const ids = new Map(areaNames.split('\u0001').map((pair) => pair.split('\u0000')).map(([id, n]) => [(n ?? '').toLowerCase(), id]));
     return (room: string) => ids.get(room.toLowerCase()) ?? null;
   }, [areaNames]);
+
   const send = useTileActions(onLocal, { areaIdOf });
+
   const actOn = useCallback(
     (key: string, a: TileAction) => {
       const t = byKey.get(key);
-      if (t) send({ key, model: model(key), targets: t.targets }, a);
+      if (!t) return;
+      const needsConfirm = Boolean(entityCustomizations?.[t.entityId]?.confirmAction) && GUARDED_ACTIONS.has(a.type);
+      if (needsConfirm) {
+        setPendingConfirm({ key, name: areaTileName(t), action: a });
+        return;
+      }
+      send({ key, model: model(key), targets: t.targets }, a);
     },
-    [byKey, model, send]
+    [byKey, entityCustomizations, model, send]
   );
+
   const renderTile = useCallback((key: string, size: TileSize) => <ChosenTile e={model(key)} size={size} act={(a) => actOn(key, a)} />, [model, actOn]);
+
+  const copyPatternTo = useCallback(
+    async (targetAreaId: string) => {
+      const targetArea = resolvedAreas.find((a) => a.area_id === targetAreaId);
+      if (!targetArea) return;
+      const targetTiles = buildAreaTiles(targetArea, {
+        picture: (p) => resolveHAImageUrl(p, serverUrl) || null,
+        entityCustomizations
+      });
+      const nextLayout = copyLayoutPatternToRoom(
+        editor.layout,
+        targetTiles.map(({ key, section, size, focus }) => ({ key, section, size, focus })),
+        activeDevice
+      );
+      await saveScopedPrefs(
+        {
+          roomModes: { [targetAreaId]: 'custom' },
+          proAreaLayouts: { version: 1, [targetAreaId]: { [activeDevice]: nextLayout } }
+        },
+        true
+      );
+    },
+    [resolvedAreas, serverUrl, entityCustomizations, editor.layout, activeDevice, saveScopedPrefs]
+  );
 
   if (!area) {
     return (
@@ -151,6 +238,21 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
     haUrl: haBase ? `${haBase}/config/areas/area/${encodeURIComponent(areaId)}` : null
   };
 
+  const otherRooms = rooms.filter((r) => r.areaId !== areaId);
+  const editTileEntityId = editTileKey ? byKey.get(editTileKey)?.entityId ?? null : null;
+
+  const submitSectionDialog = () => {
+    const clean = sectionNameInput.trim();
+    if (!clean || !sectionDialog) return;
+    if (sectionDialog.mode === 'create') {
+      editor.update((l) => createRoomSection(l, clean).layout);
+    } else {
+      editor.update((l) => renameRoomSection(l, sectionDialog.id, clean));
+    }
+    setSectionDialog(null);
+    setSectionNameInput('');
+  };
+
   return (
     <div className={cn('mx-auto w-full', editor.editing && 'pb-24')} style={{ maxWidth: editor.editing ? DEVICE_MAX_WIDTH[activeDevice] : undefined }}>
       <PageRail
@@ -166,11 +268,25 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
         onBack={onBack}
         model={model}
         name={name}
+        onEditTile={(k) => {
+          const t = byKey.get(k);
+          if (t && !t.focus) setEditTileKey(k);
+        }}
+        onOpenEntities={() => setEntitiesOpen(true)}
+        onAddSection={() => {
+          setSectionNameInput('');
+          setSectionDialog({ mode: 'create' });
+        }}
+        onRenameSection={(id) => {
+          setSectionNameInput(roomSectionTitle(editor.layout, id));
+          setSectionDialog({ mode: 'rename', id });
+        }}
         editExtras={<CarPictures cars={tiles.filter((t) => t.model.kind === 'car' && !t.focus)} chosen={carPictures} />}
         renderTile={renderTile}
         actOn={actOn}
         device={activeDevice}
       />
+
       {editor.editing ? (
         <ProEditBar
           pageLabel={room.name}
@@ -209,9 +325,109 @@ export default function RoomPage({ areaId, rooms, onBack, onOpenRoom }: RoomPage
             icon: Settings01Icon,
             onPress: () => setSettingsOpen(true)
           }}
+          extraActions={
+            otherRooms.length > 0 ? (
+              <Dropdown>
+                <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs">
+                  <HugeiconsIcon icon={Copy01Icon} size={13} />
+                  Copy layout to…
+                </Button>
+                <Dropdown.Popover placement="top start" className="max-h-[50dvh] min-w-48 overflow-y-auto">
+                  <Dropdown.Menu aria-label="Copy room layout pattern to another room" onAction={(key) => void copyPatternTo(String(key))}>
+                    {otherRooms.map((r) => (
+                      <Dropdown.Item key={r.areaId} id={r.areaId} textValue={r.name}>
+                        <Label>{r.name}</Label>
+                      </Dropdown.Item>
+                    ))}
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
+            ) : undefined
+          }
         />
       ) : null}
+
       <RoomSettingsSheet areaId={areaId} isOpen={settingsOpen} onOpenChange={setSettingsOpen} />
+      <RoomEntitiesSheet
+        areaId={areaId}
+        areaName={room.name}
+        isOpen={entitiesOpen}
+        onOpenChange={setEntitiesOpen}
+        autoTileEntityIds={autoTileEntityIds}
+      />
+      <TileEditSheet
+        entityId={editTileEntityId}
+        isOpen={Boolean(editTileEntityId)}
+        onOpenChange={(open) => {
+          if (!open) setEditTileKey(null);
+        }}
+      />
+
+      {/* Section create / rename modal */}
+      <Modal.Backdrop isOpen={Boolean(sectionDialog)} onOpenChange={(open) => !open && setSectionDialog(null)}>
+        <Modal.Container size="sm">
+          <Modal.Dialog aria-label={sectionDialog?.mode === 'rename' ? 'Rename section' : 'New section'} className="pro" data-page="rooms">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{sectionDialog?.mode === 'rename' ? 'Rename section' : 'New section'}</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body className="flex flex-col gap-3 pb-4">
+              <TextField aria-label="Section title" value={sectionNameInput} onChange={setSectionNameInput} autoFocus>
+                <InputGroup fullWidth variant="secondary">
+                  <InputGroup.Input
+                    placeholder="e.g. Desk, Bedside, Entertainment…"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') submitSectionDialog();
+                    }}
+                  />
+                </InputGroup>
+              </TextField>
+              <div className="flex justify-end gap-2">
+                <Button size="sm" variant="ghost" onPress={() => setSectionDialog(null)}>
+                  Cancel
+                </Button>
+                <Button size="sm" variant="primary" isDisabled={!sectionNameInput.trim()} onPress={submitSectionDialog}>
+                  {sectionDialog?.mode === 'rename' ? 'Save name' : 'Create'}
+                </Button>
+              </div>
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+
+      {/* Tap safety guard confirmation modal */}
+      <Modal.Backdrop isOpen={Boolean(pendingConfirm)} onOpenChange={(open) => !open && setPendingConfirm(null)}>
+        <Modal.Container size="sm">
+          <Modal.Dialog aria-label="Confirm action" className="pro" data-page="rooms">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>Confirm action</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body className="flex flex-col gap-4 pb-4">
+              <p className="text-sm text-muted">
+                Proceed with action on <span className="font-semibold text-foreground">{pendingConfirm?.name}</span>?
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button size="sm" variant="ghost" onPress={() => setPendingConfirm(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onPress={() => {
+                    if (!pendingConfirm) return;
+                    const t = byKey.get(pendingConfirm.key);
+                    if (t) send({ key: pendingConfirm.key, model: model(pendingConfirm.key), targets: t.targets }, pendingConfirm.action);
+                    setPendingConfirm(null);
+                  }}
+                >
+                  Confirm
+                </Button>
+              </div>
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
     </div>
   );
 }
@@ -257,5 +473,4 @@ function CarPictures({ cars, chosen }: { cars: AreaTile[]; chosen: Record<string
   );
 }
 
-/** A key the layout still names but the room no longer has (never drawn: `reconcile` drops it). */
 const MISSING = { kind: 'switch', entityId: '', name: '', available: false, isOn: false } as unknown as TileModel;

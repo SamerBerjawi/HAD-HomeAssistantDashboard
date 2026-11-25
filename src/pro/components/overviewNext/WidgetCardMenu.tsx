@@ -16,26 +16,49 @@ interface WidgetCardMenuProps {
   designs?: readonly { id: string; name: string; description: string }[];
   design?: string;
   onSetDesign?: (design: string) => void;
+  /** Cross-section move support (Phase 2.1). */
+  sections?: readonly { id: string; title: string }[];
+  currentSection?: string;
+  onMoveToSection?: (sectionId: string) => void;
+  hideLabel?: string;
 }
 
 /**
- * The one edit control on a card besides the drag handle (owner decision: "⋯" menu). Size and
- * Arrange live here, so keyboard and screen-reader users can do everything a drag does.
+ * The one edit control on a card besides the drag handle (owner decision: "⋯" menu). Size,
+ * style, section move, and arrange live here for pointer, touch, and keyboard accessibility.
  */
-export function WidgetCardMenu({ title, size, sizes, designs, design, onSetDesign, canMoveEarlier, canMoveLater, onSetSize, onMove, onHide }: WidgetCardMenuProps) {
+export function WidgetCardMenu({
+  title,
+  size,
+  sizes,
+  designs,
+  design,
+  onSetDesign,
+  canMoveEarlier,
+  canMoveLater,
+  onSetSize,
+  onMove,
+  onHide,
+  sections,
+  currentSection,
+  onMoveToSection,
+  hideLabel = 'Hide'
+}: WidgetCardMenuProps) {
   const showStyles = Boolean(designs && designs.length > 1 && onSetDesign);
+  const otherSections = (sections ?? []).filter((s) => s.id !== currentSection);
   return (
     <Dropdown>
       <Button isIconOnly size="sm" variant="ghost" aria-label={`Edit ${title}: ${SIZE_LABELS[size]}`} className="pro-touch-44 shrink-0">
         <HugeiconsIcon icon={MoreHorizontalIcon} size={18} />
       </Button>
-      <Dropdown.Popover placement="bottom end">
+      <Dropdown.Popover placement="bottom end" className="max-h-[65dvh] overflow-y-auto">
         <Dropdown.Menu
           aria-label={`Edit ${title}`}
           onAction={(key) => {
             const k = String(key);
             if (k.startsWith('size:')) onSetSize(k.slice(5) as WidgetSize);
             else if (k.startsWith('style:')) onSetDesign?.(k.slice(6));
+            else if (k.startsWith('move:')) onMoveToSection?.(k.slice(5));
             else if (k === 'earlier') onMove(-1);
             else if (k === 'later') onMove(1);
             else if (k === 'hide') onHide();
@@ -79,11 +102,21 @@ export function WidgetCardMenu({ title, size, sizes, designs, design, onSetDesig
               <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="shrink-0" />
               <Label>Move later</Label>
             </Dropdown.Item>
-            <Dropdown.Item id="hide" textValue="Hide">
+            <Dropdown.Item id="hide" textValue={hideLabel}>
               <HugeiconsIcon icon={ViewOffSlashIcon} size={16} className="shrink-0" />
-              <Label>Hide</Label>
+              <Label>{hideLabel}</Label>
             </Dropdown.Item>
           </Dropdown.Section>
+          {onMoveToSection && otherSections.length > 0 ? (
+            <Dropdown.Section>
+              <Header>Move to section</Header>
+              {otherSections.map((sec) => (
+                <Dropdown.Item key={sec.id} id={`move:${sec.id}`} textValue={`Move to ${sec.title}`}>
+                  <Label>{sec.title}</Label>
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Section>
+          ) : null}
         </Dropdown.Menu>
       </Dropdown.Popover>
     </Dropdown>

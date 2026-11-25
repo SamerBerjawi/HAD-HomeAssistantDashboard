@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
 import type { AreaPrimaryMetric, UserDashboardConfig } from '@/types/userConfig';
 import { ProSheet } from '../../components/ProSheet';
+import { useLayoutScope } from '../../hooks/useLayoutScope';
 import { QUICK_ACTIONS, type QuickAction } from '../../lib/roomTiles';
 import { SheetFilter } from '../../widgets/shared/sheet/SheetKit';
 import { ROOM_COLORS, ROOM_ICONS, roomIcon } from './shared';
@@ -51,8 +52,8 @@ interface RoomSettingsSheetProps {
 }
 
 export function RoomSettingsSheet({ areaId, isOpen, onOpenChange }: RoomSettingsSheetProps) {
-  const { config, updateConfig } = useUserConfig();
-  const { uploadVehicleAsset } = useUserConfig();
+  const { config, updateConfig, uploadVehicleAsset } = useUserConfig();
+  const { effectivePrefs, saveScopedPrefs } = useLayoutScope();
   const area = useAutoLayoutStore((s) => (areaId ? s.resolvedAreas.find((a) => a.area_id === areaId) ?? null : null));
   const override = areaId ? config.rooms?.areaOverrides?.[areaId] : undefined;
 
@@ -300,13 +301,31 @@ export function RoomSettingsSheet({ areaId, isOpen, onOpenChange }: RoomSettings
 
         {/* Primary Card Metric & Primary Sensors */}
         <section aria-label="Hero reading and sensors" className="flex flex-col gap-3">
-          <h3 className="text-xs font-semibold text-muted">Hero metric & primary sensors</h3>
+          <h3 className="text-xs font-semibold text-muted">Hero metric &amp; primary sensors</h3>
           <SheetFilter
             label="Primary metric on room card"
             value={activeMetric}
             onChange={(m) => saveOverride({ primaryMetric: m === 'auto' ? null : m })}
             options={METRIC_OPTIONS}
           />
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-muted">Default Room view</span>
+            <SheetFilter
+              label="Default view when opening room"
+              value={effectivePrefs.roomDefaultViews?.[areaId] ?? 'auto'}
+              onChange={(v) =>
+                void saveScopedPrefs({
+                  roomDefaultViews: { [areaId]: v === 'auto' ? null : (v as 'all' | 'now') }
+                } as never)
+              }
+              options={[
+                { id: 'auto', label: 'Auto (remember)' },
+                { id: 'all', label: 'All' },
+                { id: 'now', label: 'Now' }
+              ]}
+            />
+          </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm">Temperature sensor</span>

@@ -12,7 +12,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowDown01Icon, ArrowRight01Icon, PinIcon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import type { TileModel } from '../tileTypes';
-import { SECTION_ORDER, SECTION_TITLE, toggleCollapsed, visibleSections, type RoomLayout } from './roomLayout';
+import { roomSectionTitle, SECTION_ORDER, toggleCollapsed, visibleSections, type RoomLayout } from './roomLayout';
 import { isActive, isAlert, roomSentence, sectionSummary } from './roomSummary';
 import { RoomGrid } from './RoomGrid';
 import { EmptyRoom, HiddenTray, RoomEditBar } from './RoomEditParts';
@@ -118,10 +118,11 @@ export function NowBody({ props, editor, skip = () => false }: { props: PageProp
             {rest.map((s, i) => {
               const open = editor.editing || !l.collapsed.includes(s.id);
               const models = s.keys.map(model);
+              const secTitle = roomSectionTitle(l, s.id);
               if (editor.editing) {
                 return (
-                  <section key={s.id} aria-label={SECTION_TITLE[s.id]} className="mb-6">
-                    <SectionHeading id={s.id} title={SECTION_TITLE[s.id]} editor={editor} index={i} count={rest.length} />
+                  <section key={s.id} aria-label={secTitle} className="mb-6">
+                    <SectionHeading id={s.id} title={secTitle} editor={editor} index={i} count={rest.length} />
                     <RoomGrid keys={s.keys} sizeOf={(k) => l.sizes[k]} renderTile={renderTile} editing={editing} />
                   </section>
                 );
@@ -134,7 +135,7 @@ export function NowBody({ props, editor, skip = () => false }: { props: PageProp
                     onPress={() => editor.commit((x) => toggleCollapsed(x, s.id))}
                     className="flex h-auto w-full items-center justify-start gap-3 rounded-none px-4 py-3.5 text-left"
                   >
-                    <span className="text-[15px] font-semibold">{SECTION_TITLE[s.id]}</span>
+                    <span className="text-[15px] font-semibold">{secTitle}</span>
                     <span className="min-w-0 flex-1 truncate text-[13px] font-normal text-muted">{sectionSummary(s.id, models)}</span>
                     <span className="text-[13px] font-normal tabular-nums text-muted">{s.keys.length}</span>
                     <HugeiconsIcon icon={open ? ArrowDown01Icon : ArrowRight01Icon} size={16} className="shrink-0 opacity-60" />

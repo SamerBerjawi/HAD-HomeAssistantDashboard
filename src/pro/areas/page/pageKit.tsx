@@ -6,10 +6,10 @@
 import type { ReactNode } from 'react';
 import { Button, Dropdown, Label } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, ArrowRight01Icon, DashboardSquare01Icon, DropletIcon, ArrowUp01Icon, ArrowDown01Icon, BulbIcon, TemperatureIcon, Tick02Icon } from '@hugeicons/core-free-icons';
+import { ArrowLeft01Icon, ArrowRight01Icon, DashboardSquare01Icon, Delete02Icon, DropletIcon, ArrowUp01Icon, ArrowDown01Icon, BulbIcon, MoreHorizontalIcon, PencilEdit01Icon, TemperatureIcon, Tick02Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import type { CarTileModel, TileAction, TileModel, TileSize } from '../tileTypes';
-import { hide, moveBy, moveOnto, moveSection, setSize, togglePin, type AnyDevice, type RoomItem, type SectionId } from './roomLayout';
+import { hide, moveBy, moveOnto, moveSection, moveTileToSection, setSize, togglePin, type AnyDevice, type RoomItem, type SectionId } from './roomLayout';
 import { roomFacts } from './roomSummary';
 import type { GridEditing } from './RoomGrid';
 import type { RoomEditor } from './useRoomEditor';
@@ -126,26 +126,89 @@ export function lightsOff(props: PageProps, keys: string[]) {
 /** The tile's name for menus and the Hidden tray. */
 export const nameOf = (props: Pick<PageProps, 'model' | 'name'>) => props.name ?? ((k: string) => props.model(k).name);
 
-export function gridEditing(editor: RoomEditor, name: (key: string) => string, withPin = false): GridEditing {
+export function gridEditing(
+  editor: RoomEditor,
+  name: (key: string) => string,
+  withPin = false,
+  extra?: {
+    items?: readonly RoomItem[];
+    sections?: readonly { id: SectionId; title: string }[];
+    currentSection?: SectionId;
+    onEditTile?: (key: string) => void;
+  }
+): GridEditing {
   return {
     name,
     onMoveOnto: (k, over) => editor.update((l) => moveOnto(l, k, over)),
     onMoveBy: (k, dir) => editor.update((l) => moveBy(l, k, dir)),
     onSize: (k, size) => editor.update((l) => setSize(l, k, size)),
     onHide: (k) => editor.update((l) => hide(l, k)),
-    ...(withPin ? { pinned: (k: string) => editor.layout.pinned.includes(k), onPin: (k: string) => editor.update((l) => togglePin(l, k)) } : {})
+    ...(withPin ? { pinned: (k: string) => editor.layout.pinned.includes(k), onPin: (k: string) => editor.update((l) => togglePin(l, k)) } : {}),
+    ...(extra?.sections ? { sections: extra.sections, currentSection: extra.currentSection, onMoveToSection: (k: string, target: SectionId) => editor.update((l) => moveTileToSection(l, k, target, extra.items)) } : {}),
+    ...(extra?.onEditTile ? { onEditTile: extra.onEditTile } : {})
   };
 }
 
-/** A section heading; in edit mode it gets ↑ / ↓ to move the whole section. */
-export function SectionHeading({ id, title, summary, action, editor, index, count }: { id: SectionId; title: string; summary?: string; action?: ReactNode; editor?: RoomEditor; index: number; count: number }) {
+/** A section heading; in edit mode it gets ↑ / ↓ to move the section and optional rename/delete for custom sections. */
+export function SectionHeading({
+  id,
+  title,
+  summary,
+  action,
+  editor,
+  index,
+  count,
+  isCustom = false,
+  onRename,
+  onDelete
+}: {
+  id: SectionId;
+  title: string;
+  summary?: string;
+  action?: ReactNode;
+  editor?: RoomEditor;
+  index: number;
+  count: number;
+  isCustom?: boolean;
+  onRename?: () => void;
+  onDelete?: () => void;
+}) {
   return (
     <div className="mb-2 flex min-h-8 items-center gap-2 px-1">
       <h3 className="text-[15px] font-semibold">{title}</h3>
       {summary ? <span className="truncate text-[13px] text-muted">{summary}</span> : null}
       <span className="flex-1" />
       {editor?.editing ? (
-        <span className="flex gap-1">
+        <span className="flex items-center gap-1">
+          {isCustom && (onRename || onDelete) ? (
+            <Dropdown>
+              <Button isIconOnly size="sm" variant="secondary" aria-label={`${title} section options`} className="size-8 min-w-0 rounded-full">
+                <HugeiconsIcon icon={MoreHorizontalIcon} size={15} />
+              </Button>
+              <Dropdown.Popover placement="bottom end">
+                <Dropdown.Menu
+                  aria-label={`${title} options`}
+                  onAction={(key) => {
+                    if (key === 'rename') onRename?.();
+                    else if (key === 'delete') onDelete?.();
+                  }}
+                >
+                  {onRename ? (
+                    <Dropdown.Item id="rename" textValue="Rename section">
+                      <HugeiconsIcon icon={PencilEdit01Icon} size={15} className="shrink-0" />
+                      <Label>Rename section…</Label>
+                    </Dropdown.Item>
+                  ) : null}
+                  {onDelete ? (
+                    <Dropdown.Item id="delete" textValue="Delete section">
+                      <HugeiconsIcon icon={Delete02Icon} size={15} className="shrink-0 text-danger" />
+                      <Label>Delete section</Label>
+                    </Dropdown.Item>
+                  ) : null}
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown>
+          ) : null}
           <Button isIconOnly size="sm" variant="secondary" aria-label={`Move ${title} up`} isDisabled={index === 0} onPress={() => editor.update((l) => moveSection(l, id, -1))} className="size-8 min-w-0 rounded-full">
             <HugeiconsIcon icon={ArrowUp01Icon} size={15} />
           </Button>

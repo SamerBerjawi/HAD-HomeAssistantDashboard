@@ -8,10 +8,24 @@
  *   once, to migrate an existing arrangement.
  */
 import type { UserDashboardConfig } from '@/types/userConfig';
-import { DEFAULT_OVERVIEW_SECTION_ORDER, type OverviewSectionId } from './overviewSections';
+import { DEFAULT_OVERVIEW_SECTION_ORDER, OVERVIEW_SECTION_LABELS, type OverviewSectionId } from './overviewSections';
 
 export type WidgetSize = 's' | 'w' | 't' | 'l';
 export type DeviceType = 'phone' | 'tablet' | 'desktop';
+export type AnyOverviewSectionId = OverviewSectionId | (string & {});
+export type SectionTabVisibility = 'all_and_tab' | 'tab_only' | 'hidden';
+
+export interface CustomOverviewSection {
+  id: string;
+  title: string;
+  icon?: string;
+}
+
+export interface OverviewHeaderPrefs {
+  showAttentionPills?: boolean;
+  showTabs?: boolean;
+  defaultTab?: string;
+}
 
 export const WIDGET_SIZES: readonly WidgetSize[] = ['s', 'w', 't', 'l'];
 
@@ -43,12 +57,20 @@ export interface LayoutPlacement {
 }
 
 export interface DeviceLayout {
-  sectionOrder: OverviewSectionId[];
-  collapsed: OverviewSectionId[];
+  sectionOrder: AnyOverviewSectionId[];
+  collapsed: AnyOverviewSectionId[];
   hidden: string[];
-  items: Partial<Record<OverviewSectionId, LayoutPlacement[]>>;
+  items: Partial<Record<AnyOverviewSectionId, LayoutPlacement[]>>;
   /** Chosen style per widget id, for widgets that offer several (absent = the widget's default). */
   styles?: Record<string, string>;
+  /** User-created custom sections (`custom:*`). */
+  customSections?: CustomOverviewSection[];
+  /** Built-in widgets reassigned to a different section (`widgetId -> sectionId`). */
+  sectionOverrides?: Record<string, AnyOverviewSectionId>;
+  /** Per-section Overview / Tab visibility (`all_and_tab` default, `tab_only`, or `hidden`). */
+  sectionVisibility?: Record<string, SectionTabVisibility>;
+  /** Overview header & tab configuration. */
+  header?: OverviewHeaderPrefs;
 }
 
 export interface ProOverviewLayoutConfig {
@@ -282,14 +304,50 @@ export function buildDefaultDeviceLayout(widgets: readonly LayoutWidgetInfo[], d
  * widget no longer allows, adds new widgets on a new row at the end of their section, and fills
  * the section order. Stored config is user data, so nothing in it is trusted.
  */
+const PINNED_CARD_RE = /^(entity|scene|script|room|camera):.+$/;
+
+export function isPinnedCardId(id: string): boolean {
+  return PINNED_CARD_RE.test(id);
+}
+
+export function pinnedCardAllowedSizes(id: string): readonly WidgetSize[] {
+  if (id.startsWith('camera:')) return ['w', 'l'];
+  if (id.startsWith('room:')) return ['s', 'w', 'l'];
+  if (id.startsWith('scene:') || id.startsWith('script:')) return ['s', 'w'];
+  return WIDGET_SIZES;
+}
+
+export function pinnedCardDefaultSize(id: string): WidgetSize {
+  if (id.startsWith('camera:') || id.startsWith('room:')) return 'w';
+  return 's';
+}
+
 export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutWidgetInfo[], device: DeviceType): DeviceLayout {
   const fallback = buildDefaultDeviceLayout(widgets, device);
   if (!stored || typeof stored !== 'object') return fallback;
   const raw = stored as Partial<Record<keyof DeviceLayout, unknown>>;
   const cols = DEVICE_COLUMNS[device];
   const byId = new Map(widgets.map((w) => [w.id, w]));
-  const sectionIds = new Set<string>(DEFAULT_OVERVIEW_SECTION_ORDER);
-  const asSections = (v: unknown): OverviewSectionId[] => (Array.isArray(v) ? (v.filter((s, idx) => typeof s === 'string' && sectionIds.has(s) && v.indexOf(s) === idx) as OverviewSectionId[]) : []);
+
+  const customSections: CustomOverviewSection[] = [];
+  const customIds = new Set<string>();
+  if (Array.isArray(raw.customSections)) {
+    for (const entry of raw.customSections) {
+      if (!entry || typeof entry !== 'object') continue;
+      const c = entry as Partial<CustomOverviewSection>;
+      if (typeof c.id !== 'string' || !c.id.startsWith('custom:') || customIds.has(c.id)) continue;
+      const title = typeof c.title === 'string' ? c.title.trim() : '';
+      if (!title) continue;
+      customIds.add(c.id);
+      customSections.push(typeof c.icon === 'string' && c.icon ? { id: c.id, title, icon: c.icon } : { id: c.id, title });
+    }
+  }
+
+  const sectionIds = new Set<string>([...DEFAULT_OVERVIEW_SECTION_ORDER, ...customIds]);
+  const asSections = (v: unknown): AnyOverviewSectionId[] =>
+    Array.isArray(v)
+      ? (v.filter((s, idx) => typeof s === 'string' && sectionIds.has(s) && v.indexOf(s) === idx) as AnyOverviewSectionId[])
+      : [];
 
   const sectionOrder = asSections(raw.sectionOrder);
   // Sections a saved order lacks go at the end, except Rooms (added 2026-11-20), which goes first
@@ -297,21 +355,44 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
   const hadRooms = sectionOrder.includes('rooms');
   for (const s of DEFAULT_OVERVIEW_SECTION_ORDER) if (!sectionOrder.includes(s)) sectionOrder.push(s);
   if (!hadRooms) sectionOrder.unshift(...sectionOrder.splice(sectionOrder.indexOf('rooms'), 1));
+  for (const c of customSections) if (!sectionOrder.includes(c.id)) sectionOrder.push(c.id);
+
   const collapsed = asSections(raw.collapsed);
   const hidden = Array.isArray(raw.hidden) ? raw.hidden.filter((id): id is string => typeof id === 'string' && byId.has(id)) : [];
+
+  const sectionOverrides: Record<string, AnyOverviewSectionId> = {};
+  if (raw.sectionOverrides && typeof raw.sectionOverrides === 'object' && !Array.isArray(raw.sectionOverrides)) {
+    for (const [wid, target] of Object.entries(raw.sectionOverrides as Record<string, unknown>)) {
+      if (typeof target === 'string' && byId.has(wid) && sectionIds.has(target)) {
+        sectionOverrides[wid] = target;
+      }
+    }
+  }
+  const sectionForWidget = (w: LayoutWidgetInfo): AnyOverviewSectionId => sectionOverrides[w.id] ?? w.section;
 
   const storedItems = raw.items && typeof raw.items === 'object' ? (raw.items as Record<string, unknown>) : {};
   // Hidden widgets have no place; Add puts them back at the end of their section.
   const seen = new Set<string>(hidden);
   const items: DeviceLayout['items'] = {};
-  for (const section of DEFAULT_OVERVIEW_SECTION_ORDER) {
+  for (const section of sectionIds) {
     const list = Array.isArray(storedItems[section]) ? (storedItems[section] as unknown[]) : [];
     const kept: LayoutPlacement[] = [];
     for (const entry of list) {
       if (!entry || typeof entry !== 'object') continue;
       const p = entry as Partial<LayoutPlacement>;
-      const def = typeof p.i === 'string' ? byId.get(p.i) : undefined;
-      if (!def || def.section !== section || seen.has(def.id)) continue;
+      if (typeof p.i !== 'string' || seen.has(p.i)) continue;
+      if (isPinnedCardId(p.i)) {
+        const allowed = pinnedCardAllowedSizes(p.i);
+        const size = p.size && allowed.includes(p.size) ? p.size : pinnedCardDefaultSize(p.i);
+        const w = cellsFor(size, cols).w;
+        const x = Number.isInteger(p.x) && (p.x as number) >= 0 ? Math.min(p.x as number, cols - w) : 0;
+        const y = Number.isInteger(p.y) && (p.y as number) >= 0 ? (p.y as number) : 0;
+        kept.push({ i: p.i, x, y, size });
+        seen.add(p.i);
+        continue;
+      }
+      const def = byId.get(p.i);
+      if (!def || sectionForWidget(def) !== section) continue;
       const size = p.size && def.sizes.includes(p.size) ? p.size : def.defaultSize;
       const w = cellsFor(size, cols).w;
       const x = Number.isInteger(p.x) && (p.x as number) >= 0 ? Math.min(p.x as number, cols - w) : 0;
@@ -319,7 +400,7 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
       kept.push({ i: def.id, x, y, size });
       seen.add(def.id);
     }
-    const missing = widgets.filter((w) => w.section === section && !seen.has(w.id));
+    const missing = widgets.filter((w) => sectionForWidget(w) === section && !seen.has(w.id));
     for (const w of missing) seen.add(w.id);
     // Widgets keep their cells (free placement); a tampered or stale layout is settled so it can
     // never overlap. New widgets go on a new row at the end.
@@ -330,8 +411,36 @@ export function normalizeDeviceLayout(stored: unknown, widgets: readonly LayoutW
     ).map((p) => ({ ...p, y: p.y + bottomRow(settled, cols) }));
     if (settled.length + added.length > 0) items[section] = [...settled, ...added];
   }
+
   const styles = normalizeStyles(raw.styles, byId);
-  return styles ? { sectionOrder, collapsed, hidden, items, styles } : { sectionOrder, collapsed, hidden, items };
+  const sectionVisibility: Record<string, SectionTabVisibility> = {};
+  if (raw.sectionVisibility && typeof raw.sectionVisibility === 'object' && !Array.isArray(raw.sectionVisibility)) {
+    for (const [sid, vis] of Object.entries(raw.sectionVisibility as Record<string, unknown>)) {
+      if (sectionIds.has(sid) && (vis === 'all_and_tab' || vis === 'tab_only' || vis === 'hidden')) {
+        sectionVisibility[sid] = vis;
+      }
+    }
+  }
+  const rawHeader = raw.header && typeof raw.header === 'object' && !Array.isArray(raw.header) ? (raw.header as Partial<OverviewHeaderPrefs>) : undefined;
+  const header: OverviewHeaderPrefs | undefined = rawHeader
+    ? {
+        ...(typeof rawHeader.showAttentionPills === 'boolean' ? { showAttentionPills: rawHeader.showAttentionPills } : {}),
+        ...(typeof rawHeader.showTabs === 'boolean' ? { showTabs: rawHeader.showTabs } : {}),
+        ...(typeof rawHeader.defaultTab === 'string' && rawHeader.defaultTab ? { defaultTab: rawHeader.defaultTab } : {})
+      }
+    : undefined;
+
+  return {
+    sectionOrder,
+    collapsed,
+    hidden,
+    items,
+    ...(styles ? { styles } : {}),
+    ...(customSections.length > 0 ? { customSections } : {}),
+    ...(Object.keys(sectionOverrides).length > 0 ? { sectionOverrides } : {}),
+    ...(Object.keys(sectionVisibility).length > 0 ? { sectionVisibility } : {}),
+    ...(header && Object.keys(header).length > 0 ? { header } : {})
+  };
 }
 
 /** Keeps only styles a known widget still offers. */
@@ -459,37 +568,62 @@ export function withoutDeviceLayout(prev: UserDashboardConfig, device: DeviceTyp
 /* ---------- Edit operations (pure; the page applies them to the draft) ---------- */
 
 export interface VisibleSection {
-  section: OverviewSectionId;
+  section: AnyOverviewSectionId;
   items: LayoutPlacement[];
+}
+
+export function isCustomOverviewSection(layout: DeviceLayout, sectionId: string): boolean {
+  return Boolean(layout.customSections?.some((c) => c.id === sectionId));
+}
+
+export function sectionTitleOf(layout: DeviceLayout, sectionId: AnyOverviewSectionId): string {
+  const custom = layout.customSections?.find((c) => c.id === sectionId);
+  if (custom) return custom.title;
+  return OVERVIEW_SECTION_LABELS[sectionId as OverviewSectionId] ?? String(sectionId);
+}
+
+export function sectionVisibilityOf(layout: DeviceLayout, sectionId: AnyOverviewSectionId): SectionTabVisibility {
+  return layout.sectionVisibility?.[sectionId] ?? 'all_and_tab';
 }
 
 /** Sections in the user's order that have at least one widget on the page. */
 export function visibleSections(layout: DeviceLayout): VisibleSection[] {
-  return layout.sectionOrder.map((section) => ({ section, items: (layout.items[section] ?? []).filter((p) => !layout.hidden.includes(p.i)) })).filter((s) => s.items.length > 0);
+  return layout.sectionOrder
+    .map((section) => ({ section, items: (layout.items[section] ?? []).filter((p) => !layout.hidden.includes(p.i)) }))
+    .filter((s) => s.items.length > 0);
 }
 
-export function withSectionItems(layout: DeviceLayout, section: OverviewSectionId, items: LayoutPlacement[]): DeviceLayout {
+/** In Edit Mode: non-empty sections PLUS user-created custom sections even when empty. */
+export function editableSections(layout: DeviceLayout): VisibleSection[] {
+  return layout.sectionOrder
+    .map((section) => ({ section, items: (layout.items[section] ?? []).filter((p) => !layout.hidden.includes(p.i)) }))
+    .filter((s) => s.items.length > 0 || isCustomOverviewSection(layout, s.section));
+}
+
+export function withSectionItems(layout: DeviceLayout, section: AnyOverviewSectionId, items: LayoutPlacement[]): DeviceLayout {
   return { ...layout, items: { ...layout.items, [section]: items } };
 }
 
 /** Takes a widget off the page (the others stay put; a row left empty closes up). */
 export function hideWidget(layout: DeviceLayout, widget: LayoutWidgetInfo, cols: number): DeviceLayout {
-  const rest = (layout.items[widget.section] ?? []).filter((p) => p.i !== widget.id);
+  const sec = layout.sectionOverrides?.[widget.id] ?? widget.section;
+  const rest = (layout.items[sec] ?? []).filter((p) => p.i !== widget.id);
   return {
-    ...withSectionItems(layout, widget.section, settlePlacements(rest, cols)),
+    ...withSectionItems(layout, sec, settlePlacements(rest, cols)),
     hidden: layout.hidden.includes(widget.id) ? layout.hidden : [...layout.hidden, widget.id]
   };
 }
 
 /** Puts a hidden widget back on a new row at the end of its section, at its default size. */
 export function showWidget(layout: DeviceLayout, widget: LayoutWidgetInfo, cols: number): DeviceLayout {
-  const items = appendToFlow(layout.items[widget.section] ?? [], widget.id, widget.defaultSize, cols);
-  return { ...withSectionItems(layout, widget.section, items), hidden: layout.hidden.filter((id) => id !== widget.id) };
+  const sec = layout.sectionOverrides?.[widget.id] ?? widget.section;
+  const items = appendToFlow(layout.items[sec] ?? [], widget.id, widget.defaultSize, cols);
+  return { ...withSectionItems(layout, sec, items), hidden: layout.hidden.filter((id) => id !== widget.id) };
 }
 
-/** Moves a section up or down past the next visible section. */
-export function moveSection(layout: DeviceLayout, section: OverviewSectionId, dir: -1 | 1): DeviceLayout {
-  const shown = visibleSections(layout).map((v) => v.section);
+/** Moves a section up or down past the next editable/visible section. */
+export function moveSection(layout: DeviceLayout, section: AnyOverviewSectionId, dir: -1 | 1): DeviceLayout {
+  const shown = editableSections(layout).map((v) => v.section);
   const target = shown[shown.indexOf(section) + dir];
   if (!target) return layout;
   const order = [...layout.sectionOrder];
@@ -499,9 +633,134 @@ export function moveSection(layout: DeviceLayout, section: OverviewSectionId, di
   return { ...layout, sectionOrder: order };
 }
 
-export function toggleSectionCollapsed(layout: DeviceLayout, section: OverviewSectionId): DeviceLayout {
+export function toggleSectionCollapsed(layout: DeviceLayout, section: AnyOverviewSectionId): DeviceLayout {
   const collapsed = layout.collapsed.includes(section) ? layout.collapsed.filter((s) => s !== section) : [...layout.collapsed, section];
   return { ...layout, collapsed };
+}
+
+export function createOverviewSection(layout: DeviceLayout, title: string, icon?: string): { layout: DeviceLayout; id: string } {
+  const clean = title.trim() || 'Custom';
+  const slug = clean.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'section';
+  const existing = new Set((layout.customSections ?? []).map((c) => c.id));
+  let id = `custom:${slug}`;
+  let suffix = 2;
+  while (existing.has(id)) {
+    id = `custom:${slug}_${suffix++}`;
+  }
+  const nextCustom: CustomOverviewSection = icon ? { id, title: clean, icon } : { id, title: clean };
+  return {
+    id,
+    layout: {
+      ...layout,
+      customSections: [...(layout.customSections ?? []), nextCustom],
+      sectionOrder: [id, ...layout.sectionOrder],
+      items: { ...layout.items, [id]: [] }
+    }
+  };
+}
+
+export function renameOverviewSection(layout: DeviceLayout, sectionId: AnyOverviewSectionId, title: string, icon?: string): DeviceLayout {
+  const clean = title.trim();
+  if (!clean || !layout.customSections?.some((c) => c.id === sectionId)) return layout;
+  return {
+    ...layout,
+    customSections: layout.customSections.map((c) => (c.id === sectionId ? { ...c, title: clean, ...(icon !== undefined ? { icon } : {}) } : c))
+  };
+}
+
+export function deleteOverviewSection(layout: DeviceLayout, sectionId: AnyOverviewSectionId, widgets: readonly LayoutWidgetInfo[], cols: number): DeviceLayout {
+  if (!isCustomOverviewSection(layout, sectionId)) return layout;
+  const byId = new Map(widgets.map((w) => [w.id, w]));
+  const itemsToReturn = (layout.items[sectionId] ?? []).filter((p) => !isPinnedCardId(p.i) && byId.has(p.i));
+  const nextItems = { ...layout.items };
+  delete nextItems[sectionId];
+  const nextOverrides = { ...(layout.sectionOverrides ?? {}) };
+  for (const p of itemsToReturn) {
+    const def = byId.get(p.i)!;
+    delete nextOverrides[p.i];
+    nextItems[def.section] = appendToFlow(nextItems[def.section] ?? [], p.i, p.size, cols);
+  }
+  const nextVis = { ...(layout.sectionVisibility ?? {}) };
+  delete nextVis[sectionId];
+  const nextCustom = (layout.customSections ?? []).filter((c) => c.id !== sectionId);
+  const { customSections: _c, sectionOverrides: _o, sectionVisibility: _v, ...base } = layout;
+  return {
+    ...base,
+    ...(nextCustom.length > 0 ? { customSections: nextCustom } : {}),
+    sectionOrder: layout.sectionOrder.filter((s) => s !== sectionId),
+    collapsed: layout.collapsed.filter((s) => s !== sectionId),
+    items: nextItems,
+    ...(Object.keys(nextOverrides).length > 0 ? { sectionOverrides: nextOverrides } : {}),
+    ...(Object.keys(nextVis).length > 0 ? { sectionVisibility: nextVis } : {})
+  };
+}
+
+export function moveWidgetToSection(
+  layout: DeviceLayout,
+  id: string,
+  fromSection: AnyOverviewSectionId,
+  toSection: AnyOverviewSectionId,
+  cols: number,
+  widgets?: readonly LayoutWidgetInfo[]
+): DeviceLayout {
+  if (fromSection === toSection) return layout;
+  const fromList = layout.items[fromSection] ?? [];
+  const moving = fromList.find((p) => p.i === id);
+  if (!moving) return layout;
+  const nextFrom = settlePlacements(fromList.filter((p) => p.i !== id), cols);
+  const nextTo = appendToFlow(layout.items[toSection] ?? [], id, moving.size, cols);
+  const nextOverrides = { ...(layout.sectionOverrides ?? {}) };
+  if (!isPinnedCardId(id)) {
+    const def = widgets?.find((w) => w.id === id);
+    if (def && def.section === toSection) delete nextOverrides[id];
+    else nextOverrides[id] = toSection;
+  }
+  return {
+    ...layout,
+    items: { ...layout.items, [fromSection]: nextFrom, [toSection]: nextTo },
+    sectionOverrides: Object.keys(nextOverrides).length > 0 ? nextOverrides : undefined
+  };
+}
+
+export function allPinnedCardIds(layout: DeviceLayout): string[] {
+  const out: string[] = [];
+  for (const list of Object.values(layout.items)) {
+    for (const p of list ?? []) {
+      if (isPinnedCardId(p.i) && !out.includes(p.i)) out.push(p.i);
+    }
+  }
+  return out;
+}
+
+export function pinCardToSection(
+  layout: DeviceLayout,
+  cardId: string,
+  sectionId: AnyOverviewSectionId,
+  cols: number,
+  size?: WidgetSize
+): DeviceLayout {
+  if (!isPinnedCardId(cardId) || !layout.sectionOrder.includes(sectionId)) return layout;
+  if (allPinnedCardIds(layout).includes(cardId)) return layout;
+  const chosenSize = size ?? pinnedCardDefaultSize(cardId);
+  const nextItems = appendToFlow(layout.items[sectionId] ?? [], cardId, chosenSize, cols);
+  return withSectionItems(layout, sectionId, nextItems);
+}
+
+export function removePinnedCard(layout: DeviceLayout, cardId: string, sectionId: AnyOverviewSectionId, cols: number): DeviceLayout {
+  const rest = (layout.items[sectionId] ?? []).filter((p) => p.i !== cardId);
+  return withSectionItems(layout, sectionId, settlePlacements(rest, cols));
+}
+
+export function setSectionVisibility(layout: DeviceLayout, sectionId: AnyOverviewSectionId, visibility: SectionTabVisibility): DeviceLayout {
+  const nextVis = { ...(layout.sectionVisibility ?? {}) };
+  if (visibility === 'all_and_tab') delete nextVis[sectionId];
+  else nextVis[sectionId] = visibility;
+  return { ...layout, sectionVisibility: Object.keys(nextVis).length > 0 ? nextVis : undefined };
+}
+
+export function updateOverviewHeader(layout: DeviceLayout, patch: Partial<OverviewHeaderPrefs>): DeviceLayout {
+  const next = { ...(layout.header ?? {}), ...patch };
+  return { ...layout, header: next };
 }
 
 /** Columns a section needs in view mode (side by side on wide screens); at least 2. */
