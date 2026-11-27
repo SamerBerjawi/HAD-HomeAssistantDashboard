@@ -81,6 +81,8 @@ export interface ClimateTileModel extends TileBase {
 
 /** cover.*: position (0 closed … 100 open), moving or not. */
 export interface CoverTileModel extends TileBase {
+  canPosition?: boolean;
+  canStop?: boolean;
   kind: 'cover';
   position: number | null;
   moving: 'opening' | 'closing' | null;
@@ -98,6 +100,7 @@ export interface ReadingTileModel extends TileBase {
 
 /** media_player.*: what's playing and the transport controls. */
 export interface MediaTileModel extends TileBase {
+  supportedFeatures?: number;
   kind: 'media';
   /** What it is, for the icon and the TV layout (source list instead of a track). */
   deviceClass: 'speaker' | 'tv';
@@ -172,6 +175,7 @@ export interface MotionTileModel extends TileBase {
 
 /** vacuum.*: what it's doing, battery, suction, the rooms it knows, and the current or last run. */
 export interface VacuumTileModel extends TileBase {
+  supportedFeatures?: number;
   kind: 'vacuum';
   state: 'docked' | 'cleaning' | 'returning' | 'paused' | 'idle' | 'error';
   battery: number | null;

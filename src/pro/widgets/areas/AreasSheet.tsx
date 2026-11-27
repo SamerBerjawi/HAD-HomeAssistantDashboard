@@ -15,7 +15,7 @@ import { useLayoutScope } from '../../hooks/useLayoutScope';
 import { areaSummaryLine, findArea, toggleFavorite, type ProAreaItem, type ProAreasModel } from '../../lib/overviewAreas';
 import { ToggleSwitch } from '../controls/ControlParts';
 import { useDomainEntities } from '../shared/entities';
-import { openArea } from '../shared/navigate';
+import { useOpenArea } from '../shared/navigate';
 import { DetailSheet, HERO, HeroButton, SheetEmpty, SheetFilter, SheetHero, SheetRow, SheetSection, SheetTile, SheetTiles } from '../shared/sheet/SheetKit';
 import { useHaPicture } from '../shared/useHaPicture';
 import { useServiceCall } from '../shared/useServiceCall';
@@ -25,6 +25,7 @@ import { areaIcon, tempText, useAreaActions } from './concepts/shared';
 const EMPTY: string[] = [];
 
 export default function AreasSheet({ model: m, itemId, onClose }: WidgetSheetProps<ProAreasModel>) {
+  const openArea = useOpenArea();
   const { updateConfig } = useUserConfig();
   const { scope, effectiveFavorites } = useLayoutScope();
   const favorites = effectiveFavorites;

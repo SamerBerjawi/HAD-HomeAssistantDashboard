@@ -465,7 +465,7 @@ Built from the 11 owner-approved concepts in the Energy Studio (`/?studio=energy
 | States & visibility | Default unconfigured, initial loading skeleton, and error-with-retry cards. Sections without HA data (solar, battery, gas, water, Huawei lifetime impact sensors) hide cleanly and partner cards expand to full width. |
 
 Implementation notes:
-- Pure domain transformer & preferences persistence: `src/pro/lib/energyPage.ts` (`buildLiveEnergySnapshot`, `readEnergyPrefs`, `writeEnergyPrefs`, `computeCustomPresetDates`), tested in `tests/energyPage.test.ts`.
+- Pure domain mapping: `src/pro/lib/energyHomeLive.ts` (HA → `EnergyHome`), tested in `tests/energyHomeLive.test.ts`. (The earlier `energyPage.ts` was removed on 2026-11-26.)
 - Production page: `src/pro/pages/ProEnergy.tsx` (wired into `src/pro/ProApp.tsx`), reading `useEnergyData`, `useEnergyComparison`, and `useAutoLayoutStore`, and publishing to `useEnergyStore`.
 - Energy Studio (`src/pro/pages/energy/studio/`) stays dev-only behind `import.meta.env.DEV` at `/?studio=energy` and is excluded from `dist-pro/`.
 
@@ -668,6 +668,43 @@ Append only. One row per decision. Newest at the bottom.
 | 2026-11-24 | Mobility bay chosen | D · Garage dial for cars and bikes. | Owner. MOBILITY.md |
 | 2026-11-24 | Mobility car header review | Preview all three concepts side by side. Production pick pending. | Owner. MOBILITY.md |
 | 2026-11-24 | Mobility car header chosen | C · Garage door for the individual car Garage. | Owner. MOBILITY.md |
+| 2026-11-26 | Security, Energy, Mobility studios | Scrapped: the AntiGravity/Codex studios are removed (Security and Mobility fully; Energy's studio shell is gone and its concept files stay only because the live Energy page imports them, until Energy is redesigned). Restart page by page, Security first. | Owner. SECURITY.md |
+| 2026-11-26 | Security restart: approach | Whole-page directions first (as Rooms), then refine the chosen one section by section. | Owner. SECURITY.md |
+| 2026-11-26 | Security restart: frame | Phone and desktop: the one clear answer first, cameras right below. Alarm, activity, devices and safety are secondary (columns, tabs or below: to be decided). All four belong on the page. Avoid: busy/dense, generic, inconsistent. | Owner. SECURITY.md |
+| 2026-11-26 | Security direction | B · Ambient: state-lit hero, featured camera + Area camera tiles, devices as the chosen Area tiles, Today column on wide screens. | Owner. SECURITY.md |
+| 2026-11-26 | Security refinement order | The answer hero first. Phone layout below the cameras (one scroll or tabs): decide later, with Devices and Today. | Owner. SECURITY.md |
+| 2026-11-26 | Security hero | 3 · Slide (slide to arm Away / turn off, chips pick the mode, Home is a tap). The fix pills are too bulky: restyle them (round 3). | Owner. SECURITY.md |
+| 2026-11-26 | Security "needs you" | B · Summary line: one line of counts with icons, one main fix (Lock all or the single fix), tap for the list. Silence siren stays a full button. | Owner. SECURITY.md |
+| 2026-11-26 | Security cameras | A · Stage + filmstrip: one big view (latest event first), name and detection under it, a strip of every camera to switch, full screen with previous / next. No text on the video. | Owner. SECURITY.md |
+| 2026-11-26 | Security next section | Devices (with Today and the phone layout). | Owner. SECURITY.md |
+| 2026-11-26 | Security devices | C · Needs a look + tabs: problem devices first as Area tiles, the rest in tabs (All, Locks, Openings, Safety, Motion, Today). Same layout on phone and desktop. | Owner. SECURITY.md |
+| 2026-11-26 | Security next step | Finish the studio before building: sirens, garage doors, loading / empty / error states (round 6). | Owner. SECURITY.md |
+| 2026-11-26 | Security page approved | Round 6 approved; the live Security page is rebuilt from the studio picks. | Owner. SECURITY.md |
+| 2026-11-26 | Security hero | The alarm slide appears only after pressing Away, Night or Off while armed; the hero is compact and the modes sit in one segmented row (HeroUI ToggleButtonGroup). | Owner. SECURITY.md |
+| 2026-11-26 | Security desktop | Cameras take two thirds of the width with a colour-coded, scrolling Today list beside them; Today leaves the tabs on desktop. | Owner. SECURITY.md |
+| 2026-11-26 | Media studio | Removed from the Design Studio (Media Studio page and the Widget Studio's Media entry) to be redone later. The shipped Media page and widget stay. | Owner. MEDIA.md |
+| 2026-11-26 | Energy restart | Restart the Energy page in the studio like Security: whole-page directions first. Live power leads on phone and desktop. Scope: everything (usage, solar, battery, devices, costs, gas, water, impact) plus related integrations (Electricity Maps, Sun, solar forecast, prices). Dislikes: layout needs optimising, generic, inconsistent. | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy direction | C · Day timeline. Refine Right now first (round 2). Phones: cards in tabs after Today. | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy right now | 1 · Answer + numbers, with a smooth sparkline of today beside each value. | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy next section | The Today timeline (round 3). | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy today timeline | A · Chart + lanes with B's night shading on the chart; next facts in the main text colour. | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy next section | The cards under Today on tablets and desktop (round 4); phones keep the tabs. | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy cards | A · Bento on tablets and desktop; C · Tiles + detail on phones (replaces the tabs). | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy next section | Card contents (round 5). | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy card contents | 1 · Headline on tablets and desktop; 2 · Chart first on phones. | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy next step | Edge states and the full page (round 6): loading, not set up, HA unreachable. | Owner. ENERGY.md §0 |
+| 2026-11-26 | Energy page built | Round 6 approved; ProEnergy rebuilt on live HA data (`useEnergyHome` + `energyHomeLive.ts`), replacing the 11-section page and its customise sheet. | Owner. ENERGY.md §0 |
+| 2026-11-26 | Old Energy code removed | Deleted the old section concepts, customise sheet, studio fixtures and `energyPage.ts` (no longer used). | Owner. ENERGY.md §0 |
+| 2026-11-26 | Wall switch tile | Plain (unmetered) switches drop the wave on Wide, Tall and Large: the corner glow alone at every size. | Owner. AREA_TILES.md |
+| 2026-11-26 | Mobility restart | Restarted in `/?studio=mobility`: “Ready to go?” first; full scope from FordPass and Cowboy; one brand-neutral vehicle model with an adapter per integration; fleet handling open again. Round 1: A Cockpit, B Ready check, C Garage bays. | Owner. MOBILITY.md §0 |
+| 2026-11-26 | Mobility direction | B · Ready check, with Cockpit’s (A) vehicle pills; Mobility’s HeroUI soft accent set to emerald. | Owner. MOBILITY.md §0 |
+| 2026-11-26 | Mobility hero | 2 · Picture, made compact: picture beside name and answer, one charge line, checks and controls in one row. | Owner. MOBILITY.md §0 |
+| 2026-11-26 | Mobility charging and climate | 1 · Tidy cards: charge-limit slider and Start/Pause; climate with − set temperature +, extras as icon toggles, Warm up. | Owner. MOBILITY.md §0 |
+| 2026-11-26 | Mobility where and trips | 2 · The day on the map: one full-width card with the map, today’s drives on a 24-hour bar (from the speed history) and the last trip. | Owner. MOBILITY.md §0 |
+| 2026-11-27 | Mobility condition and battery | 2 · Top view: the car from above with a pressure by each wheel, other readings as pills. The drive battery (not 12 V) is a pack on the Charging card (bike: its Battery card), filled to the charge with lost capacity hatched, animating in while charging and out while driving or conditioning. | Owner. MOBILITY.md §0 |
+| 2026-11-27 | Mobility live adapters | One adapter per integration (FordPass, Cowboy) plus a generic fallback, matched by registry platform and translation_key, each with its own action → service-call mapping; `useMobilityHome` is the live hook. | Owner. MOBILITY.md §0 |
+| 2026-11-27 | Mobility live page | ProMobility renders the studio picks on live data (pages/mobility/home); page states loading / no vehicles / HA unreachable; vehicle states asleep / stale / not reporting in the hero; header sentence from the same adapters; demo mode shows the samples. | Owner. MOBILITY.md §0 |
+| 2026-11-27 | Mobility colour | 1 · Ambient colour without the wave: each card in its hue (corner glow, tinted icon) and its controls in it too (glowing primary buttons, hue-tinted secondary ones, slider, toggles) via `pro-mob-hued`. The hero keeps only controls no card has (Lock, Flash, Refresh). | Owner. MOBILITY.md §0 |
 
 ## 10. Notes for other agents
 

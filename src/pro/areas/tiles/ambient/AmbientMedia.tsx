@@ -6,6 +6,7 @@
  * - Camera: a header with the name and a "Live" pill, the view below with a full-screen button;
  *   Small is the picture with the name over it; X-small a row with a thumbnail.
  */
+import { MediaPlayerEntityFeature as Feature } from '@/services/mediaPlayerClassification';
 import type { CSSProperties } from 'react';
 import { Button } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -63,10 +64,12 @@ function Progress({ e, times }: { e: MediaTileModel; times?: boolean }) {
 }
 
 export function AmbientMedia({ e, size, act }: TileProps<MediaTileModel>) {
-  const title = e.title ?? 'Nothing playing';
-  const play = (px: number) => <OrbButton icon={e.playing ? PauseIcon : PlayIcon} label={`${e.name}: ${e.playing ? 'pause' : 'play'}`} on={e.playing} color={HUE.media} size={px} isDisabled={!e.title} onPress={() => act({ type: 'media', cmd: e.playing ? 'pause' : 'play' })} />;
-  const next = (px = 38) => <GlassButton icon={NextIcon} label={`${e.name}: next`} onPress={() => act({ type: 'media', cmd: 'next' })} isDisabled={!e.title} size={px} />;
-  const prev = (px = 38) => <GlassButton icon={PreviousIcon} label={`${e.name}: previous`} onPress={() => act({ type: 'media', cmd: 'previous' })} isDisabled={!e.title} size={px} />;
+  const title = e.available ? e.title ?? 'Nothing playing' : 'Unavailable';
+  const supports = (feature: number) => e.available && (e.supportedFeatures === undefined || Boolean(e.supportedFeatures & feature));
+  const canPlay = supports(e.playing ? Feature.PAUSE : Feature.PLAY) && (e.supportedFeatures !== undefined || Boolean(e.title));
+  const play = (px: number) => <OrbButton icon={e.playing ? PauseIcon : PlayIcon} label={`${e.name}: ${e.playing ? 'pause' : 'play'}`} on={e.playing} color={HUE.media} size={px} isDisabled={!canPlay} onPress={() => act({ type: 'media', cmd: e.playing ? 'pause' : 'play' })} />;
+  const next = (px = 38) => <GlassButton icon={NextIcon} label={`${e.name}: next`} onPress={() => act({ type: 'media', cmd: 'next' })} isDisabled={!supports(Feature.NEXT_TRACK) || !e.title} size={px} />;
+  const prev = (px = 38) => <GlassButton icon={PreviousIcon} label={`${e.name}: previous`} onPress={() => act({ type: 'media', cmd: 'previous' })} isDisabled={!supports(Feature.PREVIOUS_TRACK) || !e.title} size={px} />;
   const style = e.playing ? glowStyle(HUE.media, 0.75, '15% 20%') : undefined;
   if (size === 'xs') {
     return (
@@ -77,7 +80,7 @@ export function AmbientMedia({ e, size, act }: TileProps<MediaTileModel>) {
             isIconOnly
             variant="ghost"
             aria-label={`${e.name}: ${e.playing ? 'pause' : 'play'}`}
-            isDisabled={!e.title}
+            isDisabled={!canPlay}
             onPress={() => act({ type: 'media', cmd: e.playing ? 'pause' : 'play' })}
             className="relative size-11 min-w-0 shrink-0 overflow-hidden rounded-[12px] p-0"
           >
@@ -135,8 +138,8 @@ export function AmbientMedia({ e, size, act }: TileProps<MediaTileModel>) {
   if (size === 't') {
     return (
       <Glass label={e.name} style={style}>
-        <div className="flex h-full flex-col gap-3 p-4">
-          <Art e={e} px="100%" />
+        <div className="flex h-full flex-col gap-3 p-4 [container-type:size]">
+          <Art e={e} px="min(100%, max(0px, calc(100cqh - 145px)))" />
           <div className="min-w-0">
             <AName className="truncate text-[15px]">{title}</AName>
             <AState className="mt-0.5 text-[12px]">{e.artist ?? e.name}</AState>
@@ -169,11 +172,11 @@ export function AmbientMedia({ e, size, act }: TileProps<MediaTileModel>) {
           <Progress e={e} times />
         </div>
         <div className="mt-2 flex items-center justify-between">
-          <GlassButton icon={ShuffleIcon} label={`${e.name}: shuffle`} active={e.shuffle} onPress={() => act({ type: 'media', cmd: 'shuffle' })} size={34} />
+          <GlassButton icon={ShuffleIcon} label={`${e.name}: shuffle`} isDisabled={!supports(Feature.SHUFFLE_SET)} active={e.shuffle} onPress={() => act({ type: 'media', cmd: 'shuffle' })} size={34} />
           {prev(40)}
           {play(54)}
           {next(40)}
-          <GlassButton icon={RepeatIcon} label={`${e.name}: repeat`} active={e.repeat} onPress={() => act({ type: 'media', cmd: 'repeat' })} size={34} />
+          <GlassButton icon={RepeatIcon} label={`${e.name}: repeat`} isDisabled={!supports(Feature.REPEAT_SET)} active={e.repeat} onPress={() => act({ type: 'media', cmd: 'repeat' })} size={34} />
         </div>
       </div>
     </Glass>

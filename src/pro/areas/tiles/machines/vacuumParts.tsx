@@ -1,4 +1,5 @@
 /** Shared bits for the vacuum tiles: words and colours per state, the main action, and buttons. */
+import { VacuumEntityFeature as Feature } from '@/services/vacuumClassification';
 import { Button } from '@heroui/react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import { Home01Icon, PauseIcon, PlayIcon } from '@hugeicons/core-free-icons';
@@ -39,7 +40,9 @@ export function mainAction(v: VacuumTileModel): { label: string; icon: IconSvgEl
 export function VacButton({ v, act, kind, size = 'md', iconOnly, className }: { v: VacuumTileModel; act: (a: TileAction) => void; kind: 'main' | 'dock'; size?: 'sm' | 'md'; iconOnly?: boolean; className?: string }) {
   const m = mainAction(v);
   const dock = kind === 'dock';
-  const disabled = !v.available || (dock && (v.state === 'docked' || v.state === 'returning'));
+  const feature = dock ? Feature.RETURN_HOME : m.cmd === 'pause' ? Feature.PAUSE : Feature.START;
+  const unsupported = v.supportedFeatures !== undefined && !(v.supportedFeatures & feature);
+  const disabled = unsupported || !v.available || (dock && (v.state === 'docked' || v.state === 'returning'));
   const label = dock ? 'Dock' : m.label;
   const h = size === 'sm' ? 32 : 38;
   return (

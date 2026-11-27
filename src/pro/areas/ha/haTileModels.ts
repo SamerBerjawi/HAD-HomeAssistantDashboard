@@ -179,8 +179,11 @@ export function coverModel(e: ResolvedEntity, ctx: MapContext): CoverTileModel {
   const a = e.attributes ?? {};
   const cls = deviceClass(e);
   const pos = num(a.current_position);
+  const features = num(a.supported_features);
   return {
     kind: 'cover',
+    canPosition: features === null ? pos !== null : Boolean(features & 4),
+    canStop: features === null || Boolean(features & 8),
     ...base(e, ctx),
     isOn: e.state === 'open' || e.state === 'opening',
     // No position reported: open or closed is all we know.
@@ -216,6 +219,7 @@ export function mediaModel(e: ResolvedEntity, ctx: MapContext): MediaTileModel {
   const art = str(a.entity_picture);
   return {
     kind: 'media',
+    supportedFeatures: num(a.supported_features) ?? undefined,
     ...base(e, ctx),
     isOn: !['off', 'standby', 'unavailable', 'unknown'].includes(e.state),
     deviceClass: deviceClass(e) === 'tv' ? 'tv' : 'speaker',
@@ -341,6 +345,7 @@ export function vacuumModel(e: ResolvedEntity, ctx: MapContext): VacuumTileModel
   const state = VAC_STATES.has(e.state) ? (e.state as VacuumTileModel['state']) : e.state === 'charging' ? 'docked' : 'idle';
   return {
     kind: 'vacuum',
+    supportedFeatures: num(a.supported_features) ?? undefined,
     ...base(e, ctx),
     isOn: state === 'cleaning' || state === 'returning',
     state,

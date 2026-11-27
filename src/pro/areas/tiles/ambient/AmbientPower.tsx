@@ -5,7 +5,8 @@
  * - Wide: icon and orb on top, name and "75% · Warm white", a level slider along the bottom
  *   (the Ceiling Light tile); the card warms from the corner as the level rises.
  * - Tall / Large: the level as a big number above the same parts; Large adds tone pills.
- * Lights: slide anywhere on the tile to dim. Fans: tap the speed bar. Switches: the wave is the load.
+ * Lights: slide anywhere on the tile to dim. Fans: tap the speed bar. Switches: metered plugs draw
+ * their load trace; plain switches keep the corner glow alone at every size.
  */
 import type { ReactNode } from 'react';
 import { Button } from '@heroui/react';
@@ -177,9 +178,8 @@ export function AmbientSwitch({ e, size, act }: TileProps<SwitchTileModel>) {
         <div className={cn('pointer-events-none absolute inset-x-0 bottom-0', size === 'xs' || size === 's' ? 'opacity-55' : 'opacity-90')}>
           <Sparkline values={on ? e.powerHistory : e.powerHistory.map((v, i) => (i < e.powerHistory.length - 4 ? v : 0))} width={300} height={TRACE_PX[size]} color={on ? HUE.power : HUE.idle} />
         </div>
-      ) : size !== 'xs' && size !== 's' ? (
-        <Wave color={HUE.power} level={on ? draw : 0} />
       ) : null}
+      {/* Plain switches (a wall switch): the corner glow alone at every size, no wave (owner, 2026-11-26). */}
       <Device
         size={size}
         icon={<GlowIcon icon={switchIcon(e)} on={on} color={HUE.power} px={size === 'xs' ? 24 : size === 's' ? 28 : 34} />}

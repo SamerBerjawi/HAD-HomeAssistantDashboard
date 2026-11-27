@@ -111,10 +111,10 @@ function DayStrip({ o, labels, className }: { o: OpeningTileModel; labels?: bool
   );
 }
 
-export function OpeningDay({ e: o, size }: TileProps<OpeningTileModel>) {
+export function OpeningDay({ e: o, size, historyAvailable = true }: TileProps<OpeningTileModel> & {historyAvailable?: boolean}) {
   const info = openingInfo(o);
   const n = o.spells.length;
-  const summary = !o.available ? '' : n ? `Opened ${n === 1 ? 'once' : `${n} times`} in 24 h` : 'Not opened in 24 h';
+  const summary = !o.available || !historyAvailable ? '' : n ? `Opened ${n === 1 ? 'once' : `${n} times`} in 24 h` : 'Not opened in 24 h';
   return (
     <Shell
       size={size}
@@ -126,13 +126,13 @@ export function OpeningDay({ e: o, size }: TileProps<OpeningTileModel>) {
           <span style={{ color: info.hue }} className="font-semibold">
             {info.word}
           </span>
-          {o.available && size !== 'l' && size !== 't' ? <span className="opacity-80"> · {summary}</span> : null}
+          {summary && size !== 'l' && size !== 't' ? <span className="opacity-80"> · {summary}</span> : null}
         </span>
       }
       detail={size === 'l' || size === 't' ? `${openingSince(o)}${summary ? ` · ${summary}` : ''}` : openingSince(o)}
       visual={(px) => (size === 'xs' ? <IconDot icon={openingIcon(o)} hue={info.hue} px={36} /> : size === 'w' ? null : <IconDot icon={openingIcon(o)} hue={info.hue} px={size === 's' ? 34 : Math.round(px * 0.45)} solid={o.isOn && o.available} />)}
       aside={<BatteryNote battery={o.battery} />}
-      strip={o.available ? <DayStrip o={o} labels={size === 'l' || size === 't' || size === 'w'} /> : undefined}
+      strip={o.available && historyAvailable ? <DayStrip o={o} labels={size === 'l' || size === 't' || size === 'w'} /> : undefined}
     />
   );
 }

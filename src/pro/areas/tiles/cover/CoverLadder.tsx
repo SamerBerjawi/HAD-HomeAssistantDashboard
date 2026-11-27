@@ -15,7 +15,7 @@ const STEPS = [0, 25, 50, 75, 100];
 const word = (p: number) => (p === 0 ? 'Closed' : p === 100 ? 'Open' : `${p}`);
 
 function Ladder({ c, act, vertical, labels, className, rung }: { c: CoverTileModel; act: TileProps<CoverTileModel>['act']; vertical?: boolean; labels: boolean; className?: string; rung?: string }) {
-  const steps = c.position === null ? [0, 100] : STEPS;
+  const steps = (c.canPosition ?? (c.position !== null)) ? STEPS : [0, 100]; // Capabilities are independent of the last reported position.
   const at = openness(c);
   const nearest = steps.reduce((a, b) => (Math.abs(b - at) < Math.abs(a - at) ? b : a));
   const toward = c.moving === 'opening' ? 100 : c.moving === 'closing' ? 0 : null;
@@ -33,7 +33,7 @@ function Ladder({ c, act, vertical, labels, className, rung }: { c: CoverTileMod
             aria-label={`${c.name}: ${p === 0 ? 'close' : p === 100 ? 'open fully' : `open to ${p}%`}`}
             aria-pressed={active}
             isDisabled={!c.available}
-            onPress={() => act(c.position === null || p === 0 || p === 100 ? { type: 'cover', cmd: p === 0 ? 'close' : 'open' } : { type: 'position', pct: p })}
+            onPress={() => act(p === 0 || p === 100 ? { type: 'cover', cmd: p === 0 ? 'close' : 'open' } : { type: 'position', pct: p })}
             className={cn(
               'h-auto min-h-0 w-full min-w-0 flex-1 basis-0 rounded-xl p-0 text-[12px] font-semibold tabular-nums transition-[background,color] duration-200',
               vertical && 'justify-start px-3',
@@ -54,7 +54,7 @@ function Ladder({ c, act, vertical, labels, className, rung }: { c: CoverTileMod
 export default function CoverLadder({ e: c, size, act }: TileProps<CoverTileModel>) {
   const state = coverState(c);
   const frame = cn('pro-surface', !c.available && 'opacity-60');
-  const stop = c.moving ? <CoverButton c={c} act={act} cmd="stop" size={30} /> : null;
+  const stop = c.moving && c.canStop !== false ? <CoverButton c={c} act={act} cmd="stop" size={30} /> : null;
   const icon = coverIcon(c);
   const big = !c.available ? '—' : c.position === null ? (c.isOn ? 'Open' : 'Closed') : `${c.position}%`;
 
@@ -132,10 +132,10 @@ export default function CoverLadder({ e: c, size, act }: TileProps<CoverTileMode
             <HugeiconsIcon icon={icon} size={20} />
           </span>
           <TileName className="mt-3 text-[17px]">{c.name}</TileName>
-          <TileState>{c.moving || !since ? state : `Last moved ${since === 'just now' ? since : `${since.replace('for ', '')} ago`}`}</TileState>
+          <TileState>{!c.available || c.moving || !since ? state : `Last moved ${since === 'just now' ? since : `${since.replace('for ', '')} ago`}`}</TileState>
           <p className="mt-auto text-[44px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{big}</p>
-          <p className="mt-1.5 text-[13px] opacity-60">{c.moving ? state : c.position === null ? 'Open / close only' : state}</p>
-          {c.moving ? (
+          <p className="mt-1.5 text-[13px] opacity-60">{c.available && !c.moving && c.position === null ? 'Open / close only' : state}</p>
+          {c.moving && c.canStop !== false ? (
             <CoverButton c={c} act={act} cmd="stop" size={36} className="mt-3 self-start">
               Stop
             </CoverButton>

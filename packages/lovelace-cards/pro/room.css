@@ -1,0 +1,8 @@
+.atc-room-frame {
+  height: 100%;
+  min-height: 0;
+  container: atc-room / size;
+  contain-intrinsic-height: 192px;
+}
+.atc-room-frame[data-preset='2x0.5'] { contain-intrinsic-height: 82px; }
+.atc-room-frame:is([data-preset='1x2'], [data-preset='2x2']) { contain-intrinsic-height: 376px; }

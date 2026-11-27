@@ -4,9 +4,9 @@
  * StudioHub and StudioNavBar render directly from this list.
  */
 import type { IconSvgElement } from '@hugeicons/react';
-import { Car01Icon, MusicNote01Icon, FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon } from '@hugeicons/core-free-icons';
+import { FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon, Car01Icon } from '@hugeicons/core-free-icons';
 
-export type StudioId = 'widgets' | 'areas' | 'rooms' | 'energy' | 'security' | 'media' | 'mobility';
+export type StudioId = 'widgets' | 'areas' | 'rooms' | 'security' | 'energy' | 'mobility';
 
 export interface StudioEntry {
   id: StudioId;
@@ -59,41 +59,40 @@ export const STUDIOS: readonly StudioEntry[] = [
     highlights: ['Designs A / B / C / D', '375–1920 px widths', 'Live room service mocks']
   },
   {
-    id: 'energy',
-    title: 'Energy Studio',
-    shortTitle: 'Energy',
-    subtitle: 'Full-page Energy experience: distinct concepts for all 11 sections from live power orbits and daylight skyscapes to treemaps and utility meters.',
-    query: 'energy',
-    icon: FlashIcon,
-    pageAccent: 'energy',
-    status: 'Shipped',
-    statusTone: 'success',
-    highlights: ['11 Energy sections', 'Bespoke charts & SVGs', 'Assembled responsive page']
-  },
-  {
-    id: 'mobility', title: 'Mobility Studio', shortTitle: 'Mobility',
-    subtitle: 'Compare garage bays for cars and bikes across different household fleets.',
-    query: 'mobility', icon: Car01Icon, pageAccent: 'mobility',
-    status: 'In review', statusTone: 'accent', highlights: ['Vehicle bays', 'Simulated vehicles']
-  },
-  {
-    id: 'media', title: 'Media Studio', shortTitle: 'Media',
-    subtitle: 'Compare Now playing layouts for speakers and TVs.',
-    query: 'media', icon: MusicNote01Icon, pageAccent: 'media',
-    status: 'In review', statusTone: 'accent',
-    highlights: ['Now playing', 'Simulated playback']
-  },
-  {
     id: 'security',
     title: 'Security Studio',
     shortTitle: 'Security',
-    subtitle: 'Full-page Security & Safety redesign: Alarm hero, Perimeter attention, WebRTC Cameras, 24 h Activity, and Device groups across 5 live states.',
+    subtitle: 'Security page, restarted from zero: the brief, then concepts per section on mock home states.',
     query: 'security',
     icon: Shield01Icon,
     pageAccent: 'security',
-    status: 'Shipped',
-    statusTone: 'success',
-    highlights: ['5 Security sections', 'Press-and-hold safety', 'Desktop scroll + Phone tabs']
+    status: 'Redesigning',
+    statusTone: 'warning',
+    highlights: ['Restarted 2026-11-26', 'Brief first']
+  },
+  {
+    id: 'energy',
+    title: 'Energy Studio',
+    shortTitle: 'Energy',
+    subtitle: 'Energy page, restarted from zero: live power first, then three whole-page directions on sample homes.',
+    query: 'energy',
+    icon: FlashIcon,
+    pageAccent: 'energy',
+    status: 'Redesigning',
+    statusTone: 'warning',
+    highlights: ['Approved and built 2026-11-26', 'Live on HA data']
+  },
+  {
+    id: 'mobility',
+    title: 'Mobility Studio',
+    shortTitle: 'Mobility',
+    subtitle: 'Mobility page, restarted from zero: “Ready to go?” first, any make through one vehicle model, three whole-page directions.',
+    query: 'mobility',
+    icon: Car01Icon,
+    pageAccent: 'mobility',
+    status: 'Redesigning',
+    statusTone: 'warning',
+    highlights: ['Restarted 2026-11-26', 'Round 1: page direction']
   }
 ];
 

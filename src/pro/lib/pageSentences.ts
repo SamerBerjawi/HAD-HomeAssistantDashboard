@@ -5,6 +5,7 @@
  * them live in src/pro/components/PageSentence.tsx.
  */
 import type { IconSvgElement } from '@hugeicons/react';
+import type { Vehicle } from './mobilityHome';
 import {
   Alert02Icon,
   ArrowUp01Icon,
@@ -293,6 +294,28 @@ export function mobilitySentence({ car, bike }: MobilityInput): SentencePart[] {
   clauses.forEach((c, i) => {
     if (i > 0) out.push('; ');
     out.push(...c);
+  });
+  return finish(out);
+}
+
+/** The restarted Mobility page's header (docs/pro-ui/MOBILITY.md §0): one clause per vehicle from the adapters' model, so it always agrees with the page. */
+export function vehiclesSentence(vehicles: Vehicle[]): SentencePart[] {
+  if (vehicles.length === 0) return finish(['no vehicles found in Home Assistant']);
+  const out: SentencePart[] = [];
+  vehicles.forEach((v, i) => {
+    if (i > 0) out.push('; ');
+    out.push(v.name);
+    if (v.offline) {
+      out.push(' isn’t ', chip(Alert02Icon, 'reporting', 'warning'));
+      return;
+    }
+    const charging = v.charging?.state === 'charging';
+    if (v.level !== null) out.push(' is at ', chip(v.kind === 'bike' ? Bicycle01Icon : charging ? BatteryCharging01Icon : BatteryFullIcon, pct(v.level), v.level < 20 ? 'warning' : 'success'));
+    if (v.range !== null) out.push(' with ', chip(Route01Icon, `${Math.round(v.range)} ${v.unit} range`, 'default'));
+    if (charging) out.push(', ', chip(BatteryCharging01Icon, 'charging', 'accent'));
+    else if (v.charging?.plugged) out.push(', ', chip(PlugSocketIcon, 'plugged in', 'default'));
+    if (v.security.locked !== null) out.push(', ', chip(v.security.locked ? SquareLock02Icon : SquareUnlock02Icon, v.security.locked ? 'locked' : 'unlocked', v.security.locked ? 'success' : 'warning'));
+    if (v.asleep) out.push(', ', chip(Moon02Icon, 'asleep', 'default'));
   });
   return finish(out);
 }

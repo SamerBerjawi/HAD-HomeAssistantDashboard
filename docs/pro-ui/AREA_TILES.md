@@ -96,7 +96,7 @@ blue cooling / orange heating, violet media, blue water). Code: `src/pro/areas/t
 | Type | Chosen | Changes |
 |---|---|---|
 | Light | **B · Halo** | Small shows the level with its % sign. On/off-only lights (no dimming, no colour): a plain lit ring around the bulb (no knob), and the state says how long ("On for 52m", "Off · just now"); Tall and Large show On / Off big. |
-| Switch & plug | **D · Ambient** | Metered plugs show Meter's (B) trace of the last hours instead of the wave, at every size; plain switches keep the wave. |
+| Switch & plug | **D · Ambient** | Metered plugs show Meter's (B) trace of the last hours instead of the wave, at every size; plain switches (a wall switch) show the corner glow alone at every size, no wave (owner, 2026-11-26). |
 | Fan | **C · Breeze** | Fans without presets say "On" (not "Running") so Small never clips. |
 
 The studio marks these "Chosen" and the Area page's "Chosen" view uses them.

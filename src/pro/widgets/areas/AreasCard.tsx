@@ -14,7 +14,7 @@ import { ArrowRight01Icon, BulbIcon, Home01Icon } from '@hugeicons/core-free-ico
 import { cn } from '@/lib/utils';
 import { areaSummaryLine, type ProAreaItem, type ProAreasModel } from '../../lib/overviewAreas';
 import { useOpenSheet } from '../../hooks/useSheetParam';
-import { openArea } from '../shared/navigate';
+import { useOpenArea } from '../shared/navigate';
 import { DetailsButton, WidgetSurface, type DesignedWidgetProps } from '../shared/WidgetSurface';
 import { FavoriteAreasSheet } from './FavoriteAreasSheet';
 import { AreaMenu, areaIcon, tempText, useAreaActions, useAreaSelection } from './concepts/shared';
@@ -32,6 +32,7 @@ function Figure({ label, value }: { label: string; value: string }) {
 }
 
 export default function AreasCard({ model: m, size, onOpenDetails }: DesignedWidgetProps<ProAreasModel>) {
+  const openArea = useOpenArea();
   const { area, select } = useAreaSelection(m);
   const actions = useAreaActions();
   const [choosing, setChoosing] = useState(false);

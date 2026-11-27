@@ -52,10 +52,10 @@ export function VacuumDock({ e: v, size, act }: TileProps<VacuumTileModel>) {
       size={size}
       label={v.name}
       name={v.name}
-      className={cn('pro-surface', !v.available && 'opacity-60')}
+      className={cn('pro-surface', size === 't' && '[container-type:size]', !v.available && 'opacity-60')}
       state={<span style={{ color: info.hue }}>{info.word}</span>}
       detail={info.detail}
-      visual={(px) => <Robot v={v} px={size === 'xs' ? 44 : size === 's' ? 52 : px} />}
+      visual={(px) => <span className={size === 't' ? '[@container(max-height:319px)]:[zoom:0.45]' : undefined}><Robot v={v} px={size === 'xs' ? 44 : size === 's' ? 52 : px} /></span>}
       aside={size === 'xs' ? <VacButton v={v} act={act} kind="main" size="sm" iconOnly /> : <BatteryNote battery={v.battery} always={size === 'l'} />}
       strip={size === 'xs' ? undefined : both}
     />

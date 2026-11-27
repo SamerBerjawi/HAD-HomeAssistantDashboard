@@ -7,6 +7,7 @@ import {
   integrationsSentence,
   mediaSentence,
   mobilitySentence,
+  vehiclesSentence,
   networkSentence,
   overviewSentence,
   roomsSentence,
@@ -132,5 +133,14 @@ describe('pageSentences', () => {
     expect(text(settingsSentence({ isDemo: false, version: '2026.11.1', userName: 'Samer', visiblePages: 12, totalPages: 13 }))).toBe(
       'Connected to Home Assistant v2026.11.1 as Samer, with 12 of 13 pages visible.'
     );
+  });
+});
+
+describe('vehicles sentence', () => {
+  it('has one clause per vehicle, from the page model', async () => {
+    const { studioMobilityHome } = await import('@/pro/lib/mobility/sampleVehicles');
+    expect(text(vehiclesSentence(studioMobilityHome('charging').vehicles))).toBe('The Ford is at 61% with 262 km range, charging, locked; Cowboy is at 64% with 45 km range.');
+    expect(text(vehiclesSentence(studioMobilityHome('quiet').vehicles))).toBe('The Ford is at 90% with 386 km range, plugged in, locked, asleep; Cowboy isn’t reporting.');
+    expect(text(vehiclesSentence([]))).toBe('No vehicles found in Home Assistant.');
   });
 });

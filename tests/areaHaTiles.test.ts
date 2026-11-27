@@ -62,7 +62,9 @@ describe('HA → tile models', () => {
 
   it('maps covers with and without a position', () => {
     expect(map(ent('cover.blinds', 'opening', { current_position: 40, device_class: 'blind' }))).toMatchObject({ position: 40, moving: 'opening', deviceClass: 'blind' });
-    expect(map(ent('cover.garage', 'closed', { device_class: 'garage' }))).toMatchObject({ position: 0, moving: null });
+    expect(map(ent('cover.garage', 'closed', { device_class: 'garage' }))).toMatchObject({ position: 0, moving: null, canPosition: false });
+    expect(map(ent('cover.shade', 'opening', { current_position: 50, supported_features: 3 }))).toMatchObject({ canPosition: false, canStop: false });
+    expect(map(ent('cover.blind', 'opening', { supported_features: 15 }))).toMatchObject({ canPosition: true, canStop: true });
   });
 
   it('only makes readings of room measurements with numbers', () => {

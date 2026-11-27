@@ -22,7 +22,6 @@ import { lightsStudio } from '../widgets/lights/concepts';
 import { locksStudio } from '../widgets/locks/concepts';
 import { motionStudio } from '../widgets/motion/concepts';
 import { openingsStudio } from '../widgets/openings/concepts';
-import { mediaStudio } from '../widgets/media/concepts';
 import { presenceStudio } from '../widgets/presence/concepts';
 import { safetyStudio } from '../widgets/safety/concepts';
 import { scenesStudio } from '../widgets/scenes/concepts';
@@ -39,7 +38,6 @@ const asEntry = <M,>(e: StudioEntry<M>) => e as unknown as StudioEntry<never>;
 const ENTRIES: readonly StudioEntry<never>[] = [
   asEntry(weatherStudio),
   asEntry(lightsStudio),
-  asEntry(mediaStudio),
   asEntry(vacuumsStudio),
   asEntry(presenceStudio),
   asEntry(switchesStudio),

@@ -18,6 +18,8 @@ When nothing is playing, the directory moves up under the header. The floor filt
 
 ## 3. Media Studio
 
+**Removed 2026-11-26 (owner):** the Media Studio (`/?studio=media`) and the Widget Studio's Media entry are deleted, to be redone later. The shipped Media page (`ProMedia.tsx`, `pages/media/Monitor.tsx`, `RoomList.tsx`) and the Overview media widget (`widgets/media/`, which still uses `concepts/MediaConceptB`, `MediaConceptC` and `shared.tsx`) stay. The history below is kept for reference.
+
 Page accent approved 2026-11-24: fuchsia (hue 330).
 
 Studio route `/?studio=media`. Now playing is the first section for concept review. Players by room follows its approval.

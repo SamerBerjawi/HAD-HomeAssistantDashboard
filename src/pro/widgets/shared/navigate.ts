@@ -20,3 +20,5 @@ export function openArea(areaId: string) {
   window.dispatchEvent(new PopStateEvent('popstate', { state: { tab: 'rooms', areaId } }));
   useAutoLayoutStore.getState().setSelectedAreaId(areaId);
 }
+
+export function useOpenArea() { return openArea; }

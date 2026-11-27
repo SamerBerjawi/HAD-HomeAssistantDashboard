@@ -2,6 +2,15 @@
 
 HAD / HOMZ: a Home Assistant (HA) dashboard. A React SPA plus a single Express server that serves the SPA, persists config, proxies cameras/images and stores energy statistics.
 
+## HAD parity for At Home Cards
+
+The owner’s standing requirement is **110% HAD parity** for every ATC feature, enhancement, and fix. Use the current production HAD experience as the acceptance reference. This applies to existing cards and every future batch.
+
+- Trace the production entry point through the tile, its surrounding layout, gestures, sheets, state updates, and service calls. Reuse the production implementation where possible and verify the behavior supplied by its host.
+- Match typography, colors, themes, icons, imagery, spacing, animations, touch targets, and focus behavior. Preserve every supported interaction, sheet, customization, state, and device capability, including pending, unavailable, and error states.
+- Compare HAD and ATC using equivalent entities, capabilities, themes, and actual rendered dimensions. Exercise every supported size, narrow and wide layouts, resizing, pointer and keyboard input, and touch gestures where applicable. Check for clipped content and unreachable controls.
+- Before calling a batch complete, compare rendered results and exercise the complete user flows, including service feedback and sheet dismissal. Record what was compared and where. Fix known discrepancies before advancing the batch. If live hardware or a host limitation prevents verification, identify the exact gap and keep parity status open. Label any release intended for that verification as a test build.
+
 ## Stack (versions from package.json ranges)
 - Runtime: Node 22 (Dockerfile uses `node:22-alpine`; server uses built-in `node:sqlite`, so Node 22+ is required). ESM (`"type": "module"`).
 - Frontend: React ^19.0.1, Vite ^6.2.3, TypeScript ~5.8.2, Tailwind CSS ^4.1.14 (`@tailwindcss/vite`), vite-plugin-pwa ^1.3.0.

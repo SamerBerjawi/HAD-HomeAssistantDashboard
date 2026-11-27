@@ -3,7 +3,8 @@
  * dark-mode detector, square album cover renderer, dual-layer adaptive album-art backdrop,
  * transport buttons, volume Slider, and expandable "Up next" track queue panel.
  */
-import { useEffect, useState } from 'react';
+import { HostDarkMode } from "./HostDarkMode";
+import { useContext, useEffect, useState } from 'react';
 import { Badge, Button, Slider } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
@@ -26,6 +27,7 @@ import { useHAImage } from '@/services/haImageService';
 import type { ProMediaQueueSource, ProMediaQueueTrack } from '../../lib/overviewMedia';
 
 export function useProDarkMode(): boolean {
+  const hostDark = useContext(HostDarkMode);
   const [isDark, setIsDark] = useState(() => {
     if (typeof document === 'undefined') return true;
     if (document.documentElement.classList.contains('dark')) return true;
@@ -51,7 +53,7 @@ export function useProDarkMode(): boolean {
     return () => observer.disconnect();
   }, []);
 
-  return isDark;
+  return hostDark ?? isDark;
 }
 
 export function ProMediaCover({

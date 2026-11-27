@@ -9,8 +9,8 @@ import { haWebSocketService } from '@/services/haWebSocket';
 import { fetchHAEnergyPreferences, isEnergyConfigured } from '@/services/haEnergyPreferences';
 import type { EnergyPreferences } from '@/services/haEnergyPreferences';
 import { computeInstantaneousPower } from '@/utils/energyMath';
-import { deriveCarMetrics } from '@/services/mobility/carMetrics';
-import { deriveBikeMetrics } from '@/services/mobility/bikeMetrics';
+import { buildMobilityHome } from '../lib/mobility/adapters';
+import { studioMobilityHome } from '../lib/mobility/sampleVehicles';
 import { findEntity } from '@/services/mobility/entityLookup';
 import { resolveHealthSensorsForDevice } from '@/services/healthDiscovery';
 import { discoverVacuumDevices } from '@/services/vacuumDiscovery';
@@ -23,7 +23,7 @@ import {
   healthSentence,
   integrationsSentence,
   mediaSentence,
-  mobilitySentence,
+  vehiclesSentence,
   networkSentence,
   overviewSentence,
   roomsSentence,
@@ -186,27 +186,12 @@ function SecuritySentence() {
 }
 
 function MobilitySentence() {
-  const { states, resolvedZones } = useAutoLayoutStore(useShallow((s) => ({ states: s.states, resolvedZones: s.resolvedZones })));
+  const { states, registry, devices, zones } = useAutoLayoutStore(useShallow((s) => ({ states: s.states, registry: s.rawEntityRegistry, devices: s.rawDevices, zones: s.resolvedZones })));
   const parts = useMemo(() => {
-    const isDemo = haWebSocketService.isDemo();
-    const car = deriveCarMetrics({ states, resolvedZones, isDemo, speedHistory: [] });
-    const bike = deriveBikeMetrics({ states, resolvedZones, isDemo });
-    const hasCar = car.soc !== undefined || car.range !== undefined;
-    const hasBike = bike.batteryPercent !== undefined;
-    return mobilitySentence({
-      car: hasCar
-        ? {
-            soc: car.soc,
-            range: car.range,
-            rangeUnit: car.rangeUnit,
-            charging: /charging/i.test(car.chargingState) && !/not/i.test(car.chargingState),
-            plugged: car.isPluggedIn,
-            locked: /^locked$/i.test(car.doorLockStatus)
-          }
-        : undefined,
-      bike: hasBike ? { battery: bike.batteryPercent, rangeKm: bike.remainingRangeKm, locked: bike.isLocked } : undefined
-    });
-  }, [states, resolvedZones]);
+    const vehicles = buildMobilityHome({ states, registry, devices, zones, now: Date.now() }).home.vehicles;
+    // Demo mode shows the sample vehicles on the page (useMobilityHome), so the header does too.
+    return vehiclesSentence(vehicles.length || !haWebSocketService.isDemo() ? vehicles : studioMobilityHome('fleet').vehicles);
+  }, [states, registry, devices, zones]);
   return <RichSubtitle parts={parts} />;
 }
 

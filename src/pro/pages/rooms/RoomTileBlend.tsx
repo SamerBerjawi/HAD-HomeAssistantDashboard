@@ -20,13 +20,15 @@ import { roomIcon } from './shared';
 import { sameTile, tileFacts, type RoomTileProps } from './tileParts';
 import { useHaPicture } from '../../widgets/shared/useHaPicture';
 
-function RoomTileBlendImpl({ r, size, prefs, actions, onOpen }: RoomTileProps) {
+type BlendProps = RoomTileProps & {showStates?: boolean; showReading?: boolean; showCounts?: boolean};
+
+function RoomTileBlendImpl({ r, size, prefs, actions, onOpen, showStates = true, showReading = true, showCounts = true }: BlendProps) {
   const f = tileFacts(r, prefs, size);
   const picture = useHaPicture(prefs.showPictures ? r.picture : null);
   const compact = size === 'compact';
   // Lights always first (`roomActions` order); compact tiles get the lights toggle only.
   const shown = compact ? actions.filter((a) => a === 'lights') : actions.slice(0, size === 'expanded' ? 3 : 2);
-  const dot = f.dot ? <span role="img" aria-label={f.dot.label} className="size-1.5 shrink-0 rounded-full" style={{ background: f.dot.color }} /> : null;
+  const dot = showStates && f.dot ? <span role="img" aria-label={f.dot.label} className="size-1.5 shrink-0 rounded-full" style={{ background: f.dot.color }} /> : null;
   const icon = <HugeiconsIcon icon={roomIcon(r)} size={compact ? 18 : 17} className="pro-rb-ico shrink-0" />;
 
   return (
@@ -44,8 +46,8 @@ function RoomTileBlendImpl({ r, size, prefs, actions, onOpen }: RoomTileProps) {
               {dot}
             </span>
             <span className="pro-rs-sub truncate text-[12px]">
-              <span className="font-semibold tabular-nums text-[var(--rs-fg)]">{f.big ?? f.word}</span>
-              {f.devices ? ` · ${f.devices}` : null}
+              {showReading && <span className="font-semibold tabular-nums text-[var(--rs-fg)]">{f.big ?? f.word}</span>}
+              {showCounts && f.devices ? (showReading ? ' · ' : '') + f.devices : null}
             </span>
           </span>
           <RoomQuickActions r={r} actions={shown} useLightColor={prefs.lightColorGlow} look="b" />
@@ -60,8 +62,8 @@ function RoomTileBlendImpl({ r, size, prefs, actions, onOpen }: RoomTileProps) {
               {dot}
             </p>
             <RoomQuickActions r={r} actions={shown} useLightColor={prefs.lightColorGlow} look="b" className="pro-rb-acts gap-1" />
-            <p className={cn('pro-rb-temp font-semibold leading-none tracking-tight tabular-nums', !f.big && 'pro-rb-word')}>{f.big ?? f.word}</p>
-            {f.extras.length || f.mood ? (
+            {showReading && <p className={cn('pro-rb-temp font-semibold leading-none tracking-tight tabular-nums', !f.big && 'pro-rb-word')}>{f.big ?? f.word}</p>}
+            {showStates && (f.extras.length || f.mood) ? (
               <p className="pro-rb-extra pro-rs-sub flex min-w-0 items-center gap-1.5 text-[13px]">
                 {r.media?.playing && prefs.animations ? (
                   <span aria-hidden className="pro-eq shrink-0">
@@ -79,7 +81,7 @@ function RoomTileBlendImpl({ r, size, prefs, actions, onOpen }: RoomTileProps) {
                 <span className="truncate">{f.extras.join(' · ')}</span>
               </p>
             ) : null}
-            <p className="pro-rb-foot pro-rs-sub flex min-w-0 items-center gap-2 text-[13px]">
+            {showCounts && <p className="pro-rb-foot pro-rs-sub flex min-w-0 items-center gap-2 text-[13px]">
               {f.lights ? (
                 <span className="flex min-w-0 items-center gap-1">
                   <HugeiconsIcon icon={BulbIcon} size={14} className={cn('shrink-0', f.lit && 'pro-rt-lit')} />
@@ -93,7 +95,7 @@ function RoomTileBlendImpl({ r, size, prefs, actions, onOpen }: RoomTileProps) {
                   {f.devices}
                 </span>
               ) : null}
-            </p>
+            </p>}
           </div>
         </div>
       )}
@@ -101,4 +103,4 @@ function RoomTileBlendImpl({ r, size, prefs, actions, onOpen }: RoomTileProps) {
   );
 }
 
-export const RoomTileBlend = memo(RoomTileBlendImpl, sameTile);
+export const RoomTileBlend = memo(RoomTileBlendImpl, (a, b) => a.showStates === b.showStates && a.showReading === b.showReading && a.showCounts === b.showCounts && sameTile(a, b));

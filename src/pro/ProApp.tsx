@@ -25,9 +25,8 @@ const WidgetStudio = import.meta.env.DEV ? lazy(() => import('./studio/WidgetStu
 const AreaStudio = import.meta.env.DEV ? lazy(() => import('./areas/studio/AreaStudio')) : null;
 const RoomsStudio = import.meta.env.DEV ? lazy(() => import('./pages/rooms/studio/RoomsStudio')) : null;
 const EnergyStudio = import.meta.env.DEV ? lazy(() => import('./pages/energy/studio/EnergyStudio')) : null;
-const MobilityStudio = import.meta.env.DEV ? lazy(() => import('./pages/mobility/studio/MobilityStudio')) : null;
-const MediaStudio = import.meta.env.DEV ? lazy(() => import('./pages/media/studio/MediaStudio')) : null;
 const SecurityStudio = import.meta.env.DEV ? lazy(() => import('./pages/security/studio/SecurityStudio')) : null;
+const MobilityStudio = import.meta.env.DEV ? lazy(() => import('./pages/mobility/studio/MobilityStudio')) : null;
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
 const ProSettings = lazy(() => import('./pages/ProSettings'));
@@ -89,18 +88,19 @@ export default function ProApp() {
           </Suspense>
         );
       }
+      if (studioId === 'mobility' && MobilityStudio) {
+        return (
+          <Suspense fallback={null}>
+            <MobilityStudio />
+          </Suspense>
+        );
+      }
       if (studioId === 'energy' && EnergyStudio) {
         return (
           <Suspense fallback={null}>
             <EnergyStudio />
           </Suspense>
         );
-      }
-      if (studioId === 'mobility' && MobilityStudio) {
-        return <Suspense fallback={null}><MobilityStudio /></Suspense>;
-      }
-      if (studioId === 'media' && MediaStudio) {
-        return <Suspense fallback={null}><MediaStudio /></Suspense>;
       }
       if (studioId === 'security' && SecurityStudio) {
         return (

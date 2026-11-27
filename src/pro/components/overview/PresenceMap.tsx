@@ -2,7 +2,8 @@
  * Optimized, viewport-lazy OpenStreetMap component using a minimal dark/light basemap layer and
  * Leaflet member markers (docs/pro-ui/DESIGN.md 7.6).
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { HostDarkMode } from "./HostDarkMode";
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
@@ -22,6 +23,7 @@ const MARKER_COLORS: Record<ProPresenceTone, { bg: string; ring: string }> = {
 };
 
 function useDocumentDarkMode(): boolean {
+  const hostDark = useContext(HostDarkMode);
   const [isDark, setIsDark] = useState(() => {
     if (typeof document === 'undefined') return true;
     if (document.documentElement.classList.contains('dark')) return true;
@@ -41,7 +43,7 @@ function useDocumentDarkMode(): boolean {
     return () => observer.disconnect();
   }, []);
 
-  return isDark;
+  return hostDark ?? isDark;
 }
 
 function escapeHtml(text: string): string {

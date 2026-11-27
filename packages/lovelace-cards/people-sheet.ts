@@ -3,11 +3,7 @@ import leafletCss from 'leaflet/dist/leaflet.css';
 import type { Member } from './people-card';
 import { personInitials } from '../../src/pro/lib/overviewPills';
 
-function node<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string) {
-  const el = document.createElement(tag);
-  if (text) el.textContent = text;
-  return el;
-}
+import { node, Sheet } from './sheet';
 
 function location(person: Member) {
   if (person.tone === 'home') return 'At home';
@@ -28,29 +24,16 @@ function age(p: Member) {
   return minutes < 60 ? minutes + 'm ago' : Math.floor(minutes / 60) + 'h ago';
 }
 
-export class PeopleSheet {
-  readonly dialog = node('dialog');
-  private readonly body = node('div');
-  private readonly close = node('button', '×');
+export class PeopleSheet extends Sheet {
   private map?: L.Map;
   private members: Member[] = [];
   private selected?: string;
   private headline = '';
 
   constructor() {
-    this.dialog.setAttribute('aria-label', 'People details');
-    const style = node('style', leafletCss);
-    this.close.className = 'sheet-close';
-    this.close.setAttribute('aria-label', 'Close People details');
-    this.close.onclick = () => this.dialog.close();
-    this.dialog.append(style, this.close, this.body);
+    super('People');
+    this.dialog.prepend(node('style', leafletCss));
     this.dialog.onclose = () => this.clearMap();
-    this.dialog.onclick = event => {
-      if (event.target === this.dialog) {
-        const rect = this.dialog.getBoundingClientRect();
-        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) this.dialog.close();
-      }
-    };
   }
 
   private clearMap() {
@@ -64,19 +47,13 @@ export class PeopleSheet {
     if (this.dialog.open) this.draw();
   }
 
-  open() {
-    this.dialog.showModal();
-    this.draw();
-    this.close.focus();
-  }
-
   private select(id: string) {
     this.selected = id;
     this.draw();
     this.body.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.focus({ preventScroll: true });
   }
 
-  private draw() {
+  protected draw() {
     this.clearMap();
     const p = this.members.find(member => member.id === this.selected) ?? this.members[0];
     const home = this.members.filter(m => m.tone === 'home').length;

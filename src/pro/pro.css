@@ -20,7 +20,7 @@
   font-family: 'Plus Jakarta Sans Variable', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
-.dark .pro {
+.dark .pro, .pro.dark {
   --pro-l: 0.68;
   --pro-accent-soft: color-mix(in oklab, var(--accent) 22%, transparent);
   --pro-accent-soft-fg: color-mix(in oklab, var(--accent) 70%, white);
@@ -28,8 +28,23 @@
 
 /* One accent per page */
 .pro[data-page='overview'] { --pro-h: 254; --pro-c: 0.2; }
-.pro[data-page='mobility'] { --pro-h: 155; --pro-c: 0.13; --pro-l: 0.48; }
-.dark .pro[data-page='mobility'], .pro.dark[data-page='mobility'] { --pro-l: 0.73; --accent-foreground: oklch(0.18 0.02 155); }
+.pro[data-page='mobility'] {
+  --pro-h: 155;
+  --pro-c: 0.13;
+  --pro-l: 0.48;
+  /* HeroUI's soft accent (secondary buttons) in emerald, not its default blue. */
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 20%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--accent) 78%, black);
+}
+.dark .pro[data-page='mobility'],
+.pro.dark[data-page='mobility'] {
+  --pro-l: 0.73;
+  --accent-foreground: oklch(0.18 0.02 155);
+  --accent-soft: color-mix(in oklab, var(--accent) 22%, transparent);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 28%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--accent) 78%, white);
+}
 .pro[data-page='media'] { --pro-h: 330; }
 .pro[data-page='rooms'] { --pro-h: 192; --pro-c: 0.115; }
 .pro[data-page='settings'] { --pro-h: 254; --pro-c: 0.14; }
@@ -1063,4 +1078,108 @@
   .pro .pro-eb {
     transition: none;
   }
+}
+
+/* Mobility: the drive battery's stripes flow in while charging, out while driving or conditioning. */
+@keyframes pro-battery-flow {
+  from {
+    transform: translateX(-12px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pro .pro-battery-flow {
+    animation: pro-battery-flow 0.9s linear infinite;
+  }
+  .pro .pro-battery-flow.is-out {
+    animation-direction: reverse;
+    animation-duration: 1.6s;
+  }
+  .pro .pro-battery-edge {
+    animation: pro-battery-edge 1.4s ease-in-out infinite;
+  }
+}
+@keyframes pro-battery-edge {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Mobility round 6 "life": streams in a card's hue (charge flowing, air blowing) and the road passing. */
+.pro .pro-mob-flow {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, black 25%, black 75%, transparent);
+}
+.pro .pro-mob-flow > span {
+  position: absolute;
+  top: var(--y);
+  left: calc(-1 * var(--w));
+  right: 0;
+  height: 2px;
+  opacity: 0.45;
+  background: linear-gradient(90deg, currentColor 0 40px, transparent 40px) var(--x) 0 / var(--w) 2px repeat-x;
+}
+.pro .pro-mob-flow > span:nth-child(1) { --y: 30%; --w: 150px; --x: 0px; }
+.pro .pro-mob-flow > span:nth-child(2) { --y: 48%; --w: 190px; --x: 40px; }
+.pro .pro-mob-flow > span:nth-child(3) { --y: 66%; --w: 170px; --x: 90px; }
+.pro .pro-mob-flow > span:nth-child(4) { --y: 84%; --w: 210px; --x: 20px; }
+.pro .pro-mob-flow.is-air > span { height: 1.5px; opacity: 0.35; border-radius: 2px; }
+@media (prefers-reduced-motion: no-preference) {
+  .pro .pro-mob-flow > span { animation: pro-airflow 2.6s linear infinite; }
+  .pro .pro-mob-flow.is-out > span { animation-direction: reverse; animation-duration: 4s; }
+  .pro .pro-mob-flow.is-air > span { animation-duration: 5s; }
+  .pro .pro-mob-road { animation: pro-mob-road 0.8s linear infinite; }
+  .pro .pro-mob-twinkle { animation: pro-mob-twinkle 3.2s ease-in-out infinite; }
+}
+.pro .pro-mob-road {
+  background: linear-gradient(90deg, currentColor 0 24px, transparent 24px) 0 0 / 44px 100% repeat-x;
+}
+@keyframes pro-mob-road {
+  to { background-position: -44px 0; }
+}
+@keyframes pro-mob-twinkle {
+  50% { opacity: 0.2; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pro .pro-mob-cable { animation: pro-cable 0.8s linear infinite; }
+}
+
+/*
+ * Mobility round 6, "life": the controls take their card's hue, as the room tiles' orb buttons do
+ * (docs/pro-ui/MOBILITY.md §0). `--hue` is set by the card (or by each control in the hero). It
+ * re-points HeroUI's own tokens, so primary buttons, toggles, the slider and the battery fill turn
+ * that colour; on buttons glow like the room tiles' orbs, off ones are glass tinted in the hue.
+ */
+.pro .pro-mob-hued {
+  --accent: var(--hue);
+  --accent-hover: color-mix(in oklab, var(--hue) 85%, white);
+  --accent-foreground: hsl(232 30% 12%);
+  --default: color-mix(in oklab, var(--hue) 15%, transparent);
+  --default-hover: color-mix(in oklab, var(--hue) 24%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--hue) 62%, var(--foreground));
+}
+.pro .pro-mob-hued .button--primary,
+.pro .pro-mob-hued .pro-mob-on {
+  background: radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--hue) 55%, white), var(--hue));
+  color: var(--accent-foreground);
+  box-shadow: 0 0 24px -4px color-mix(in srgb, var(--hue) 75%, transparent);
+}
+.pro .pro-mob-hued .button--secondary {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--hue) 22%, transparent);
+}
+.pro .pro-mob-hued .slider__track {
+  background-color: color-mix(in oklab, var(--hue) 14%, transparent);
+}
+.pro .pro-mob-hued .slider__fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hue) 45%, transparent), var(--hue));
+  box-shadow: 0 0 16px -3px color-mix(in srgb, var(--hue) 80%, transparent);
+}
+.pro .pro-mob-hued .slider__thumb {
+  background: radial-gradient(circle at 35% 30%, white, color-mix(in srgb, var(--hue) 35%, white));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hue) 70%, transparent), 0 0 18px -2px var(--hue);
+}
+.pro .pro-mob-hued .slider__thumb::after {
+  background-color: color-mix(in srgb, var(--hue) 30%, white);
 }

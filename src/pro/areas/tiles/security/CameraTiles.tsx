@@ -7,7 +7,7 @@
  * - C · "Private": words first ("Quiet · motion 52m ago"); the view stays blurred until you press
  *   Show, then blurs again after 15 seconds. For cameras inside the home, seen by guests.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@heroui/react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { EyeIcon, VideoOffIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons';
@@ -52,12 +52,13 @@ function SwitchView({ e, act }: { e: CameraTileModel; act: TileProps<CameraTileM
   );
 }
 
-export function CameraWindow({ e, size, act }: TileProps<CameraTileModel>) {
+export function CameraWindow({ e, size, act, liveView }: TileProps<CameraTileModel> & {liveView?: ReactNode}) {
   const scrim = 'pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.35),transparent_35%,transparent_55%,rgba(0,0,0,0.7))]';
   const big = size === 'l' || size === 't';
   return (
     <TileFrame label={e.name} className={cn('bg-black text-white', !e.available && 'pro-surface bg-transparent text-current')}>
       {e.available ? <div aria-hidden className="absolute inset-0" style={{ background: e.picture ?? undefined }} /> : <Offline compact={size === 'xs'} />}
+      {e.available && e.live ? liveView : null}
       {e.available ? <div className={scrim} /> : null}
       {e.available ? <SwitchView e={e} act={act} /> : null}
       <div className={cn('pointer-events-none absolute inset-0 flex flex-col', size === 'xs' ? 'justify-center px-3' : big ? 'p-4' : 'p-3')}>

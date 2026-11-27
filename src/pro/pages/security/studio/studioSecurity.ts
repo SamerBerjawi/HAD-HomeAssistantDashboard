@@ -1,695 +1,206 @@
 /**
- * Pure fixtures, metadata, phone-tab builder, and interactive stand-in action reducer for the
- * Security Studio (docs/pro-ui/SECURITY.md). Dev-only: never bundled into production, zero HA calls.
+ * Security Studio sample homes (docs/pro-ui/SECURITY.md) and `applySecurityAction`, a stand-in
+ * for Home Assistant so the mockups react. The model and its rules live in
+ * `src/pro/lib/securityPage.ts` (shared with the live page); re-exported here under the studio's
+ * names.
  */
-import type { IconSvgElement } from '@hugeicons/react';
-import {
-  Activity01Icon,
-  Alert02Icon,
-  Camera01Icon,
-  Layers01Icon,
-  Shield01Icon
-} from '@hugeicons/core-free-icons';
-import type { AlarmModeId, Tone } from '../../../lib/securityLogic';
+import type { CameraTileModel, CoverTileModel, LockTileModel, MotionTileModel, OpeningTileModel, SafetyTileModel } from '../../../areas/tileTypes';
+import { applyTileAction } from '../../../areas/studio/areaStates';
+import { DRIVEWAY, GARAGE, GARDEN_NIGHT, LIVING_ROOM, PORCH } from './cameraArt';
+import { ARM_MODES, needsCode, isGarage, isLock, isSiren, type GarageModel, type Placed, type SecurityAction, type SecurityCamera, type SecurityDevice, type SecurityEvent, type SecurityHome, type SirenModel, type Tone } from '../../../lib/securityPage';
 
-export type SecuritySectionId = 'alarm' | 'attention' | 'cameras' | 'activity' | 'devices';
-export type SecurityPhoneTabId = 'attention' | 'cameras' | 'activity' | 'devices';
-export type StudioSecurityStateId = 'all_clear' | 'attention' | 'night_motion' | 'triggered' | 'states';
+export * from '../../../lib/securityPage';
+export type StudioCamera = SecurityCamera;
+export type StudioDevice = SecurityDevice;
+export type StudioEvent = SecurityEvent;
+export type StudioHome = SecurityHome;
 
-export interface SecuritySectionMeta {
-  id: SecuritySectionId;
-  title: string;
-  shortTitle: string;
-  icon: IconSvgElement;
-  phoneTab: SecurityPhoneTabId | null;
-  summary: string;
+const MIN = 60_000;
+const PANEL = { entityId: 'alarm_control_panel.home', modes: ARM_MODES.map((m) => m.id), codeToArm: false, codeNumeric: true };
+
+export const STUDIO_STATES = [
+  { id: 'secure', label: 'Away · all secure' },
+  { id: 'evening', label: 'Evening · things open' },
+  { id: 'night', label: 'Night · motion outside' },
+  { id: 'triggered', label: 'Alarm triggered' },
+  { id: 'flat', label: 'Small flat' }
+] as const;
+export type StudioStateId = (typeof STUDIO_STATES)[number]['id'];
+
+const times = (now: number, ...minsAgo: number[]) => minsAgo.map((m) => now - m * MIN).sort((a, b) => a - b);
+
+function lock(now: number, p: Partial<LockTileModel> & Pick<LockTileModel, 'entityId' | 'name'>, area: string, minsAgo = 90): Placed<LockTileModel> {
+  const state = p.state ?? 'locked';
+  return { kind: 'lock', available: true, state, isOn: state === 'locked', battery: 80, changedBy: 'Auto-lock', supportsOpen: false, lastChanged: now - minsAgo * MIN, area, ...p };
+}
+function opening(now: number, p: Partial<OpeningTileModel> & Pick<OpeningTileModel, 'entityId' | 'name' | 'deviceClass'>, area: string, openMinsAgo: number | null): Placed<OpeningTileModel> {
+  const isOn = openMinsAgo !== null;
+  return { kind: 'opening', available: true, isOn, battery: 90, lastChanged: now - (openMinsAgo ?? 180) * MIN, spells: isOn ? [[now - openMinsAgo * MIN, null]] : [[now - 300 * MIN, now - 296 * MIN]], area, ...p };
+}
+function motion(now: number, p: Pick<MotionTileModel, 'entityId' | 'name'> & Partial<MotionTileModel>, area: string, lastMinsAgo: number, active = false): Placed<MotionTileModel> {
+  return { kind: 'motion', deviceClass: 'motion', available: true, isOn: active, battery: 70, lastChanged: now - lastMinsAgo * MIN, events: times(now, lastMinsAgo, lastMinsAgo + 40, lastMinsAgo + 130), area, ...p };
+}
+function safety(now: number, p: Pick<SafetyTileModel, 'entityId' | 'name' | 'deviceClass'> & Partial<SafetyTileModel>, area: string): Placed<SafetyTileModel> {
+  return { kind: 'safety', available: true, isOn: false, battery: 95, lastSeen: now - 2 * MIN, lastChanged: now - 60 * 24 * 9 * MIN, area, ...p };
+}
+function garage(now: number, p: Pick<CoverTileModel, 'entityId' | 'name'> & Partial<CoverTileModel>, area: string, openMinsAgo: number | null): Placed<GarageModel> {
+  const open = openMinsAgo !== null;
+  return { kind: 'cover', available: true, isOn: open, position: open ? 100 : 0, moving: null, lastChanged: now - (openMinsAgo ?? 300) * MIN, area, ...p, ...{ deviceClass: 'garage' as const } };
+}
+function siren(now: number, p: Pick<SirenModel, 'entityId' | 'name'> & Partial<SirenModel>, area: string): Placed<SirenModel> {
+  return { kind: 'siren', available: true, isOn: false, lastChanged: now - 60 * 24 * 30 * MIN, battery: null, area, ...p };
+}
+function camera(now: number, p: Pick<CameraTileModel, 'entityId' | 'name' | 'picture'> & Partial<StudioCamera>, area: string, outdoor: boolean, motionMinsAgo: number | null): StudioCamera {
+  return { kind: 'camera', available: true, isOn: true, live: true, lastChanged: null, lastMotion: motionMinsAgo === null ? null : now - motionMinsAgo * MIN, events: motionMinsAgo === null ? [] : times(now, motionMinsAgo, motionMinsAgo + 55, motionMinsAgo + 190), detection: null, area, outdoor, ...p };
 }
 
-export const SECURITY_SECTIONS: readonly SecuritySectionMeta[] = [
-  { id: 'alarm', title: 'Alarm hero', shortTitle: 'Alarm', icon: Shield01Icon, phoneTab: null, summary: 'Alarm state, arm/disarm modes, panel switcher, PIN & countdowns' },
-  { id: 'attention', title: 'Needs attention', shortTitle: 'Attention', icon: Alert02Icon, phoneTab: 'attention', summary: 'Active hazards, open entries, unlocked locks, battery & offline alerts' },
-  { id: 'cameras', title: 'Cameras', shortTitle: 'Cameras', icon: Camera01Icon, phoneTab: 'cameras', summary: 'Live WebRTC camera stage, surveillance grid, motion & AI badges' },
-  { id: 'activity', title: 'Recent activity', shortTitle: 'Activity', icon: Activity01Icon, phoneTab: 'activity', summary: '24 h security logbook timeline and hourly activity pulse' },
-  { id: 'devices', title: 'Device groups', shortTitle: 'Devices', icon: Layers01Icon, phoneTab: 'devices', summary: 'Locks, garages, doors, windows, motion & hazard sensors by type or room' }
-];
-
-export const STUDIO_SECURITY_STATES: readonly { id: StudioSecurityStateId; label: string; note: string }[] = [
-  { id: 'all_clear', label: 'Armed & All Clear', note: 'Armed away, every lock sealed, 4 live cameras, quiet logbook' },
-  { id: 'attention', label: 'Evening Attention', note: 'Disarmed, 1 lock unlocked, patio & garage open, driveway motion, low battery' },
-  { id: 'night_motion', label: 'Night + Motion', note: 'Armed night, garden person motion, 1 window sensor offline' },
-  { id: 'triggered', label: 'Alarm Triggered', note: 'Emergency: siren sounding, back door forced, kitchen leak detected' },
-  { id: 'states', label: 'Edge states', note: 'Loading skeleton, Empty no-devices card, and Service error alert' }
-];
-
-export interface StudioAlarmPanel {
-  id: string;
-  name: string;
-  state: AlarmModeId | 'arming' | 'pending' | 'triggered';
-  changedBy: string;
-  changedAgo: string;
-  needsCode: boolean;
-  supportedModes: readonly AlarmModeId[];
-  triggerSource?: string;
-}
-
-export interface StudioPerson {
-  id: string;
-  name: string;
-  initials: string;
-  home: boolean;
-  location: string;
-}
-
-export type StudioDeviceKind = 'lock' | 'garage' | 'siren' | 'door' | 'window' | 'motion' | 'smoke' | 'leak';
-
-export interface StudioSecurityDevice {
-  id: string;
-  name: string;
-  kind: StudioDeviceKind;
-  area: string;
-  floor: string;
-  state: string;
-  stateLabel: string;
-  tone: Tone;
-  problem: boolean;
-  batteryPct?: number;
-  offline?: boolean;
-  lastChangedAgo: string;
-}
-
-export type StudioAiKind = 'person' | 'vehicle' | 'package' | 'animal';
-export type StudioCameraStatus = 'live' | 'motion' | 'snapshot' | 'offline';
-export type StudioCameraScene = 'driveway' | 'front_door' | 'garden' | 'living';
-
-export interface StudioCamera {
-  id: string;
-  name: string;
-  area: string;
-  zone: 'Exterior' | 'Interior';
-  scene: StudioCameraScene;
-  status: StudioCameraStatus;
-  motion: boolean;
-  muted: boolean;
-  aiDetections: readonly StudioAiKind[];
-  lastEvent: string;
-  lastEventAgo: string;
-}
-
-export type StudioEventCategory = 'alarm' | 'access' | 'motion' | 'hazard';
-
-export interface StudioActivityEvent {
-  id: string;
-  time: string;
-  ago: string;
-  sentence: string;
-  area: string;
-  actor?: string;
-  category: StudioEventCategory;
-  tone: Tone;
-}
-
-export interface StudioSecuritySnapshot {
-  stateId: StudioSecurityStateId;
-  activeAlarmId: string;
-  alarms: StudioAlarmPanel[];
-  people: StudioPerson[];
-  devices: StudioSecurityDevice[];
-  cameras: StudioCamera[];
-  featuredCameraId: string;
-  events: StudioActivityEvent[];
-  hourlyPulse: readonly { hour: string; count: number; maxTone: Tone }[];
-  lastActionFeedback: string | null;
-}
-
-export type StudioSecurityAction =
-  | { type: 'arm'; mode: AlarmModeId; force?: boolean }
-  | { type: 'selectAlarm'; alarmId: string }
-  | { type: 'toggleLock'; deviceId: string }
-  | { type: 'lockAll' }
-  | { type: 'toggleGarage'; deviceId: string }
-  | { type: 'silenceSirens' }
-  | { type: 'selectCamera'; cameraId: string }
-  | { type: 'toggleCameraMute'; cameraId: string }
-  | { type: 'clearFeedback' };
-
-function baseHourlyPulse(stateId: StudioSecurityStateId): { hour: string; count: number; maxTone: Tone }[] {
-  return Array.from({ length: 24 }, (_, h) => {
-    const hour = `${String(h).padStart(2, '0')}:00`;
-    if (stateId === 'triggered' && h === 22) return { hour, count: 8, maxTone: 'danger' };
-    if (stateId === 'night_motion' && (h === 22 || h === 23)) return { hour, count: 4, maxTone: 'warning' };
-    if (h === 8 || h === 18) return { hour, count: 5, maxTone: 'success' };
-    if (h === 12 || h === 19 || h === 21) return { hour, count: stateId === 'attention' ? 4 : 2, maxTone: stateId === 'attention' && h === 21 ? 'warning' : 'success' };
-    if (h >= 1 && h <= 5) return { hour, count: 0, maxTone: 'default' };
-    return { hour, count: h % 3 === 0 ? 1 : 0, maxTone: 'default' };
-  });
-}
-
-function makeDevices(stateId: StudioSecurityStateId): StudioSecurityDevice[] {
-  const isAtt = stateId === 'attention';
-  const isNight = stateId === 'night_motion';
-  const isTrig = stateId === 'triggered';
-
-  return [
-    {
-      id: 'lock.front_door',
-      name: 'Front door lock',
-      kind: 'lock',
-      area: 'Entryway',
-      floor: 'Ground floor',
-      state: isAtt ? 'unlocked' : 'locked',
-      stateLabel: isAtt ? 'Unlocked' : 'Locked',
-      tone: isAtt ? 'warning' : 'success',
-      problem: isAtt,
-      batteryPct: 86,
-      lastChangedAgo: isAtt ? '6m ago' : '2h ago'
-    },
-    {
-      id: 'lock.back_door',
-      name: 'Back patio lock',
-      kind: 'lock',
-      area: 'Kitchen',
-      floor: 'Ground floor',
-      state: isTrig ? 'jammed' : 'locked',
-      stateLabel: isTrig ? 'Jammed' : 'Locked',
-      tone: isTrig ? 'danger' : 'success',
-      problem: isTrig,
-      batteryPct: 74,
-      lastChangedAgo: isTrig ? '1m ago' : '4h ago'
-    },
-    {
-      id: 'lock.side_gate',
-      name: 'Side gate lock',
-      kind: 'lock',
-      area: 'Garden',
-      floor: 'Exterior',
-      state: isAtt ? 'unlocked' : 'locked',
-      stateLabel: isAtt ? 'Unlocked' : 'Locked',
-      tone: isAtt ? 'warning' : 'success',
-      problem: isAtt,
-      batteryPct: 62,
-      lastChangedAgo: isAtt ? '19m ago' : 'Yesterday'
-    },
-    {
-      id: 'cover.garage_door',
-      name: 'Main garage door',
-      kind: 'garage',
-      area: 'Garage',
-      floor: 'Ground floor',
-      state: isAtt ? 'open' : 'closed',
-      stateLabel: isAtt ? 'Open' : 'Closed',
-      tone: isAtt ? 'warning' : 'success',
-      problem: isAtt,
-      lastChangedAgo: isAtt ? '11m ago' : '5h ago'
-    },
-    {
-      id: 'siren.entry_hall',
-      name: 'Entry hall siren',
-      kind: 'siren',
-      area: 'Entryway',
-      floor: 'Ground floor',
-      state: isTrig ? 'on' : 'off',
-      stateLabel: isTrig ? 'Sounding' : 'Standby',
-      tone: isTrig ? 'danger' : 'success',
-      problem: isTrig,
-      lastChangedAgo: isTrig ? '40s ago' : '30d ago'
-    },
-    {
-      id: 'binary_sensor.front_door',
-      name: 'Front door contact',
-      kind: 'door',
-      area: 'Entryway',
-      floor: 'Ground floor',
-      state: 'off',
-      stateLabel: 'Closed',
-      tone: 'success',
-      problem: false,
-      batteryPct: 91,
-      lastChangedAgo: '24m ago'
-    },
-    {
-      id: 'binary_sensor.patio_door',
-      name: 'Patio sliding door',
-      kind: 'door',
-      area: 'Kitchen',
-      floor: 'Ground floor',
-      state: isAtt || isTrig ? 'on' : 'off',
-      stateLabel: isTrig ? 'Forced open' : isAtt ? 'Open' : 'Closed',
-      tone: isTrig ? 'danger' : isAtt ? 'warning' : 'success',
-      problem: isAtt || isTrig,
-      batteryPct: 80,
-      lastChangedAgo: isTrig ? '1m ago' : isAtt ? '8m ago' : '3h ago'
-    },
-    {
-      id: 'binary_sensor.bedroom_window',
-      name: 'Master bedroom window',
-      kind: 'window',
-      area: 'Master bedroom',
-      floor: 'First floor',
-      state: isNight ? 'unavailable' : 'off',
-      stateLabel: isNight ? 'Offline' : 'Closed',
-      tone: isNight ? 'danger' : 'success',
-      problem: isNight,
-      offline: isNight,
-      batteryPct: isAtt ? 14 : 68,
-      lastChangedAgo: isNight ? '3h ago' : '1d ago'
-    },
-    {
-      id: 'binary_sensor.kitchen_window',
-      name: 'Kitchen window',
-      kind: 'window',
-      area: 'Kitchen',
-      floor: 'Ground floor',
-      state: 'off',
-      stateLabel: 'Closed',
-      tone: 'success',
-      problem: false,
-      batteryPct: 84,
-      lastChangedAgo: '2d ago'
-    },
-    {
-      id: 'binary_sensor.hall_motion',
-      name: 'Hallway motion',
-      kind: 'motion',
-      area: 'Entryway',
-      floor: 'Ground floor',
-      state: isTrig ? 'on' : 'off',
-      stateLabel: isTrig ? 'Motion' : 'Clear',
-      tone: isTrig ? 'warning' : 'success',
-      problem: isTrig,
-      batteryPct: 77,
-      lastChangedAgo: isTrig ? '30s ago' : '42m ago'
-    },
-    {
-      id: 'binary_sensor.garden_motion',
-      name: 'Garden perimeter motion',
-      kind: 'motion',
-      area: 'Garden',
-      floor: 'Exterior',
-      state: isNight || isAtt ? 'on' : 'off',
-      stateLabel: isNight || isAtt ? 'Motion' : 'Clear',
-      tone: isNight || isAtt ? 'warning' : 'success',
-      problem: isNight || isAtt,
-      batteryPct: 58,
-      lastChangedAgo: isNight || isAtt ? '1m ago' : '2h ago'
-    },
-    {
-      id: 'binary_sensor.kitchen_smoke',
-      name: 'Kitchen smoke alarm',
-      kind: 'smoke',
-      area: 'Kitchen',
-      floor: 'Ground floor',
-      state: 'off',
-      stateLabel: 'Clear',
-      tone: 'success',
-      problem: false,
-      batteryPct: 95,
-      lastChangedAgo: '14d ago'
-    },
-    {
-      id: 'binary_sensor.sink_leak',
-      name: 'Under-sink leak sensor',
-      kind: 'leak',
-      area: 'Kitchen',
-      floor: 'Ground floor',
-      state: isTrig ? 'on' : 'off',
-      stateLabel: isTrig ? 'Leak detected' : 'Dry',
-      tone: isTrig ? 'danger' : 'success',
-      problem: isTrig,
-      batteryPct: 89,
-      lastChangedAgo: isTrig ? '2m ago' : '20d ago'
-    }
-  ];
-}
-
-function makeCameras(stateId: StudioSecurityStateId): StudioCamera[] {
-  const isAtt = stateId === 'attention';
-  const isNight = stateId === 'night_motion';
-  const isTrig = stateId === 'triggered';
-
-  return [
-    {
-      id: 'camera.driveway',
-      name: 'Driveway',
-      area: 'Driveway',
-      zone: 'Exterior',
-      scene: 'driveway',
-      status: isAtt ? 'motion' : 'live',
-      motion: isAtt,
-      muted: true,
-      aiDetections: isAtt ? ['vehicle', 'person'] : [],
-      lastEvent: isAtt ? 'Vehicle & person approaching' : 'Clear perimeter',
-      lastEventAgo: isAtt ? 'Just now' : '38m ago'
-    },
-    {
-      id: 'camera.front_door',
-      name: 'Front Porch',
-      area: 'Entryway',
-      zone: 'Exterior',
-      scene: 'front_door',
-      status: 'live',
-      motion: false,
-      muted: true,
-      aiDetections: stateId === 'all_clear' ? ['package'] : [],
-      lastEvent: stateId === 'all_clear' ? 'Package resting by door' : 'Doorbell idle',
-      lastEventAgo: stateId === 'all_clear' ? '18m ago' : '1h ago'
-    },
-    {
-      id: 'camera.garden',
-      name: 'Back Garden',
-      area: 'Garden',
-      zone: 'Exterior',
-      scene: 'garden',
-      status: isNight || isTrig ? 'motion' : 'live',
-      motion: isNight || isTrig,
-      muted: true,
-      aiDetections: isTrig ? ['person'] : isNight ? ['person', 'animal'] : [],
-      lastEvent: isTrig ? 'Person near patio door!' : isNight ? 'Movement near fence' : 'Quiet yard',
-      lastEventAgo: isNight || isTrig ? '15s ago' : '2h ago'
-    },
-    {
-      id: 'camera.living',
-      name: 'Living Room',
-      area: 'Living room',
-      zone: 'Interior',
-      scene: 'living',
-      status: isNight ? 'offline' : 'snapshot',
-      motion: false,
-      muted: true,
-      aiDetections: [],
-      lastEvent: isNight ? 'Camera offline' : 'Privacy snapshot only',
-      lastEventAgo: isNight ? '2h ago' : '12m ago'
-    }
-  ];
-}
-
-function makeEvents(stateId: StudioSecurityStateId): StudioActivityEvent[] {
-  const base: StudioActivityEvent[] = [
-    { id: 'e4', time: '19:40', ago: '2h ago', sentence: 'Front door locked by Samer', area: 'Entryway', actor: 'Samer', category: 'access', tone: 'success' },
-    { id: 'e5', time: '18:55', ago: '3h ago', sentence: 'Package detected at Front Porch', area: 'Entryway', category: 'motion', tone: 'warning' },
-    { id: 'e6', time: '18:12', ago: '4h ago', sentence: 'Main garage door closed', area: 'Garage', actor: 'Maya', category: 'access', tone: 'success' },
-    { id: 'e7', time: '14:05', ago: '8h ago', sentence: 'Home alarm armed away by Samer', area: 'Entryway', actor: 'Samer', category: 'alarm', tone: 'success' },
-    { id: 'e8', time: '08:18', ago: '14h ago', sentence: 'Home alarm disarmed by Maya', area: 'Entryway', actor: 'Maya', category: 'alarm', tone: 'default' },
-    { id: 'e9', time: '07:50', ago: '14h ago', sentence: 'Patio sliding door closed', area: 'Kitchen', category: 'access', tone: 'success' }
-  ];
-
-  if (stateId === 'triggered') {
-    return [
-      { id: 't1', time: '22:13', ago: '40s ago', sentence: 'Entry hall siren triggered — Patio sliding door forced open', area: 'Kitchen', category: 'hazard', tone: 'danger' },
-      { id: 't2', time: '22:12', ago: '1m ago', sentence: 'Person detected on Back Garden camera', area: 'Garden', category: 'motion', tone: 'warning' },
-      { id: 't3', time: '22:11', ago: '2m ago', sentence: 'Under-sink leak sensor detected water', area: 'Kitchen', category: 'hazard', tone: 'danger' },
-      ...base
-    ];
-  }
-  if (stateId === 'attention') {
-    return [
-      { id: 'a1', time: '22:08', ago: 'Just now', sentence: 'Vehicle & person detected on Driveway camera', area: 'Driveway', category: 'motion', tone: 'warning' },
-      { id: 'a2', time: '22:02', ago: '6m ago', sentence: 'Front door unlocked by Samer', area: 'Entryway', actor: 'Samer', category: 'access', tone: 'warning' },
-      { id: 'a3', time: '21:57', ago: '11m ago', sentence: 'Main garage door opened', area: 'Garage', actor: 'Samer', category: 'access', tone: 'warning' },
-      ...base
-    ];
-  }
-  if (stateId === 'night_motion') {
-    return [
-      { id: 'n1', time: '22:12', ago: '15s ago', sentence: 'Person detected on Back Garden camera', area: 'Garden', category: 'motion', tone: 'warning' },
-      { id: 'n2', time: '21:45', ago: '28m ago', sentence: 'Home alarm armed night by Maya', area: 'Entryway', actor: 'Maya', category: 'alarm', tone: 'success' },
-      { id: 'n3', time: '19:10', ago: '3h ago', sentence: 'Master bedroom window went offline', area: 'Master bedroom', category: 'hazard', tone: 'danger' },
-      ...base
-    ];
-  }
-  return [
-    { id: 'c1', time: '20:10', ago: '2h ago', sentence: 'Home alarm armed away by Samer', area: 'Entryway', actor: 'Samer', category: 'alarm', tone: 'success' },
-    { id: 'c2', time: '20:09', ago: '2h ago', sentence: 'All 3 exterior locks verified locked', area: 'Entryway', category: 'access', tone: 'success' },
-    ...base
-  ];
-}
-
-export function buildStudioSecuritySnapshot(stateId: StudioSecurityStateId): StudioSecuritySnapshot {
-  const alarmState: StudioAlarmPanel['state'] =
-    stateId === 'triggered'
-      ? 'triggered'
-      : stateId === 'night_motion'
-        ? 'armed_night'
-        : stateId === 'attention'
-          ? 'disarmed'
-          : 'armed_away';
-
-  const alarms: StudioAlarmPanel[] = [
-    {
-      id: 'alarm_control_panel.home_alarm',
-      name: 'Aqara Home Alarm',
-      state: alarmState,
-      changedBy: stateId === 'night_motion' ? 'Maya' : 'Samer',
-      changedAgo: stateId === 'triggered' ? '40s ago' : stateId === 'attention' ? '14m ago' : '2h ago',
-      needsCode: true,
-      supportedModes: ['disarmed', 'armed_home', 'armed_away', 'armed_night'],
-      triggerSource: stateId === 'triggered' ? 'Patio sliding door' : undefined
-    },
-    {
-      id: 'alarm_control_panel.garage_zone',
-      name: 'Garage Outbuilding',
-      state: stateId === 'attention' ? 'disarmed' : 'armed_away',
-      changedBy: 'Samer',
-      changedAgo: '5h ago',
-      needsCode: false,
-      supportedModes: ['disarmed', 'armed_away', 'armed_night']
-    }
-  ];
-
-  const cameras = makeCameras(stateId);
-  const motionCam = cameras.find((c) => c.motion) ?? cameras[0];
-
-  return {
-    stateId,
-    activeAlarmId: alarms[0].id,
-    alarms,
-    people: [
-      { id: 'person.samer', name: 'Samer', initials: 'SB', home: stateId !== 'all_clear', location: stateId === 'all_clear' ? 'Away' : 'Home' },
-      { id: 'person.maya', name: 'Maya', initials: 'MB', home: stateId === 'night_motion' || stateId === 'attention', location: stateId === 'night_motion' || stateId === 'attention' ? 'Home' : 'Work' }
-    ],
-    devices: makeDevices(stateId),
-    cameras,
-    featuredCameraId: motionCam.id,
-    events: makeEvents(stateId),
-    hourlyPulse: baseHourlyPulse(stateId),
-    lastActionFeedback: null
-  };
-}
-
-/** Pure stand-in service reducer: simulates HA security actions cleanly inside Studio state. */
-export function applySecurityAction(
-  snap: StudioSecuritySnapshot,
-  action: StudioSecurityAction
-): StudioSecuritySnapshot {
-  if (action.type === 'clearFeedback') {
-    return { ...snap, lastActionFeedback: null };
-  }
-  if (action.type === 'selectAlarm') {
-    return { ...snap, activeAlarmId: action.alarmId, lastActionFeedback: null };
-  }
-  if (action.type === 'selectCamera') {
-    return { ...snap, featuredCameraId: action.cameraId };
-  }
-  if (action.type === 'toggleCameraMute') {
+/** The demo home (two floors, garden, garage) in each studio state; "flat" is a small one-floor home. */
+export function studioHome(id: StudioStateId, now = Date.now()): StudioHome {
+  if (id === 'flat') {
     return {
-      ...snap,
-      cameras: snap.cameras.map((c) => (c.id === action.cameraId ? { ...c, muted: !c.muted } : c))
+      alarm: { ...PANEL, state: 'disarmed', changedBy: 'Alex', changedAt: now - 35 * MIN, cause: null, siren: false, codeToDisarm: false },
+      people: [{ name: 'Alex', home: true }],
+      cameras: [camera(now, { entityId: 'camera.doorbell', name: 'Doorbell', picture: PORCH }, 'Entrance', true, 210)],
+      devices: [
+        lock(now, { entityId: 'lock.front_door', name: 'Front Door', changedBy: 'Alex' }, 'Entrance', 35),
+        opening(now, { entityId: 'binary_sensor.balcony_door', name: 'Balcony Door', deviceClass: 'door' }, 'Living Room', null),
+        motion(now, { entityId: 'binary_sensor.hall_motion', name: 'Hall Motion' }, 'Hall', 12),
+        safety(now, { entityId: 'binary_sensor.kitchen_smoke', name: 'Kitchen Smoke', deviceClass: 'smoke' }, 'Kitchen')
+      ],
+      events: [
+        { id: 'f1', at: now - 35 * MIN, kind: 'alarm', text: 'Alex turned the alarm off', tone: 'calm' },
+        { id: 'f2', at: now - 36 * MIN, kind: 'lock', text: 'Front Door unlocked with the keypad', tone: 'calm' },
+        { id: 'f3', at: now - 210 * MIN, kind: 'camera', text: 'Doorbell saw a person', tone: 'calm' }
+      ]
     };
   }
-  if (action.type === 'arm') {
-    const openOrUnlocked = snap.devices.filter(
-      (d) =>
-        (d.kind === 'door' || d.kind === 'window' || d.kind === 'garage') && d.state === 'open' ||
-        (d.kind === 'door' || d.kind === 'window') && d.state === 'on' ||
-        (d.kind === 'lock' && d.state === 'unlocked')
-    );
-    const needsWarn =
-      !action.force &&
-      (action.mode === 'armed_away' || action.mode === 'armed_night') &&
-      openOrUnlocked.length > 0;
-    if (needsWarn) {
+
+  const evening = id === 'evening';
+  const night = id === 'night';
+  const triggered = id === 'triggered';
+  const away = id === 'secure';
+
+  const cameras: StudioCamera[] = [
+    camera(now, { entityId: 'camera.front_door', name: 'Front Door', picture: PORCH, detection: away ? 'package' : null }, 'Entrance', true, away ? 48 : 140),
+    camera(now, { entityId: 'camera.driveway', name: 'Driveway', picture: DRIVEWAY, detection: evening ? 'vehicle' : null }, 'Driveway', true, evening ? 1 : 260),
+    camera(now, { entityId: 'camera.garden', name: 'Garden', picture: GARDEN_NIGHT, detection: night || triggered ? 'person' : null }, 'Garden', true, night || triggered ? 0.5 : 95),
+    camera(now, { entityId: 'camera.living_room', name: 'Living Room', picture: LIVING_ROOM, available: !night, live: !night }, 'Living Room', false, night ? null : evening ? 3 : 400),
+    camera(now, { entityId: 'camera.garage', name: 'Garage', picture: GARAGE }, 'Garage', false, 600)
+  ];
+
+  const devices: StudioDevice[] = [
+    lock(now, { entityId: 'lock.front_door', name: 'Front Door', supportsOpen: true }, 'Entrance', away ? 70 : 200),
+    lock(now, { entityId: 'lock.back_door', name: 'Back Door', state: evening ? 'unlocked' : triggered ? 'jammed' : 'locked', changedBy: evening ? 'Sam' : 'Auto-lock' }, 'Kitchen', evening ? 25 : 2),
+    lock(now, { entityId: 'lock.garage_side', name: 'Garage Side Door', state: evening ? 'unlocked' : 'locked', battery: night ? 12 : 64, changedBy: 'Keypad' }, 'Garage', evening ? 50 : 300),
+    opening(now, { entityId: 'binary_sensor.patio_door', name: 'Patio Door', deviceClass: 'door' }, 'Living Room', evening ? 18 : triggered ? 1 : null),
+    garage(now, { entityId: 'cover.garage_door', name: 'Garage Door' }, 'Garage', evening ? 6 : null),
+    opening(now, { entityId: 'binary_sensor.bedroom_window', name: 'Bedroom Window', deviceClass: 'window', available: !night }, 'Bedroom', null),
+    opening(now, { entityId: 'binary_sensor.kitchen_window', name: 'Kitchen Window', deviceClass: 'window' }, 'Kitchen', null),
+    motion(now, { entityId: 'binary_sensor.hallway_motion', name: 'Hallway Motion' }, 'Hallway', away ? 72 : 4, evening),
+    motion(now, { entityId: 'binary_sensor.garden_motion', name: 'Garden Motion', battery: night ? 14 : 70 }, 'Garden', night || triggered ? 0.5 : 95, night || triggered),
+    safety(now, { entityId: 'binary_sensor.hallway_smoke', name: 'Hallway Smoke', deviceClass: 'smoke' }, 'Hallway'),
+    siren(now, { entityId: 'siren.hallway', name: 'Hallway Siren', isOn: triggered, lastChanged: triggered ? now - 1 * MIN : now - 60 * 24 * 30 * MIN }, 'Hallway'),
+    siren(now, { entityId: 'siren.outdoor', name: 'Outdoor Siren', isOn: triggered, battery: 76, lastChanged: triggered ? now - 1 * MIN : now - 60 * 24 * 30 * MIN }, 'Garden'),
+    safety(now, { entityId: 'binary_sensor.kitchen_leak', name: 'Under Sink', deviceClass: 'moisture', isOn: triggered, lastChanged: triggered ? now - 3 * MIN : now - 60 * 24 * 12 * MIN }, 'Kitchen')
+  ];
+
+  const alarm: StudioHome['alarm'] = away
+    ? { ...PANEL, state: 'armed_away', changedBy: 'Sam', changedAt: now - 75 * MIN, cause: null, siren: false, codeToDisarm: true }
+    : night
+      ? { ...PANEL, state: 'armed_night', changedBy: 'Automation', changedAt: now - 140 * MIN, cause: null, siren: false, codeToDisarm: true }
+      : triggered
+        ? { ...PANEL, state: 'triggered', changedBy: null, changedAt: now - 1 * MIN, cause: 'Patio Door opened', siren: true, codeToDisarm: true }
+        : { ...PANEL, state: 'disarmed', changedBy: 'Sam', changedAt: now - 30 * MIN, cause: null, siren: false, codeToDisarm: true };
+
+  const people = away
+    ? [{ name: 'Sam', home: false }, { name: 'Maya', home: false }]
+    : triggered
+      ? [{ name: 'Sam', home: false }, { name: 'Maya', home: false }]
+      : [{ name: 'Sam', home: true }, { name: 'Maya', home: true }];
+
+  const events: StudioEvent[] = triggered
+    ? [
+        { id: 't1', at: now - 1 * MIN, kind: 'alarm', text: 'Alarm triggered by Patio Door', tone: 'danger' },
+        { id: 't2', at: now - 1.2 * MIN, kind: 'opening', text: 'Patio Door opened', tone: 'danger' },
+        { id: 't3', at: now - 2 * MIN, kind: 'lock', text: 'Back Door jammed while locking', tone: 'danger' },
+        { id: 't4', at: now - 3 * MIN, kind: 'safety', text: 'Water under the kitchen sink', tone: 'danger' },
+        { id: 't5', at: now - 4 * MIN, kind: 'camera', text: 'Garden camera saw a person', tone: 'warning' },
+        { id: 't6', at: now - 80 * MIN, kind: 'alarm', text: 'Sam set the alarm to Away', tone: 'calm' }
+      ]
+    : [
+        ...(evening
+          ? [
+              { id: 'e1', at: now - 1 * MIN, kind: 'camera' as const, text: 'Driveway camera saw a car', tone: 'calm' as const },
+              { id: 'e2', at: now - 6 * MIN, kind: 'opening' as const, text: 'Garage Door opened', tone: 'warning' as const },
+              { id: 'e3', at: now - 18 * MIN, kind: 'opening' as const, text: 'Patio Door opened', tone: 'warning' as const },
+              { id: 'e4', at: now - 25 * MIN, kind: 'lock' as const, text: 'Sam unlocked the Back Door', tone: 'calm' as const },
+              { id: 'e5', at: now - 30 * MIN, kind: 'alarm' as const, text: 'Sam turned the alarm off', tone: 'calm' as const },
+              { id: 'e6', at: now - 31 * MIN, kind: 'person' as const, text: 'Sam arrived home', tone: 'calm' as const }
+            ]
+          : []),
+        ...(night
+          ? [
+              { id: 'n1', at: now - 0.5 * MIN, kind: 'camera' as const, text: 'Garden camera saw a person', tone: 'warning' as const },
+              { id: 'n2', at: now - 50 * MIN, kind: 'camera' as const, text: 'Living Room camera went offline', tone: 'warning' as const },
+              { id: 'n3', at: now - 140 * MIN, kind: 'alarm' as const, text: 'Bedtime automation set the alarm to Night', tone: 'calm' as const }
+            ]
+          : []),
+        ...(away
+          ? [
+              { id: 'a1', at: now - 48 * MIN, kind: 'camera' as const, text: 'Front Door camera saw a package', tone: 'calm' as const },
+              { id: 'a2', at: now - 70 * MIN, kind: 'lock' as const, text: 'Front Door locked itself', tone: 'calm' as const },
+              { id: 'a3', at: now - 75 * MIN, kind: 'alarm' as const, text: 'Sam set the alarm to Away', tone: 'calm' as const },
+              { id: 'a4', at: now - 76 * MIN, kind: 'person' as const, text: 'Everyone left', tone: 'calm' as const }
+            ]
+          : []),
+        { id: 'x1', at: now - 9 * 60 * MIN, kind: 'lock', text: 'Front Door unlocked with the keypad', tone: 'calm' },
+        { id: 'x2', at: now - 11 * 60 * MIN, kind: 'alarm', text: 'Maya turned the alarm off', tone: 'calm' }
+      ];
+
+  return { alarm, people, cameras, devices, events };
+}
+
+
+/** The studio's sample alarm code. */
+export const STUDIO_CODE = '1234';
+
+/** Apply an action as Home Assistant would, and log it. */
+export function applySecurityAction(home: StudioHome, a: SecurityAction, now = Date.now()): StudioHome {
+  const log = (text: string, kind: StudioEvent['kind'], tone: Tone = 'calm'): StudioEvent[] => [{ id: `u${now}-${home.events.length}`, at: now, kind, text, tone }, ...home.events];
+  switch (a.type) {
+    case 'arm':
+      if (needsCode(home, a.mode) && a.code !== STUDIO_CODE) return { ...home, events: log('Wrong code: the alarm did not change', 'alarm', 'warning') };
       return {
-        ...snap,
-        lastActionFeedback: `Perimeter check: ${openOrUnlocked.length} entry open/unlocked — tap again or seal perimeter first.`
+        ...home,
+        alarm: { ...home.alarm, state: a.mode, changedBy: 'You', changedAt: now, cause: null, siren: false },
+        events: log(a.mode === 'disarmed' ? 'You turned the alarm off' : `You set the alarm to ${ARM_MODES.find((m) => m.id === a.mode)?.label}`, 'alarm')
       };
+    case 'silence':
+      return { ...home, alarm: { ...home.alarm, siren: false }, devices: home.devices.map((d) => (isSiren(d) && d.isOn ? { ...d, isOn: false, lastChanged: now } : d)), events: log('You silenced the siren', 'alarm') };
+    case 'lockAll': {
+      const devices = home.devices.map((d) => (isLock(d) && d.available && (d.state === 'unlocked' || d.state === 'open') ? { ...d, state: 'locked' as const, isOn: true, changedBy: 'You', lastChanged: now } : d));
+      return { ...home, devices, events: log('You locked every door', 'lock') };
     }
-    const nowTime = '22:15';
-    const nextAlarms = snap.alarms.map((a) =>
-      a.id === snap.activeAlarmId
-        ? { ...a, state: action.mode, changedBy: 'You (Studio)', changedAgo: 'Just now', triggerSource: undefined }
-        : a
-    );
-    const nextDevices =
-      action.mode === 'disarmed'
-        ? snap.devices.map((d) =>
-            d.kind === 'siren' ? { ...d, state: 'off', stateLabel: 'Standby', tone: 'success' as Tone, problem: false } : d
-          )
-        : snap.devices;
-    const modeName = action.mode === 'disarmed' ? 'disarmed' : action.mode.replace('_', ' ');
-    return {
-      ...snap,
-      alarms: nextAlarms,
-      devices: nextDevices,
-      events: [
-        {
-          id: `evt-${Date.now()}`,
-          time: nowTime,
-          ago: 'Just now',
-          sentence: `Alarm set to ${modeName} (Studio mock)`,
-          area: 'Entryway',
-          actor: 'You',
-          category: 'alarm',
-          tone: action.mode === 'disarmed' ? 'default' : 'success'
-        },
-        ...snap.events
-      ],
-      lastActionFeedback: `Simulated: Alarm ${modeName}.`
-    };
-  }
-  if (action.type === 'toggleLock') {
-    const target = snap.devices.find((d) => d.id === action.deviceId);
-    if (!target || target.kind !== 'lock') return snap;
-    const locking = target.state !== 'locked';
-    return {
-      ...snap,
-      devices: snap.devices.map((d) =>
-        d.id === action.deviceId
-          ? {
-              ...d,
-              state: locking ? 'locked' : 'unlocked',
-              stateLabel: locking ? 'Locked' : 'Unlocked',
-              tone: locking ? 'success' : 'warning',
-              problem: !locking,
-              lastChangedAgo: 'Just now'
-            }
-          : d
-      ),
-      events: [
-        {
-          id: `evt-${Date.now()}`,
-          time: '22:15',
-          ago: 'Just now',
-          sentence: `${target.name} ${locking ? 'locked' : 'unlocked'} (Studio mock)`,
-          area: target.area,
-          actor: 'You',
-          category: 'access',
-          tone: locking ? 'success' : 'warning'
-        },
-        ...snap.events
-      ],
-      lastActionFeedback: `Simulated: ${target.name} ${locking ? 'locked' : 'unlocked'}.`
-    };
-  }
-  if (action.type === 'lockAll') {
-    let lockedCount = 0;
-    const nextDevices = snap.devices.map((d) => {
-      if (d.kind === 'lock' && d.state !== 'locked') {
-        lockedCount++;
-        return { ...d, state: 'locked', stateLabel: 'Locked', tone: 'success' as Tone, problem: false, lastChangedAgo: 'Just now' };
+    case 'device': {
+      const cam = home.cameras.find((c) => c.entityId === a.id);
+      if (cam) return { ...home, cameras: home.cameras.map((c) => (c === cam ? { ...c, ...(applyTileAction(c, a.action) as CameraTileModel) } : c)) };
+      const dev = home.devices.find((d) => d.entityId === a.id);
+      if (!dev) return home;
+      if (isSiren(dev)) {
+        if (a.action.type !== 'toggle') return home;
+        const on = !dev.isOn;
+        const devices = home.devices.map((d) => (d === dev ? { ...dev, isOn: on, lastChanged: now } : d));
+        const anyOn = devices.some((d) => isSiren(d) && d.isOn);
+        return { ...home, devices, alarm: { ...home.alarm, siren: anyOn && home.alarm.siren }, events: log(on ? `You tested the ${dev.name}` : `You silenced the ${dev.name}`, 'alarm', on ? 'warning' : 'calm') };
       }
-      return d;
-    });
-    if (lockedCount === 0) return snap;
-    return {
-      ...snap,
-      devices: nextDevices,
-      events: [
-        {
-          id: `evt-${Date.now()}`,
-          time: '22:15',
-          ago: 'Just now',
-          sentence: `Locked ${lockedCount} exterior lock${lockedCount > 1 ? 's' : ''} (Studio mock)`,
-          area: 'All entries',
-          actor: 'You',
-          category: 'access',
-          tone: 'success'
-        },
-        ...snap.events
-      ],
-      lastActionFeedback: `Simulated: Locked ${lockedCount} lock${lockedCount > 1 ? 's' : ''}.`
-    };
+      if (isGarage(dev)) {
+        const next = { ...dev, ...(applyTileAction(dev, a.action) as CoverTileModel), deviceClass: 'garage' as const };
+        return { ...home, devices: home.devices.map((d) => (d === dev ? next : d)), events: next.isOn !== dev.isOn ? log(`You ${next.isOn ? 'opened' : 'closed'} the ${dev.name}`, 'opening') : home.events };
+      }
+      const next = { ...dev, ...applyTileAction(dev, a.action) } as StudioDevice;
+      const changed = isLock(next) && isLock(dev) && next.state !== dev.state;
+      return { ...home, devices: home.devices.map((d) => (d === dev ? next : d)), events: changed && isLock(next) ? log(`You ${next.state === 'locked' ? 'locked' : 'unlocked'} the ${next.name}`, 'lock') : home.events };
+    }
   }
-  if (action.type === 'toggleGarage') {
-    const target = snap.devices.find((d) => d.id === action.deviceId);
-    if (!target || target.kind !== 'garage') return snap;
-    const closing = target.state !== 'closed';
-    return {
-      ...snap,
-      devices: snap.devices.map((d) =>
-        d.id === action.deviceId
-          ? {
-              ...d,
-              state: closing ? 'closed' : 'open',
-              stateLabel: closing ? 'Closed' : 'Open',
-              tone: closing ? 'success' : 'warning',
-              problem: !closing,
-              lastChangedAgo: 'Just now'
-            }
-          : d
-      ),
-      lastActionFeedback: `Simulated: ${target.name} ${closing ? 'closed' : 'opened'}.`
-    };
-  }
-  if (action.type === 'silenceSirens') {
-    return {
-      ...snap,
-      devices: snap.devices.map((d) =>
-        d.kind === 'siren'
-          ? { ...d, state: 'off', stateLabel: 'Standby', tone: 'success' as Tone, problem: false, lastChangedAgo: 'Just now' }
-          : d
-      ),
-      lastActionFeedback: 'Simulated: Sirens silenced.'
-    };
-  }
-  return snap;
 }
 
-export interface SecurityPhoneTabDef {
-  id: SecurityPhoneTabId;
-  title: string;
-  icon: IconSvgElement;
-  badge?: string;
-  badgeTone?: Tone;
-}
-
-export function buildSecurityPhoneTabs(snap: StudioSecuritySnapshot): SecurityPhoneTabDef[] {
-  const issues = snap.devices.filter(
-    (d) => d.problem || (typeof d.batteryPct === 'number' && d.batteryPct <= 20)
-  );
-  const dangerCount = issues.filter((d) => d.problem && d.tone === 'danger').length;
-  const motionCams = snap.cameras.filter((c) => c.motion).length;
-  const tabs: SecurityPhoneTabDef[] = [
-    {
-      id: 'attention',
-      title: 'Alerts',
-      icon: Alert02Icon,
-      badge: issues.length > 0 ? String(issues.length) : undefined,
-      badgeTone: dangerCount > 0 ? 'danger' : issues.length > 0 ? 'warning' : 'success'
-    },
-    ...(snap.cameras.length > 0
-      ? [
-          {
-            id: 'cameras' as const,
-            title: 'Cams',
-            icon: Camera01Icon,
-            badge: motionCams > 0 ? String(motionCams) : undefined,
-            badgeTone: motionCams > 0 ? ('warning' as Tone) : undefined
-          }
-        ]
-      : []),
-    {
-      id: 'activity',
-      title: 'Log',
-      icon: Activity01Icon
-    },
-    ...(snap.devices.length > 0
-      ? [
-          {
-            id: 'devices' as const,
-            title: 'Devices',
-            icon: Layers01Icon
-          }
-        ]
-      : [])
-  ];
-  return tabs;
-}

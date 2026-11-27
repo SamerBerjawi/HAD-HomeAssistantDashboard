@@ -1,14 +1,16 @@
+import { TileFit } from './fit-tile';
+import { applySize, grid, widgetEditor } from './widget-editor';
 import { personInitials } from '../../src/pro/lib/overviewPills';
 import { presenceWarmth } from '../../src/pro/lib/presencePortraits';
 import { PeopleSheet } from './people-sheet';
 import css from './people-card.css';
 
-const tag = 'at-home-people-card';
+import { expandButton } from './sheet';
 const domains = ['person', 'device_tracker'];
 const trackedEntity = /^(person|device_tracker)\.[a-z0-9_]+$/;
 
 interface PeopleConfig {
-  title?: string;
+  size?: string; title?: string;
   entities?: string[];
 }
 
@@ -107,29 +109,25 @@ function portrait(member: Member) {
   return item;
 }
 
-class PeopleCard extends HTMLElement {
+export class PeopleCard extends HTMLElement {
   private config?: PeopleConfig;
   private homeAssistant?: HomeAssistant;
   private readonly sheet = new PeopleSheet();
-  private readonly expand = element('button', 'expand');
+  private readonly expand = expandButton('People', () => this.sheet.open());
   private signature?: string;
   private readonly shadow = this.attachShadow({ mode: 'open' });
   private readonly card = document.createElement('ha-card');
   private readonly content = element('section', 'content');
+
+  private readonly fit = new TileFit(this.card, this.content);
+  connectedCallback() { this.fit.connect(); }
+  disconnectedCallback() { this.fit.disconnect(); }
 
   constructor() {
     super();
     const style = document.createElement('style');
     style.textContent = css;
     this.card.append(this.content);
-    this.expand.type = 'button';
-    this.expand.title = 'Expand People';
-    this.expand.setAttribute('aria-label', 'Expand People');
-    this.expand.setAttribute('aria-haspopup', 'dialog');
-    const icon = document.createElement('ha-icon');
-    icon.setAttribute('icon', 'mdi:arrow-expand-top-right');
-    this.expand.append(icon);
-    this.expand.onclick = () => this.sheet.open();
     this.card.append(this.expand);
     this.shadow.append(style, this.card, this.sheet.dialog);
     this.content.addEventListener('click', (event) => {
@@ -145,6 +143,8 @@ class PeopleCard extends HTMLElement {
       }
     });
   }
+
+  static getConfigElement() { return widgetEditor('People', domains); }
 
   static getConfigForm() {
     return {
@@ -167,7 +167,8 @@ class PeopleCard extends HTMLElement {
     )) {
       throw new Error('Select only person or device tracker entities.');
     }
-    this.config = { title: config.title?.trim(), entities: [...new Set(config.entities)] };
+    applySize(this.card, config.size);
+    this.config = { size: config.size, title: config.title?.trim(), entities: [...new Set(config.entities)] };
     this.render();
   }
 
@@ -176,11 +177,10 @@ class PeopleCard extends HTMLElement {
     this.render();
   }
 
-  getGridOptions() {
-    return { columns: 12, rows: 3, min_columns: 6, min_rows: 2 };
-  }
+  getGridOptions() { return grid(this.config?.size); }
 
   getCardSize() {
+    if (this.config?.size) return this.config.size.endsWith("2") ? 7 : 3;
     return Math.max(3, Math.ceil(this.content.scrollHeight / 50));
   }
 
@@ -222,32 +222,11 @@ class PeopleCard extends HTMLElement {
       nodes.push(list);
     }
     this.content.replaceChildren(...nodes);
+    this.fit.update();
 
     if (focusedId) {
       this.content.querySelector<HTMLButtonElement>(`button[data-entity="${CSS.escape(focusedId)}"]`)
         ?.focus({ preventScroll: true });
     }
   }
-}
-
-if (!customElements.get(tag)) customElements.define(tag, PeopleCard);
-
-type PickerEntry = {
-  type: string;
-  name: string;
-  description: string;
-  preview: boolean;
-  documentationURL: string;
-};
-
-const dashboard = window as Window & { customCards?: PickerEntry[] };
-const picker = dashboard.customCards ??= [];
-if (!picker.some((card) => card.type === tag)) {
-  picker.push({
-    type: tag,
-    name: 'At Home People',
-    description: 'See who is home and where others are.',
-    preview: true,
-    documentationURL: 'https://github.com/SamerBerjawi/at-home-cards#people-card',
-  });
 }
