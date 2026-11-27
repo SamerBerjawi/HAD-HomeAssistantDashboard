@@ -1,5 +1,7 @@
 # HAD Pro Mobility
 
+**Next direction (2026-11-27):** the owner wants the page in the Room page's layout and tiles; designed element by element in the Vehicle Tiles Studio, see [VEHICLE_TILES.md](VEHICLE_TILES.md).
+
 ## 0. Restart (2026-11-26)
 
 The owner restarted Mobility the same way as Security and Energy: whole-page directions first,
@@ -141,8 +143,8 @@ still come from classic Mobility's settings.
   from `firmwareupgstatus` (`rawState`: retrieval → downloading, queued → queued, deploying →
   installing, failure → failed), the next install window (`otaschedule`), what blocks it
   (`otareadiness`: low 12 V battery, too little time), the last install and its version
-  (`lastfirmwareupdate`) and automatic updates (`autosoftwareupdates`). Not offered: battery health, cabin
-  temperature, distance today, an address. Never named by its VIN (the device name is "VIN: …").
+  (`lastfirmwareupdate`) and automatic updates (`autosoftwareupdates`); cabin temperature (`cabintemperature`). Not offered: battery health,
+  distance today, an address. Never named by its VIN (the device name is "VIN: …").
 - Cowboy: charge, range, health, mileage, distance today, time ridden, CO₂ (g → kg), ride mode,
   last trip, stolen, crashed, battery inserted, firmware (update entity), tracker with address. No
   actions.
@@ -243,8 +245,41 @@ FordPass's picture (seen 2026-11-27): its tracker's entity_picture copies its `i
 image entity's, a signed `/api/image_proxy/…?token=…` link. Fetching it with the session fails when
 HA doesn't allow the dashboard's origin, so signed image/camera proxy links go straight to `<img>`
 (as HA's frontend and the Room page do; `isSignedHaPicture`). A picture that fails to load gives way
-to the next (owner's, then the integration's), then the silhouette. Cards in a row are the same
+to the next (owner's, then the integration's), then the silhouette. FordPass now looks up its
+`image.fordpass_<vin>_vehicleimage` entity explicitly (`fordPicture`): by key on the device, else by
+entity id with the device's VIN (or the only one), since that entity is not always tied to the device. Cards in a row are the same
 height (the grid stretches its rows; owner, 2026-11-27).
+
+**Cockpit refinement (2026-11-27, owner picked "Two-column cockpit").** An aesthetic and UX pass after
+looking at the Tesla (new tablet two-column layout), BMW, Volvo and Mercedes apps and Dribbble EV
+concepts. They all make the vehicle the hero and range the headline number, with round quick
+actions under the car. Same content. `HeroStage` (`heroConcepts.tsx`) is now the page's hero:
+the name and answer, the vehicle on a lit floor (the owner's picture, else a drawn side view,
+`VehicleSilhouette` in `parts.tsx`), range large with the charge and limit beside it and a glowing
+bar, the checks, then Lock / Flash / Refresh as round buttons (`ActionDock round`).
+- Desktop (≥ 1000 px): the hero is a sticky left column (340 px, 380 px from 1240), below the slim
+  header. The cards sit in two columns beside it. Where and today spans both, and an odd card out
+  (Condition for the Ford) spans both too, with the top view beside the readings (`@[560px]`).
+- Tablet: the hero is a row, readout left and the stage with its round actions right. Cards in two columns.
+- Phone: everything stacks, car centred, range under it, round actions at the foot of the hero.
+
+**Refined, not cartoonish (2026-11-27, owner: "very cartoonish compared to Tesla and Volvo").** The
+page now defaults to `life = 'plain'` (round 6's ambient colour is still in the studio): neutral
+surfaces, with colour kept for status (the answer's dot, warnings) and the emerald accent. Also:
+- The hero is a neutral panel (`Panel`), with no tinted gradient. Its floor is a soft contact shadow and a
+  hairline horizon. The checks are a quiet list (`StatusList`) with a small icon, coloured only when
+  something needs a look. The charge bar is 6 px with a hairline limit tick.
+- Without a picture, the vehicle is a fine technical line drawing (`VehicleSilhouette`), as in
+  the makers' configurators, not a filled cartoon.
+- The drive battery (`BatteryPack`) is a slim segmented bar under a large thin number, with the capacity
+  lost to age faintly hatched at the end. A soft sheen sweeps it while charging (in) or in use (out, slower),
+  replacing the stripes and the terminal nub (`pro-battery-sheen`, off under reduced motion).
+- Remote start is back in the hero (owner, 2026-11-27), as well as on Climate; plain climate
+  on / off is still left to the card. The round actions sit in a grid that never wraps.
+- Phones get a compact hero: the vehicle (52 px high) beside the answer, the range at 36 px, the
+  checks inline and smaller round buttons. The desktop column keeps the stage layout.
+- The Mobility page sets HeroUI's `--accent-hover` in emerald, so hovered primary buttons are no
+  longer its default blue.
 
 **Left:** check the adapters on the owner's real FordPass and Cowboy entities (Ford's
 state strings may need tuning).

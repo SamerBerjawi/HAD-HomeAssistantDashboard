@@ -32,7 +32,8 @@
   --pro-h: 155;
   --pro-c: 0.13;
   --pro-l: 0.48;
-  /* HeroUI's soft accent (secondary buttons) in emerald, not its default blue. */
+  /* HeroUI's soft accent (secondary buttons) and the primary's hover in emerald, not its default blue. */
+  --accent-hover: color-mix(in oklab, var(--accent) 88%, black);
   --accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
   --accent-soft-hover: color-mix(in oklab, var(--accent) 20%, transparent);
   --accent-soft-foreground: color-mix(in oklab, var(--accent) 78%, black);
@@ -41,6 +42,7 @@
 .pro.dark[data-page='mobility'] {
   --pro-l: 0.73;
   --accent-foreground: oklch(0.18 0.02 155);
+  --accent-hover: color-mix(in oklab, var(--accent) 88%, white);
   --accent-soft: color-mix(in oklab, var(--accent) 22%, transparent);
   --accent-soft-hover: color-mix(in oklab, var(--accent) 28%, transparent);
   --accent-soft-foreground: color-mix(in oklab, var(--accent) 78%, white);
@@ -1107,6 +1109,26 @@
   }
 }
 
+/* Mobility, refined (2026-11-27): a soft sheen sweeps the battery bar, in while charging, out (slower) in use. */
+@keyframes pro-battery-sheen {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pro .pro-battery-sheen { animation: pro-battery-sheen 2.4s cubic-bezier(.4,0,.2,1) infinite; }
+  .pro .pro-battery-sheen.is-out { animation-direction: reverse; animation-duration: 3.6s; }
+}
+
+/* Vehicle tiles, Find (2026-11-27): rings ripple out from the Honk & flash button after a press. */
+@keyframes pro-mob-ping {
+  from { transform: scale(0.8); opacity: 0.9; }
+  to { transform: scale(1.35); opacity: 0; }
+}
+.pro .pro-mob-ping { opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .pro .pro-mob-ping { animation: pro-mob-ping 1.4s ease-out both; }
+}
+
 /* Mobility round 6 "life": streams in a card's hue (charge flowing, air blowing) and the road passing. */
 .pro .pro-mob-flow {
   overflow: hidden;
@@ -1183,3 +1205,10 @@
 .pro .pro-mob-hued .slider__thumb::after {
   background-color: color-mix(in srgb, var(--hue) 30%, white);
 }
+
+/* Media studio (docs/pro-ui/MEDIA.md §0): thin Apple Music style scrubber and volume lines. */
+.pro .pro-media-scrub .slider__track { height: 6px; border-inline-width: 0; background-color: color-mix(in oklab, var(--foreground) 14%, transparent); }
+.pro .pro-media-scrub .slider__fill { background-color: color-mix(in oklab, var(--foreground) 80%, transparent); border-radius: 999px; }
+.pro .pro-media-scrub .slider__thumb { width: 14px; height: 14px; background-color: var(--foreground); box-shadow: 0 1px 4px rgba(0,0,0,.3); opacity: 0; transition: opacity .15s; }
+.pro .pro-media-scrub:hover .slider__thumb, .pro .pro-media-scrub .slider__thumb[data-dragging], .pro .pro-media-scrub .slider__thumb[data-focus-visible] { opacity: 1; }
+.pro .pro-media-scrub .slider__thumb::after { display: none; }

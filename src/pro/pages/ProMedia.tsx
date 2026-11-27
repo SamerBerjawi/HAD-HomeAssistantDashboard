@@ -1,58 +1,44 @@
-import { useState } from 'react';
-import { Button } from '@heroui/react';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { MusicNote01Icon } from '@hugeicons/core-free-icons';
+/**
+ * Pro Media page, restarted in the Media Studio (docs/pro-ui/MEDIA.md §0, picks of 2026-11-27):
+ * B · Home (Spotify) with the Immersive player, "Playing in your home" as a list, quick picks and
+ * shelves, the AirPlay sheet and the Room bar, on live Home Assistant media players
+ * (`useMediaHome`). Loading, no players and "HA unreachable" page states.
+ */
+import { haWebSocketService } from '@/services/haWebSocket';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
-import { useHAImage } from '@/services/haImageService';
-import { useMediaPosition } from '@/hooks/useMediaPosition';
-import { useMediaQuery } from '../hooks/useMediaQuery';
-import { useMediaModel } from '../widgets/media/useMediaModel';
-import { useMediaActions } from '../widgets/media/useMediaActions';
-import { useServiceCall } from '../widgets/shared/useServiceCall';
-import MediaSheet from '../widgets/media/MediaSheet';
-import type { ProMediaPlayerItem } from '../lib/overviewMedia';
-import { RoomList } from './media/RoomList';
-import { Monitor } from './media/Monitor';
+import { useMediaHome } from '../hooks/useMediaHome';
+import { useBoxSize } from '../widgets/shared/useBoxSize';
+import { useInDark } from '../widgets/shared/useInDark';
+import MediaPage from './media/home/MediaPage';
+import { MediaLoading, MediaNotSetUp, MediaUnreachable } from './media/MediaStates';
 
-function Player({ p, dark, actions, details }: {
-  p: ProMediaPlayerItem; dark: boolean; actions: ReturnType<typeof useMediaActions>; details: () => void;
-}) {
-  const { call } = useServiceCall();
-  const entity = useAutoLayoutStore(s => s.resolvedEntities[p.entityId]);
-  const server = useAutoLayoutStore(s => s.serverUrl);
-  const { imageUrl } = useHAImage(p.rawImage, server);
-  const { duration, currentPosition } = useMediaPosition(entity, false, null, Number(entity?.attributes.media_duration) > 0);
-  return <Monitor p={{ ...p, rawImage: imageUrl || null, durationSecs: duration, positionSecs: currentPosition }}
-    dark={dark} seek={actions.seek} pause={id => void call('media_player', 'media_pause', {}, id)} details={details} />;
-}
+export default function ProMedia() {
+  const { home, act, onTarget, loading, notSetUp, offline } = useMediaHome();
+  const box = useBoxSize<HTMLDivElement>({ width: 375, height: 0 });
+  const { ref: darkRef, isDark } = useInDark<HTMLDivElement>();
+  const width = box.width;
+  const haUrl = useAutoLayoutStore((s) => s.serverUrl);
 
-export default function ProMedia({ dark }: { dark: boolean }) {
-  const model = useMediaModel();
-  const actions = useMediaActions(model);
-  const wide = useMediaQuery('(min-width: 768px)');
-  const [selected, select] = useState('');
-  const [detail, open] = useState('');
-  const resolved = useAutoLayoutStore(s => s.resolvedEntities);
-  const loading = useAutoLayoutStore(s => s.isLoading);
-  const active = model.players.filter(p => p.isPlaying);
-  const focus = active.find(p => p.entityId === selected) ?? active[0];
-  const cards = wide ? active : focus ? [focus] : [];
-  const icon = <HugeiconsIcon icon={MusicNote01Icon} size={18} aria-hidden />;
-  return <>
-    {focus && <section aria-label="Now playing">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">{icon}Now playing</h2>
-      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {cards.map(p => <Player key={p.entityId} {...{p, dark, actions}} details={() => open(p.entityId)} />)}
+  const retry = () => {
+    const url = haWebSocketService.getCurrentUrl();
+    const token = haWebSocketService.getCurrentToken();
+    if (url && token) haWebSocketService.connect(url, token, true);
+  };
+
+  const page = <MediaPage home={home} width={width} dark={isDark} act={act} onTarget={onTarget} />;
+  return (
+    <div ref={box.ref} className="min-w-0">
+      <div ref={darkRef}>
+        {loading ? (
+          <MediaLoading width={width} />
+        ) : offline ? (
+          <MediaUnreachable onRetry={retry}>{home.players.length ? page : <MediaLoading width={width} />}</MediaUnreachable>
+        ) : notSetUp ? (
+          <MediaNotSetUp haUrl={haUrl} />
+        ) : (
+          page
+        )}
       </div>
-      {!wide && active.filter(p => p !== focus).map(p => <Button key={p.entityId} variant="ghost"
-        className="mt-1 min-h-11 w-full justify-start" onPress={() => select(p.entityId)}>
-        {icon}<span className="truncate">{p.roomName} · {p.title || p.name}</span>
-      </Button>)}
-    </section>}
-    <RoomList players={model.players} loading={loading} open={open} locate={id => {
-      const e = resolved[id];
-      return { floorId: e?.floor_id, floorName: e?.floor?.name, roomId: e?.area_id, roomName: e?.area?.name };
-    }} />
-    {detail && <MediaSheet page="media" model={model} itemId={detail} onClose={() => open('')} />}
-  </>;
+    </div>
+  );
 }

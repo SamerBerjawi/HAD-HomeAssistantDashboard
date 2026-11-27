@@ -35,3 +35,17 @@ describe('vehicle pictures', () => {
     expect(vehiclePictures(car)).toEqual(['/api/assets/old.png', '/api/image_proxy/image.car?token=x']);
   });
 });
+
+describe('FordPass picture', () => {
+  it('finds image.fordpass_<vin>_vehicleimage on the device, or by the VIN when it is not tied to it', async () => {
+    const { fordPicture } = await import('@/pro/lib/mobility/adapters/fordpass');
+    const id = 'image.fordpass_wf0ab1cd2ef345678_vehicleimage';
+    const states = { [id]: st(id, { entity_picture: `/api/image_proxy/${id}?token=t` }), 'image.fordpass_other00000000000_vehicleimage': st('image.fordpass_other00000000000_vehicleimage', { entity_picture: '/other' }) };
+    const ctx = { states, registry: [], devices: [], zones: [], now: 0 } as unknown as HaContext;
+    const onDevice: Device = { id: 'dev', info: null, entries: [{ entity_id: id, translation_key: 'vehicleimage' }] as Device['entries'] };
+    expect(fordPicture(onDevice, ctx)).toBe(`/api/image_proxy/${id}?token=t`);
+    const byVin: Device = { id: 'dev', info: { id: 'dev', name: 'VIN: WF0AB1CD2EF345678' } as Device['info'], entries: [] };
+    expect(fordPicture(byVin, ctx)).toBe(`/api/image_proxy/${id}?token=t`);
+    expect(fordPicture({ id: 'dev', info: null, entries: [] }, ctx)).toBeNull();
+  });
+});

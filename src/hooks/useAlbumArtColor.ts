@@ -288,7 +288,7 @@ import { useRef } from 'react';
  * Tier 1: Direct in-browser load with crossOrigin="anonymous" (fastest, zero-proxy for Spotify, Apple Music, and standard CDNs).
  * Tier 2: Authenticated server proxy fallback via /api/image-proxy with content-type verification and blob URL creation.
  */
-async function extractPaletteFromUrl(url: string): Promise<{ h: number; s: number; l: number } | null> {
+export async function extractPaletteFromUrl(url: string): Promise<{ h: number; s: number; l: number } | null> {
   if (!url) return null;
 
   const tryExtractFromSrc = (src: string, isProxy = false): Promise<{ h: number; s: number; l: number } | null> => {

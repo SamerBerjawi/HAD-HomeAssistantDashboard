@@ -27,6 +27,8 @@ const RoomsStudio = import.meta.env.DEV ? lazy(() => import('./pages/rooms/studi
 const EnergyStudio = import.meta.env.DEV ? lazy(() => import('./pages/energy/studio/EnergyStudio')) : null;
 const SecurityStudio = import.meta.env.DEV ? lazy(() => import('./pages/security/studio/SecurityStudio')) : null;
 const MobilityStudio = import.meta.env.DEV ? lazy(() => import('./pages/mobility/studio/MobilityStudio')) : null;
+const VehicleTilesStudio = import.meta.env.DEV ? lazy(() => import('./pages/mobility/tiles/studio/VehicleTilesStudio')) : null;
+const MediaStudio = import.meta.env.DEV ? lazy(() => import('./pages/media/studio/MediaStudio')) : null;
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
 const ProSettings = lazy(() => import('./pages/ProSettings'));
@@ -85,6 +87,20 @@ export default function ProApp() {
         return (
           <Suspense fallback={null}>
             <RoomsStudio />
+          </Suspense>
+        );
+      }
+      if (studioId === 'media' && MediaStudio) {
+        return (
+          <Suspense fallback={null}>
+            <MediaStudio />
+          </Suspense>
+        );
+      }
+      if (studioId === 'vehicles' && VehicleTilesStudio) {
+        return (
+          <Suspense fallback={null}>
+            <VehicleTilesStudio />
           </Suspense>
         );
       }
@@ -162,7 +178,7 @@ export default function ProApp() {
         ) : activeTab === 'mobility' ? (
           <ProMobility />
         ) : activeTab === 'media' ? (
-          <ProMedia dark={darkMode} />
+          <ProMedia />
         ) : activeTab === 'energy' ? (
           <ProEnergy />
         ) : activeTab === 'settings' ? (

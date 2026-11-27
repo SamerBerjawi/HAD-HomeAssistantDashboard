@@ -27,15 +27,15 @@ export interface VehiclePictures {
 /** Provided by the live page; absent in the studio and demo, where the picture is not editable. */
 export const VehiclePicturesContext = createContext<VehiclePictures | null>(null);
 
-export function EditableVehicleArt({ v, size, className }: { v: Vehicle; size: number; className?: string }) {
+export function EditableVehicleArt({ v, size, className, stage }: { v: Vehicle; size: number; className?: string; stage?: boolean }) {
   const p = useContext(VehiclePicturesContext);
-  if (!p || !v.deviceId) return <VehicleArt v={v} size={size} className={className} />;
+  if (!p || !v.deviceId) return <VehicleArt v={v} size={size} className={className} stage={stage} />;
   const integration = v.integration === 'fordpass' ? 'FordPass' : v.integration === 'cowboy' ? 'Cowboy' : 'Its integration';
   return (
     <Popover>
-      <Button variant="ghost" aria-label={`Change ${v.name}’s picture`} className="group relative h-auto min-w-0 rounded-[32%] p-0 data-[hovered=true]:bg-transparent">
-        <VehicleArt v={v} size={size} className={className} />
-        <span aria-hidden className="absolute -bottom-1 -right-1 grid size-7 place-items-center rounded-full bg-[var(--surface)] text-muted shadow-sm ring-1 ring-[color-mix(in_oklab,var(--foreground)_10%,transparent)] transition-opacity group-data-[hovered=true]:text-[var(--foreground)]">
+      <Button variant="ghost" aria-label={`Change ${v.name}’s picture`} className={cn('group relative h-auto min-w-0 p-0 data-[hovered=true]:bg-transparent', stage ? 'rounded-2xl' : 'rounded-[32%]')}>
+        <VehicleArt v={v} size={size} className={className} stage={stage} />
+        <span aria-hidden className={cn('absolute grid size-7 place-items-center rounded-full bg-[var(--surface)] text-muted shadow-sm ring-1 ring-[color-mix(in_oklab,var(--foreground)_10%,transparent)] transition-opacity group-data-[hovered=true]:text-[var(--foreground)]', stage ? 'right-0 top-0' : '-bottom-1 -right-1')}>
           <HugeiconsIcon icon={PencilEdit02Icon} size={14} />
         </span>
       </Button>

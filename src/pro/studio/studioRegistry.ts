@@ -4,9 +4,9 @@
  * StudioHub and StudioNavBar render directly from this list.
  */
 import type { IconSvgElement } from '@hugeicons/react';
-import { FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon, Car01Icon } from '@hugeicons/core-free-icons';
+import { FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon, Car01Icon, MusicNote01Icon } from '@hugeicons/core-free-icons';
 
-export type StudioId = 'widgets' | 'areas' | 'rooms' | 'security' | 'energy' | 'mobility';
+export type StudioId = 'widgets' | 'areas' | 'rooms' | 'security' | 'energy' | 'mobility' | 'vehicles' | 'media';
 
 export interface StudioEntry {
   id: StudioId;
@@ -93,6 +93,30 @@ export const STUDIOS: readonly StudioEntry[] = [
     status: 'Redesigning',
     statusTone: 'warning',
     highlights: ['Restarted 2026-11-26', 'Round 1: page direction']
+  },
+  {
+    id: 'vehicles',
+    title: 'Vehicle Tiles Studio',
+    shortTitle: 'Vehicles',
+    subtitle: 'The Mobility page in the Room page’s layout: each part of a vehicle as a tile, three concepts each, batch by batch.',
+    query: 'vehicles',
+    icon: Car01Icon,
+    pageAccent: 'mobility',
+    status: 'In review',
+    statusTone: 'accent',
+    highlights: ['Started 2026-11-27', 'Batch 1: Energy']
+  },
+  {
+    id: 'media',
+    title: 'Media Studio',
+    shortTitle: 'Media',
+    subtitle: 'Media page, restarted from zero: like Spotify or Apple Music. Player and library, art-tinted Now Playing, mini bar, shelves, speaker picker.',
+    query: 'media',
+    icon: MusicNote01Icon,
+    pageAccent: 'media',
+    status: 'Redesigning',
+    statusTone: 'warning',
+    highlights: ['Restarted 2026-11-27', 'Round 1: page direction']
   }
 ];
 

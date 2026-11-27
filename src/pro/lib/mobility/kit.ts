@@ -193,14 +193,14 @@ export const words = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2').replac
  * A vehicle whose integration reports nothing (every entity unavailable, e.g. the integration
  * failed to log in): kept on the page, marked offline, last heard from when its entities went away.
  */
-export function offlineVehicle(d: Device, ctx: HaContext, v: Pick<Vehicle, 'id' | 'kind' | 'name' | 'make' | 'model' | 'integration' | 'image'>): VehicleSource | null {
+export function offlineVehicle(d: Device, ctx: HaContext, v: Pick<Vehicle, 'id' | 'kind' | 'name' | 'make' | 'model' | 'integration' | 'image'> & { picture?: string | null }): VehicleSource | null {
   const raw = d.entries.map((e) => ctx.states[e.entity_id]).filter((x): x is HAState => !!x);
   if (!raw.length) return null;
   const went = raw.map((x) => time(x.last_changed)).filter((t): t is number => t !== null);
   return {
     vehicle: {
       ...v,
-      picture: devicePicture(d, ctx),
+      picture: v.picture ?? devicePicture(d, ctx),
       deviceId: d.info?.id ?? null,
       powertrain: 'ev',
       seen: went.length ? Math.max(...went) : null,

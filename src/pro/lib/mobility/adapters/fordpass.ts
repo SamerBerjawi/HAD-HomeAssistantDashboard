@@ -4,7 +4,7 @@
  * "rcctemperature", …). Read from the integration's source on 2026-11-27; state values Ford sends
  * (charging, plug, alarm, deep sleep) are matched loosely because they are Ford's backend strings.
  *
- * Not offered by FordPass: battery health, cabin temperature, distance today, the car's address,
+ * Not offered by FordPass: battery health, distance today, the car's address,
  * the version of a waiting update (only the installed one, once installed).
  */
 import type { HAState } from '@/types';
@@ -16,7 +16,9 @@ const EXTRAS: { id: string; label: string; domain: 'switch' | 'select'; key: str
   { id: 'rear', label: 'Rear window', domain: 'switch', key: 'rccdefrostrear' },
   { id: 'wheel', label: 'Steering wheel', domain: 'switch', key: 'rccsteeringwheel' },
   { id: 'seat-driver', label: 'Driver seat', domain: 'select', key: 'rccseatfrontleft' },
-  { id: 'seat-passenger', label: 'Passenger seat', domain: 'select', key: 'rccseatfrontright' }
+  { id: 'seat-passenger', label: 'Passenger seat', domain: 'select', key: 'rccseatfrontright' },
+  { id: 'seat-rear-left', label: 'Rear left seat', domain: 'select', key: 'rccseatrearleft' },
+  { id: 'seat-rear-right', label: 'Rear right seat', domain: 'select', key: 'rccseatrearright' }
 ];
 
 const seatOn = (s: HAState | null) => !!s && !/off/i.test(s.state);
@@ -62,6 +64,25 @@ function tyres(s: HAState | null): Tyres | null {
 }
 
 /** Ford's update lifecycle ("artifact_retrieval_in_progress → installation_queued → deploying → success / failure") as a stage. */
+
+/**
+ * FordPass's picture of the car: its `image.fordpass_<vin>_vehicleimage` entity (owner, 2026-11-27).
+ * By key on the device first; that entity is not always tied to the car's device, so then by its
+ * entity id, matched on the VIN in the device name ("VIN: …") or, with one Ford, the only one.
+ */
+export function fordPicture(d: Device, ctx: HaContext): string | null {
+  const pic = (id: string | undefined) => {
+    const p = id ? ctx.states[id]?.attributes?.entity_picture : null;
+    return typeof p === 'string' && p.trim() ? p.trim() : null;
+  };
+  const own = pic(entry(d, 'image', 'vehicleimage')?.entity_id);
+  if (own) return own;
+  const ids = Object.keys(ctx.states).filter((id) => /^image\.fordpass_.*vehicle_?image$/i.test(id));
+  const vin = /([A-HJ-NPR-Z0-9]{17})/i.exec(d.info?.name ?? '')?.[1]?.toLowerCase() ?? null;
+  const byVin = vin ? ids.find((id) => id.toLowerCase().includes(vin)) : undefined;
+  return pic(byVin ?? (ids.length === 1 ? ids[0] : undefined)) ?? devicePicture(d, ctx);
+}
+
 export function fordUpdateStage(raw: string): UpdateStage {
   if (/fail|error|abort|cancel/i.test(raw)) return 'failed';
   if (/retriev|download/i.test(raw)) return 'downloading';
@@ -105,7 +126,7 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
   if (!soc && !fuel && !odometer && !tracker) {
     // Its entities exist but report nothing: the integration is down (often a FordPass login).
     if (!entry(d, 'sensor', 'odometer') && !entry(d, 'sensor', 'soc') && !entry(d, 'device_tracker', 'tracker')) return null;
-    return offlineVehicle(d, ctx, { id: `fordpass:${d.id}`, kind: 'car', name: deviceName(d, d.info?.model ?? 'Ford'), make: 'Ford', model: d.info?.model ?? null, integration: 'fordpass', image: ctx.images?.car ?? null });
+    return offlineVehicle(d, ctx, { id: `fordpass:${d.id}`, kind: 'car', name: deviceName(d, d.info?.model ?? 'Ford'), make: 'Ford', model: d.info?.model ?? null, integration: 'fordpass', image: ctx.images?.car ?? null, picture: fordPicture(d, ctx) });
   }
 
   const fuelKm = num(fuelRange?.state);
@@ -151,7 +172,7 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
           running,
           minutesLeft: running && left !== null && left > 0 ? left : null,
           remoteStart: !!remote,
-          cabin: null,
+          cabin: num(s('sensor', 'cabintemperature')?.state),
           outside: num(s('sensor', 'outsidetemp')?.state),
           target: tempRaw === null ? null : /^hi/i.test(tempRaw) ? 30.5 : /^lo/i.test(tempRaw) ? 15.5 : num(tempRaw.replace('_', '.')),
           extras: extras.map(({ x, st }) => ({ id: x.id, label: x.label, on: x.domain === 'switch' ? on(st) : seatOn(st) }))
@@ -190,7 +211,7 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
     make: 'Ford',
     model: d.info?.model ?? null,
     image: ctx.images?.car ?? null,
-    picture: devicePicture(d, ctx),
+    picture: fordPicture(d, ctx),
     deviceId: d.info?.id ?? null,
     integration: 'fordpass',
     seen: newest(soc, tracker, odometer, lock),

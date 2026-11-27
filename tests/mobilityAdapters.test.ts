@@ -130,6 +130,8 @@ describe('FordPass adapter', () => {
     // Running: the switch is on, with the minutes left.
     const running = FORD.map((e) => (e.key === 'ignition' ? { ...e, state: 'on' } : e));
     expect(climateOf([...running, F('sensor.car_rs_countdown', 'remotestartcountdown', '9', { unit_of_measurement: 'min' })])).toMatchObject({ running: true, minutesLeft: 9 });
+    expect(climateOf([...FORD, F('sensor.car_cabin', 'cabintemperature', '17.5', { unit_of_measurement: '°C' })])).toMatchObject({ cabin: 17.5 });
+    expect(climateOf(FORD)).toMatchObject({ cabin: null });
   });
 
   it('takes the car’s picture from its tracker’s entity_picture', () => {

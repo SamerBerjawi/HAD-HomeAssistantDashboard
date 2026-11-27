@@ -239,6 +239,8 @@ export function ConditionTop({ v, home, className }: Props) {
       {c.warnings.map((w) => (
         <WarningRow key={w} text={w} />
       ))}
+      {/* Full width (an odd card out in the cockpit): the top view beside the readings. */}
+      <div className="flex flex-col gap-4 @[560px]:grid @[560px]:grid-cols-2 @[560px]:items-center @[560px]:gap-6">
       {t ? (
         <div className="grid grid-cols-[1fr_auto_1fr] grid-rows-2 items-center gap-x-3">
           <div className="self-start pt-5">
@@ -265,6 +267,7 @@ export function ConditionTop({ v, home, className }: Props) {
           ))}
         </div>
       ) : null}
+      </div>
     </Block>
   );
 }

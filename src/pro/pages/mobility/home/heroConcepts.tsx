@@ -10,9 +10,9 @@ import { Alert02Icon, ElectricPlugsIcon, FlashIcon, Location01Icon, Moon02Icon, 
 import { cn } from '@/lib/utils';
 import { clock, fmtDistance, freshness, has, readiness, type Readiness, type Tone, type Vehicle } from '../../../lib/mobilityHome';
 import { EditableVehicleArt } from './VehiclePicture';
-import { ActionDock, Answer, batteryFlow, ChargeRing, Checks, FxLayer, HUE, soft, subtitle, TONE, useLife, VehicleArt, type VehicleProps } from './parts';
+import { ActionDock, Answer, batteryFlow, ChargeRing, Checks, FxLayer, HUE, soft, subtitle, TONE, toneIcon, useLife, VehicleArt, type VehicleProps } from './parts';
 
-export type HeroProps = Omit<VehicleProps, 'noRing'>;
+export type HeroProps = Omit<VehicleProps, 'noRing'> & { /** Drawn as the cockpit's left column (desktop). */ column?: boolean };
 
 /** B's surface: lit from the corner in the answer's tone. */
 export const lit = (tone: string) =>
@@ -349,5 +349,170 @@ export function HeroKeys({ v, home, width, act }: HeroProps) {
       </div>
       <Checks r={rest} />
     </Surface>
+  );
+}
+
+/** The charge as a slim glowing bar with the charge limit as a tick. */
+function LevelBar({ v }: { v: Vehicle }) {
+  const pct = Math.max(0, Math.min(100, v.level ?? 0));
+  const target = v.kind === 'car' ? (v.charging?.target ?? null) : null;
+  const charging = v.charging?.state === 'charging';
+  const life = useLife();
+  const hue = pct < 20 ? TONE.warn : life === 'plain' ? 'var(--accent)' : HUE.power;
+  const fill = life === 'plain' ? { background: hue } : { background: `linear-gradient(90deg, color-mix(in srgb, ${hue} 35%, transparent), ${hue})`, boxShadow: `0 0 16px -2px color-mix(in srgb, ${hue} 80%, transparent)` };
+  return (
+    <div className="relative h-1.5 rounded-full" style={{ background: life === 'plain' ? soft(10) : `color-mix(in oklab, ${hue} 14%, transparent)` }} role="img" aria-label={`${pct}% charge${target !== null ? `, charge limit ${target}%` : ''}`}>
+      <div className={cn('absolute inset-y-0 left-0 rounded-full', charging && 'motion-safe:animate-pulse')} style={{ width: `${pct}%`, ...fill }} />
+      {target !== null ? <span className="absolute -inset-y-1.5 w-px bg-[var(--foreground)] opacity-60" style={{ left: `calc(${target}% - 1px)` }} /> : null}
+    </div>
+  );
+}
+
+/** Range first, as the car apps do: the distance large, the charge beside it, then the bar. */
+function RangeReadout({ v, big, compact }: { v: Vehicle; big: boolean; compact?: boolean }) {
+  const target = v.kind === 'car' ? (v.charging?.target ?? null) : null;
+  const charging = v.charging?.state === 'charging';
+  const lead = v.range !== null ? { n: Math.round(v.range).toLocaleString(), u: v.unit, label: 'range' } : { n: String(v.level ?? '—'), u: '%', label: 'charge' };
+  const limit = target !== null ? (charging && v.charging?.readyAt ? `${target}% by ${clock(v.charging.readyAt)}` : `limit ${target}%`) : null;
+  return (
+    <div className={cn('flex flex-col', compact ? 'gap-2' : 'gap-3')}>
+      <div className="flex items-end justify-between gap-3">
+        <p className="font-extralight tabular-nums tracking-tight" aria-label={`${lead.n} ${lead.u} ${lead.label}`}>
+          <span className={cn('leading-none', big ? 'text-[52px]' : compact ? 'text-[36px]' : 'text-[44px]')}>{lead.n}</span>
+          <span className="ml-1 text-lg text-muted">{lead.u}</span>
+        </p>
+        {v.range !== null && v.level !== null ? (
+          <p className="pb-1 text-right tabular-nums">
+            <span className="text-[22px] font-light leading-none">{v.level}</span>
+            <span className="text-sm text-muted">%</span>
+            {limit ? <span className="block text-xs text-muted">{limit}</span> : null}
+          </p>
+        ) : limit ? (
+          <p className="pb-1 text-xs text-muted tabular-nums">{limit}</p>
+        ) : null}
+      </div>
+      {v.level !== null ? <LevelBar v={v} /> : null}
+    </div>
+  );
+}
+
+/** The vehicle on a quiet floor: a soft contact shadow and a hairline horizon (glow only with life). */
+function Stage({ v, tone, size }: { v: Vehicle; tone: string; size: number }) {
+  const life = useLife();
+  return (
+    <div className="relative flex justify-center pb-4 pt-2">
+      {life !== 'plain' ? <span aria-hidden className="absolute left-1/2 top-1/2 -z-10 h-[90%] w-[85%] -translate-x-1/2 -translate-y-1/2 rounded-full blur-2xl" style={{ background: `radial-gradient(closest-side, color-mix(in oklab, ${tone} 30%, transparent), transparent)` }} /> : null}
+      <span aria-hidden className="absolute bottom-3 left-1/2 -z-10 h-4 w-[72%] -translate-x-1/2 rounded-[50%] blur-[2px]" style={{ background: 'radial-gradient(closest-side, color-mix(in oklab, var(--foreground) 22%, transparent), transparent)' }} />
+      <span aria-hidden className="absolute bottom-4 left-0 right-0 -z-10 h-px" style={{ background: 'linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 14%, transparent) 20%, color-mix(in oklab, var(--foreground) 14%, transparent) 80%, transparent)' }} />
+      <EditableVehicleArt v={v} size={size} stage />
+    </div>
+  );
+}
+
+/** The checks as a quiet status list (Volvo, Tesla): a small icon, colour only when something needs a look. */
+function StatusList({ r, inline }: { r: Readiness; inline?: boolean }) {
+  if (!r.checks.length) return null;
+  const color = (t: Tone) => (t === 'good' ? undefined : TONE[t]);
+  if (inline)
+    return (
+      <ul aria-label="Checks" className="flex flex-wrap gap-x-5 gap-y-1.5 text-[13px]">
+        {r.checks.slice(0, 6).map((c) => (
+          <li key={c.id} className="inline-flex items-center gap-1.5">
+            <HugeiconsIcon icon={toneIcon(c.tone)} size={14} className="text-muted" style={{ color: color(c.tone) }} />
+            {c.label}
+          </li>
+        ))}
+      </ul>
+    );
+  return (
+    <ul aria-label="Checks" className="flex flex-col">
+      {r.checks.slice(0, 6).map((c) => (
+        <li key={c.id} className="flex items-center gap-3 border-b border-[color-mix(in_oklab,var(--foreground)_7%,transparent)] py-2.5 text-sm last:border-b-0">
+          <HugeiconsIcon icon={toneIcon(c.tone)} size={16} className="shrink-0 text-muted" style={{ color: color(c.tone) }} />
+          <span className="min-w-0 flex-1 truncate">{c.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A neutral panel, as the cards are; the answer's colour stays in its dot (and the glow, with life). */
+function Panel({ r, label, className, children }: { r: Readiness; label: string; className?: string; children: ReactNode }) {
+  const life = useLife();
+  if (life !== 'plain') return <Surface r={r} label={label} className={className}>{children}</Surface>;
+  return (
+    <section aria-label={label} className={cn('pro-surface relative isolate flex flex-col overflow-hidden rounded-[26px]', className)}>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * The cockpit hero (owner, 2026-11-27, after looking at Tesla, BMW, Volvo and Mercedes): the
+ * vehicle on a stage, range as the big number, the checks, and round quick actions. As the
+ * desktop's sticky left column (`column`) and on phones it stacks; on tablets the stage sits
+ * beside the readout.
+ */
+export function HeroStage({ v, home, width, act, column }: HeroProps) {
+  const r = readiness(v, home.now);
+  // The desktop column is narrow too, but it keeps the stage layout; only real phones get the compact one.
+  const phone = !column && width < 640;
+  const stacked = column || phone;
+  const where = r.detail.split(' · ').filter((x) => !/range$/.test(x)).join(' · ');
+  // Remote start stays in the hero as well as on Climate (owner, 2026-11-27); plain climate is left to the card.
+  const skip = [...(v.kind === 'car' && v.charging ? ['charge'] : []), ...(v.climate && !v.climate.remoteStart ? ['climate'] : [])];
+  const head = (
+    <div className="min-w-0">
+      <p className="truncate text-[13px] text-muted">{phone ? v.name : nameLine(v)}</p>
+      <h2 className={cn('mt-1 flex items-center gap-2.5 font-light tracking-tight', phone ? 'text-[22px] leading-7' : 'text-[24px] leading-8')}>
+        <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: TONE[r.tone] }} />
+        <span className="min-w-0">{r.title}</span>
+      </h2>
+      {where ? <p className="mt-0.5 truncate text-[13px] text-muted">{where}</p> : null}
+    </div>
+  );
+  const readout = v.level !== null || v.range !== null ? <RangeReadout v={v} big={!phone} /> : null;
+  const dock = <ActionDock v={v} act={act} round compact={phone} skip={skip} />;
+  const hair = 'border-t border-[color-mix(in_oklab,var(--foreground)_7%,transparent)] pt-4 empty:hidden';
+  if (phone)
+    // Compact on phones (owner, 2026-11-27): the vehicle beside the answer, the checks inline.
+    return (
+      <Panel r={r} label={`${v.name}: ready to go?`} className="gap-3.5 p-4">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">{head}</div>
+          <EditableVehicleArt v={v} size={52} stage className="shrink-0" />
+        </div>
+        <Freshness v={v} now={home.now} />
+        {v.level !== null || v.range !== null ? <RangeReadout v={v} big={false} compact /> : null}
+        <StatusList r={r} inline />
+        <div className={cn(hair, 'pt-3')}>{dock}</div>
+      </Panel>
+    );
+  if (stacked)
+    return (
+      <Panel r={r} label={`${v.name}: ready to go?`} className={phone ? 'gap-4 p-5' : 'gap-5 p-6'}>
+        {head}
+        <Freshness v={v} now={home.now} />
+        <Stage v={v} tone={TONE[r.tone]} size={phone ? 104 : 118} />
+        {readout}
+        <StatusList r={r} />
+        <div className={hair}>{dock}</div>
+      </Panel>
+    );
+  return (
+    <Panel r={r} label={`${v.name}: ready to go?`} className="gap-5 p-6">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] items-center gap-6">
+        <div className="flex min-w-0 flex-col gap-5">
+          {head}
+          <Freshness v={v} now={home.now} />
+          {readout}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3">
+          <Stage v={v} tone={TONE[r.tone]} size={112} />
+          {dock}
+        </div>
+      </div>
+      <StatusList r={r} inline />
+    </Panel>
   );
 }

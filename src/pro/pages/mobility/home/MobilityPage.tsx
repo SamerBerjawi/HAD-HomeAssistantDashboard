@@ -6,7 +6,7 @@
 import { useState, type ComponentType } from 'react';
 import { cn } from '@/lib/utils';
 import { LifeContext, sectionsFor, VehiclePills, type DesignProps, type Life, type VehicleProps } from './parts';
-import { HeroPicture, type HeroProps } from './heroConcepts';
+import { HeroStage, type HeroProps } from './heroConcepts';
 import { ChargingTidy, ClimateTidy } from './chargeClimateConcepts';
 import { DayOnMap } from './whereTripsConcepts';
 import { BatteryPackCard, ConditionTop } from './conditionConcepts';
@@ -40,7 +40,7 @@ export interface WhereTripsSlot {
   short?: boolean;
 }
 
-export default function DesignB({ home, width, dark, act, Hero = HeroPicture, cards = TIDY, places = DAY, health = TOP, life = 'ambient' }: DesignProps & { Hero?: ComponentType<HeroProps>; cards?: ChargeClimateSlot; places?: WhereTripsSlot; health?: ConditionSlot; life?: Life }) {
+export default function DesignB({ home, width, dark, act, Hero = HeroStage, cards = TIDY, places = DAY, health = TOP, life = 'plain' }: DesignProps & { Hero?: ComponentType<HeroProps>; cards?: ChargeClimateSlot; places?: WhereTripsSlot; health?: ConditionSlot; life?: Life }) {
   const [id, setId] = useState(home.vehicles[0]?.id ?? '');
   const v = home.vehicles.find((x) => x.id === id) ?? home.vehicles[0];
   if (!v) return null;
@@ -61,24 +61,49 @@ export default function DesignB({ home, width, dark, act, Hero = HeroPicture, ca
     .filter((x) => !(merged && x.id === 'battery'))
     .map((x) => (x.id === 'condition' && health?.condition ? { ...x, Block: health.condition } : x.id === 'battery' && health?.battery ? { ...x, Block: health.battery } : x));
   const bike = v.kind === 'bike';
-  const p = { v, home, width, dark, act, noRing: true };
-  const span: Record<string, string> = desk
-    ? { charging: 'col-span-4', combined: 'col-span-8', battery: bike ? 'col-span-6' : 'col-span-4', climate: 'col-span-4', where: places?.short ? 'col-span-4' : 'col-span-4 row-span-2', place: 'col-span-12', trips: 'col-span-4', condition: merged ? 'col-span-12' : bike ? 'col-span-6' : 'col-span-4' }
+  // Desktop is a cockpit (owner, 2026-11-27, after Tesla's tablet app): the vehicle as a sticky
+  // column on the left, the cards in two columns beside it.
+  const cockpit = desk && sections.length > 0;
+  const LEFT = width >= 1240 ? 380 : 340;
+  const GAP = 20;
+  const cardsWidth = cockpit ? width - LEFT - GAP : width;
+  const p = { v, home, width: cardsWidth, dark, act, noRing: true };
+  const wide = new Set(['place', 'combined', ...(merged ? ['condition'] : [])]);
+  const singles = sections.filter((x) => !wide.has(x.id));
+  // An odd card out takes the full row, so nothing sits beside an empty slot.
+  if (singles.length % 2 === 1) wide.add(singles[singles.length - 1].id);
+  const span: Record<string, string> = cockpit
+    ? Object.fromEntries(sections.map((x) => [x.id, wide.has(x.id) ? 'col-span-2' : (x.id === 'where' && !places?.short ? 'row-span-2' : '')]))
     : phone
     ? {}
     : { where: places?.short ? '' : 'col-span-2', combined: 'col-span-2', place: 'col-span-2', condition: bike && !merged ? '' : 'col-span-2' };
+  const grid = (
+    <div className={cn('grid items-stretch gap-4 [grid-auto-flow:dense]', phone ? 'grid-cols-1' : 'grid-cols-2')}>
+      {sections.map(({ id: sid, Block }) => (
+        <div key={sid} className={cn('min-w-0 [&>section]:h-full', span[sid])}>
+          <Block {...p} />
+        </div>
+      ))}
+    </div>
+  );
   return (
     <LifeContext.Provider value={life}>
     <div className="flex flex-col gap-5">
       <VehiclePills home={home} current={v.id} onPick={setId} />
-      <Hero v={v} home={home} width={width} dark={dark} act={act} />
-      <div className={cn('grid items-stretch gap-4 [grid-auto-flow:dense]', desk ? 'grid-cols-12' : phone ? 'grid-cols-1' : 'grid-cols-2')}>
-        {sections.map(({ id: sid, Block }) => (
-          <div key={sid} className={cn('min-w-0 [&>section]:h-full', span[sid])}>
-            <Block {...p} />
+      {cockpit ? (
+        <div className="grid items-start" style={{ gridTemplateColumns: `${LEFT}px minmax(0, 1fr)`, columnGap: GAP }}>
+          {/* Below the slim header that appears once the page header scrolls away. */}
+          <div className="sticky top-[72px] min-w-0">
+            <Hero v={v} home={home} width={LEFT} dark={dark} act={act} column />
           </div>
-        ))}
-      </div>
+          {grid}
+        </div>
+      ) : (
+        <>
+          <Hero v={v} home={home} width={width} dark={dark} act={act} />
+          {sections.length ? grid : null}
+        </>
+      )}
     </div>
     </LifeContext.Provider>
   );

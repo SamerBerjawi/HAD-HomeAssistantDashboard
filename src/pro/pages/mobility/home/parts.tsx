@@ -158,7 +158,7 @@ export function Stat({ label, value, tone }: { label: string; value: string; ton
 
 /** The owner's picture of the vehicle, or a silhouette on a soft plate. */
 /** The vehicle's picture (the owner's, else its integration's, loaded with the HA session), else a silhouette. */
-export function VehicleArt({ v, size = 96, className }: { v: Vehicle; size?: number; className?: string }) {
+export function VehicleArt({ v, size = 96, className, stage }: { v: Vehicle; size?: number; className?: string; /** The cockpit's stage: wide, and a drawn side view in place of the icon. */ stage?: boolean }) {
   // The owner's picture, then the integration's; a picture that fails to load gives way to the next.
   const all = vehiclePictures(v);
   const [failed, setFailed] = useState<string[]>([]);
@@ -167,11 +167,71 @@ export function VehicleArt({ v, size = 96, className }: { v: Vehicle; size?: num
   const signed = raw && isSignedHaPicture(raw) ? resolveHAImageUrl(raw, serverUrl) : null;
   const loaded = useHaPicture(signed ? null : raw);
   const src = signed || loaded;
-  if (raw && src) return <img src={src} alt="" onError={() => setFailed((f) => [...f, raw])} className={cn('object-contain', className)} style={{ width: size * 1.6, height: size }} />;
+  const w = size * (stage ? 2.3 : 1.6);
+  if (raw && src) return <img src={src} alt="" onError={() => setFailed((f) => [...f, raw])} className={cn('object-contain', className)} style={{ width: w, height: size }} />;
+  if (stage) return <VehicleSilhouette kind={v.kind} className={className} style={{ width: w, height: size }} />;
   return (
     <span aria-hidden className={cn('grid shrink-0 place-items-center rounded-[30%] bg-[color-mix(in_oklab,var(--accent)_14%,transparent)] text-[var(--accent)]', className)} style={{ width: size, height: size }}>
       <HugeiconsIcon icon={vehicleIcon(v)} size={Math.round(size * 0.5)} strokeWidth={1.4} />
     </span>
+  );
+}
+
+/** A drawn side view for the stage when there is no picture: a modern EV crossover, or an e-bike. */
+export function VehicleSilhouette({ kind, className, style }: { kind: Vehicle['kind']; className?: string; style?: CSSProperties }) {
+  // A fine technical line drawing (as in the makers' configurators), not a filled cartoon.
+  const id = useId().replace(/:/g, '');
+  const line = 'color-mix(in oklab, var(--foreground) 62%, transparent)';
+  const faint = 'color-mix(in oklab, var(--foreground) 26%, transparent)';
+  if (kind === 'bike')
+    return (
+      <svg aria-hidden viewBox="0 0 400 160" className={className} style={style} preserveAspectRatio="xMidYMax meet" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        {[110, 290].map((x) => (
+          <g key={x}>
+            <circle cx={x} cy={110} r={44} stroke={line} strokeWidth={1.6} />
+            <circle cx={x} cy={110} r={37} stroke={faint} strokeWidth={1} />
+            <circle cx={x} cy={110} r={4} stroke={line} strokeWidth={1.2} />
+          </g>
+        ))}
+        <path d="M110 110 L176 46 L262 46 L290 110 M176 46 L196 110 L262 46 M196 110 L110 110" stroke={line} strokeWidth={2.2} />
+        <path d="M164 32 L192 32 M262 46 L252 18 L282 14" stroke={line} strokeWidth={2} />
+        <rect x={184} y={52} width={56} height={11} rx={5.5} stroke={faint} strokeWidth={1.2} />
+      </svg>
+    );
+  return (
+    <svg aria-hidden viewBox="0 0 400 140" className={className} style={style} preserveAspectRatio="xMidYMax meet" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <defs>
+        <linearGradient id={`b${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="var(--foreground)" stopOpacity={0.07} />
+          <stop offset="1" stopColor="var(--foreground)" stopOpacity={0.01} />
+        </linearGradient>
+      </defs>
+      {/* Body: a fastback crossover, facing right. */}
+      <path
+        d="M30 104 C26 96 26 86 31 80 L40 68 C74 56 112 36 160 30 C200 26 236 27 262 34 C284 41 300 51 314 60 C342 63 366 67 378 75 C386 81 388 92 384 102 L376 106 L346 106 A36 36 0 0 0 274 106 L128 106 A36 36 0 0 0 56 106 Z"
+        fill={`url(#b${id})`}
+        stroke={line}
+        strokeWidth={1.5}
+      />
+      {/* Glass, pillar, shoulder, door and lamps. */}
+      <path d="M78 65 C110 48 140 40 170 37 C210 34 240 36 258 40 C272 44 284 51 294 60 Z" fill="var(--foreground)" fillOpacity={0.06} stroke={line} strokeWidth={1.2} />
+      <path d="M198 36 L195 62" stroke={line} strokeWidth={1.2} />
+      <path d="M38 82 C150 74 260 70 372 79" stroke={faint} strokeWidth={1} />
+      <path d="M194 66 L192 104 M118 70 L118 104" stroke={faint} strokeWidth={1} />
+      <path d="M222 76 L238 76 M146 78 L160 78" stroke={line} strokeWidth={1.4} />
+      <path d="M356 70 C366 72 374 74 380 78" stroke={line} strokeWidth={2.4} />
+      <path d="M33 77 L48 69" stroke={line} strokeWidth={2.4} />
+      {[92, 310].map((x) => (
+        <g key={x}>
+          <circle cx={x} cy={106} r={30} stroke={line} strokeWidth={1.5} />
+          <circle cx={x} cy={106} r={21} stroke={faint} strokeWidth={1} />
+          {[0, 72, 144, 216, 288].map((a) => (
+            <path key={a} d={`M${x} ${106} L${x + 20 * Math.cos((a * Math.PI) / 180)} ${106 + 20 * Math.sin((a * Math.PI) / 180)}`} stroke={faint} strokeWidth={1} />
+          ))}
+          <circle cx={x} cy={106} r={4.5} stroke={line} strokeWidth={1.2} />
+        </g>
+      ))}
+    </svg>
   );
 }
 
@@ -232,7 +292,7 @@ export function Checks({ r, limit = 6 }: { r: Readiness; limit?: number }) {
 }
 
 /** What the vehicle can do from here: only the actions its integration offers. */
-export function ActionDock({ v, act, compact, skip = [] }: { v: Vehicle; act: DesignProps['act']; compact?: boolean; /** Controls another card on the page already has. */ skip?: string[] }) {
+export function ActionDock({ v, act, compact, round, skip = [] }: { v: Vehicle; act: DesignProps['act']; compact?: boolean; /** Car-app quick actions: round icon buttons with the label under them. */ round?: boolean; /** Controls another card on the page already has. */ skip?: string[] }) {
   const locked = v.security.locked === true;
   const life = useLife();
   // Each control in its own hue, as on the room pages: unlocked in amber (it needs doing), the cabin warm or cool, charge green, the rest quiet.
@@ -245,6 +305,22 @@ export function ActionDock({ v, act, compact, skip = [] }: { v: Vehicle; act: De
   if (has(v, 'refresh')) items.push({ id: 'refresh', icon: Refresh01Icon, label: 'Refresh', hue: HUE.water, run: () => act(v.id, { type: 'refresh' }) });
   const shown = items.filter((i) => !skip.includes(i.id));
   if (!shown.length) return null;
+  if (round)
+    return (
+      <div role="group" aria-label={`${v.name} controls`} className="grid auto-cols-[minmax(0,76px)] grid-flow-col justify-center gap-2">
+        {shown.map((i) => {
+          const h = hued(life, i.hue);
+          return (
+            <span key={i.id} className={cn('flex min-w-0 flex-col items-center', compact ? 'gap-1' : 'gap-1.5', h.className)} style={h.style}>
+              <Button isIconOnly variant={i.on ? 'primary' : 'secondary'} aria-pressed={i.on} aria-label={i.label} onPress={i.run} className={cn('min-w-0 rounded-full', compact ? 'size-11' : 'size-[52px]')}>
+                <HugeiconsIcon icon={i.icon} size={compact ? 18 : 20} style={life !== 'plain' && !i.on ? { color: i.hue } : undefined} />
+              </Button>
+              <span aria-hidden className="w-full text-center text-[11px] leading-tight text-muted">{i.label}</span>
+            </span>
+          );
+        })}
+      </div>
+    );
   return (
     <div role="group" aria-label={`${v.name} controls`} className={cn('flex flex-wrap gap-2', compact && 'gap-1.5')}>
       {shown.map((i) => {
@@ -513,42 +589,26 @@ export function batteryFlow(v: Vehicle): { flow: BatteryFlow; why: string | null
  * the charge (in: towards the terminal; out: away from it) and the charge's edge breathes.
  */
 export function BatteryPack({ level, health = null, flow = null, out = false, label }: { level: number; health?: number | null; flow?: BatteryFlow; out?: boolean; label?: string }) {
-  const w = 168;
-  const inner = w - 10;
-  const usable = (inner * (health ?? 100)) / 100;
-  const fill = Math.max(0, (usable * Math.max(0, Math.min(100, level))) / 100);
-  const id = useId().replace(/:/g, '');
-  const color = out ? soft(20) : level < 20 ? TONE.warn : 'var(--accent)';
+  // A slim segmented bar, as the car apps draw a pack: the charge filled, the capacity lost with age
+  // hatched faintly at the end, a soft sheen sweeping it while energy flows in or out.
+  const usable = Math.max(0, Math.min(100, health ?? 100));
+  const fill = (usable * Math.max(0, Math.min(100, level))) / 100;
+  const color = out ? soft(28) : level < 20 ? TONE.warn : 'var(--accent)';
   const text = label ?? `${level}%`;
-  const inside = fill > 64;
   return (
-    <svg viewBox={`0 0 ${w + 10} 56`} className="h-14 w-full max-w-[320px] self-start" preserveAspectRatio="xMinYMid meet" role="img" aria-label={`Battery ${text}${health !== null ? `, health ${health}%` : ''}${flow === 'in' ? ', charging' : flow === 'out' ? ', in use' : ''}${out ? ', not in the bike' : ''}`}>
-      <defs>
-        <pattern id={`${id}-lost`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="6" stroke={soft(25)} strokeWidth="2" />
-        </pattern>
-        <clipPath id={`${id}-fill`}>
-          <rect x={6} y={6} width={fill} height={44} rx={8} />
-        </clipPath>
-      </defs>
-      <rect x={1} y={1} width={w} height={54} rx={12} fill="none" stroke={soft(35)} strokeWidth={2} strokeDasharray={out ? '6 5' : undefined} />
-      <rect x={w + 3} y={18} width={6} height={20} rx={2} fill={flow === 'in' ? 'var(--accent)' : soft(35)} />
-      {health !== null && health < 100 ? <rect x={6 + usable} y={6} width={inner - usable} height={44} rx={4} fill={`url(#${id}-lost)`} /> : null}
-      {health !== null && health < 100 ? <line x1={6 + usable} x2={6 + usable} y1={8} y2={48} stroke={soft(30)} strokeWidth={1} /> : null}
-      <rect x={6} y={6} width={fill} height={44} rx={8} fill={color} opacity={out ? 1 : 0.85} />
-      {flow && fill > 0 ? (
-        <g clipPath={`url(#${id}-fill)`}>
-          <g className={cn('pro-battery-flow', flow === 'out' && 'is-out')}>
-            {Array.from({ length: Math.ceil(inner / 12) + 3 }, (_, i) => (
-              <path key={i} d={`M${i * 12 - 12} 50 L${i * 12 - 2} 6 L${i * 12 + 3} 6 L${i * 12 - 7} 50 Z`} fill="white" opacity={0.22} />
-            ))}
-          </g>
-          <rect className="pro-battery-edge" x={6 + fill - 3} y={6} width={3} height={44} fill="white" opacity={0.7} />
-        </g>
-      ) : null}
-      <text x={inside ? 16 : 6 + fill + 8} y={35} fontSize={18} fontWeight={300} fill={inside && !out ? 'var(--accent-foreground, white)' : 'var(--foreground)'} className="tabular-nums">
-        {text}
-      </text>
-    </svg>
+    <div role="img" aria-label={`Battery ${text}${health !== null ? `, health ${health}%` : ''}${flow === 'in' ? ', charging' : flow === 'out' ? ', in use' : ''}${out ? ', not in the bike' : ''}`} className="flex w-full flex-col gap-2.5">
+      <p aria-hidden className="text-[34px] font-extralight leading-none tracking-tight tabular-nums">
+        {text.replace(/%$/, '')}
+        {text.endsWith('%') ? <span className="ml-0.5 text-base text-muted">%</span> : null}
+      </p>
+      <div aria-hidden className={cn('relative h-3 w-full overflow-hidden rounded-full', out && 'outline-1 outline-dashed outline-[color-mix(in_oklab,var(--foreground)_25%,transparent)]')} style={{ background: soft(9) }}>
+        {usable < 100 ? <span className="absolute inset-y-0 right-0" style={{ width: `${100 - usable}%`, background: `repeating-linear-gradient(135deg, ${soft(16)} 0 2px, transparent 2px 5px)` }} /> : null}
+        <span className="absolute inset-y-0 left-0 overflow-hidden rounded-full" style={{ width: `${fill}%`, background: color }}>
+          {flow && fill > 0 ? <span className={cn('pro-battery-sheen absolute inset-0', flow === 'out' && 'is-out')} style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent)' }} /> : null}
+        </span>
+        {/* Cells. */}
+        <span className="absolute inset-0" style={{ background: 'repeating-linear-gradient(90deg, transparent 0 calc(10% - 1.5px), var(--surface) calc(10% - 1.5px) 10%)' }} />
+      </div>
+    </div>
   );
 }
