@@ -37,33 +37,46 @@ const hues = new Map<string, number | null>();
 const pendingHue = new Set<string>();
 
 // A player's library from HA's media browser, kept a few minutes.
-const browsed = new Map<string, { at: number; shelves: Shelf[] }>();
+const browsed = new Map<string, Browsed>();
 
 const browse = (entityId: string, node?: BrowseNode) =>
   haWebSocketService.sendRequest<BrowseNode>('media_player/browse_media', { entity_id: entityId, ...(node ? { media_content_id: node.media_content_id, media_content_type: node.media_content_type } : {}) }, { timeoutMs: 15_000 });
 
-/** Shelves from a player's media browser: its playable root items, then its likeliest folders (one level deeper when a folder holds only folders). */
+/** Shelves from a player's media browser: its playable root items, then its likeliest folders (one level deeper when a folder holds only folders), all folders asked at once. */
 async function loadLibrary(entityId: string, art: (src: string | null) => Artwork): Promise<Shelf[]> {
   const root = await browse(entityId);
-  const out: Shelf[] = [];
   const top = shelfOf(root, entityId, art);
-  if (top) out.push(top);
-  for (const folder of foldersOf(root)) {
-    if (out.length >= MAX_SHELVES) break;
-    const node = await browse(entityId, folder).catch(() => null);
-    if (!node) continue;
-    const shelf = shelfOf(node, entityId, art, folder.title);
-    if (shelf) {
-      out.push(shelf);
-      continue;
-    }
-    for (const sub of foldersOf(node, 2)) {
-      const deep = await browse(entityId, sub).catch(() => null);
-      const s = deep ? shelfOf(deep, entityId, art, `${folder.title} · ${sub.title}`) : null;
-      if (s) out.push(s);
-    }
+  const groups = await Promise.all(
+    foldersOf(root).map(async (folder): Promise<Shelf[]> => {
+      const node = await browse(entityId, folder).catch(() => null);
+      if (!node) return [];
+      const shelf = shelfOf(node, entityId, art, folder.title);
+      if (shelf) return [shelf];
+      const deep = await Promise.all(foldersOf(node, 2).map((sub) => browse(entityId, sub).then((d) => shelfOf(d, entityId, art, `${folder.title} · ${sub.title}`)).catch(() => null)));
+      return deep.filter((x): x is Shelf => !!x);
+    })
+  );
+  return [...(top ? [top] : []), ...groups.flat()].slice(0, MAX_SHELVES);
+}
+
+// The last library per player, kept on this device so a visit shows it at once while it refreshes.
+const LIBRARY_KEY = 'had.pro.media.library';
+type Browsed = { at: number; shelves: Shelf[] };
+function storedLibrary(id: string): Browsed | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(LIBRARY_KEY) ?? '{}')?.[id];
+    return v && Array.isArray(v.shelves) && typeof v.at === 'number' ? v : null;
+  } catch {
+    return null;
   }
-  return out.slice(0, MAX_SHELVES);
+}
+function storeLibrary(id: string, entry: Browsed) {
+  try {
+    const all = JSON.parse(localStorage.getItem(LIBRARY_KEY) ?? '{}');
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify({ ...all, [id]: entry }));
+  } catch {
+    /* storage blocked or full: kept for this visit */
+  }
 }
 
 export function useMediaHome() {
@@ -128,19 +141,23 @@ export function useMediaHome() {
   const canBrowse = !!targetPlayer?.can.browse && !demo && !offline;
   useEffect(() => {
     if (!target || !canBrowse) return;
-    const cached = browsed.get(target);
-    if (cached && Date.now() - cached.at < BROWSE_TTL) {
+    const cached = browsed.get(target) ?? storedLibrary(target);
+    if (cached) {
+      browsed.set(target, cached);
       setLibrary({ id: target, shelves: cached.shelves });
-      return;
+      if (Date.now() - cached.at < BROWSE_TTL) return;
     }
+    // Refresh behind what is shown; on failure keep it.
     let cancelled = false;
     loadLibrary(target, art)
       .then((shelves) => {
-        browsed.set(target, { at: Date.now(), shelves });
+        const entry = { at: Date.now(), shelves };
+        browsed.set(target, entry);
+        storeLibrary(target, entry);
         if (!cancelled) setLibrary({ id: target, shelves });
       })
       .catch(() => {
-        if (!cancelled) setLibrary({ id: target, shelves: [] });
+        if (!cancelled && !cached) setLibrary({ id: target, shelves: [] });
       });
     return () => {
       cancelled = true;

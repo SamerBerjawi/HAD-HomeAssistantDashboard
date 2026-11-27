@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applySampleAction, clockOf, groupName, groupsOf, homeLine, leadPlayer, positionNow, tintOf } from '@/pro/lib/mediaHome';
+import { applySampleAction, clockOf, groupName, groupsOf, homeLine, leadPlayer, libraryPlayer, positionNow, tintOf } from '@/pro/lib/mediaHome';
 import { sampleMediaHome } from '@/pro/lib/media/sampleMedia';
 
 describe('media home', () => {
@@ -55,5 +55,16 @@ describe('media home', () => {
   it('tints by the artwork’s hue, neutral without one', () => {
     expect(tintOf({ src: null, hue: 262 }, false).hue).toBe(262);
     expect(tintOf(null, true).hue).toBeNull();
+  });
+
+  it('shows the library of another player when the one playing has none', () => {
+    const home = sampleMediaHome('mixed');
+    const [a, b] = home.players;
+    const noLib = { ...a, state: 'playing' as const, kind: 'speaker' as const, can: { ...a.can, browse: false } };
+    const withLib = { ...b, state: 'paused' as const, can: { ...b.can, browse: true } };
+    const h = { ...home, players: [noLib, withLib] };
+    expect(libraryPlayer(h, noLib)?.id).toBe(withLib.id);
+    expect(libraryPlayer(h, withLib)?.id).toBe(withLib.id);
+    expect(libraryPlayer({ ...h, players: [noLib] }, noLib)?.id).toBe(noLib.id);
   });
 });

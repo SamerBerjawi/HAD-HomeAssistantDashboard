@@ -155,6 +155,14 @@ export function leadPlayer(home: MediaHome, chosen?: string | null): Player | nu
   return [...home.players].filter((p) => p.state !== 'unavailable').sort((a, b) => order(a) - order(b))[0] ?? null;
 }
 
+/** The player whose library the page shows: the lead if it has one (a media browser, or a TV's apps), else another that has, the ones playing first. */
+export function libraryPlayer(home: MediaHome, lead: Player | null): Player | null {
+  const has = (p: Player) => p.can.browse || (p.kind === 'tv' && p.sources.length > 0);
+  if (!lead || has(lead)) return lead;
+  const order = (p: Player) => (p.state === 'playing' ? 0 : p.state === 'paused' ? 1 : 2);
+  return [...home.players].filter((p) => has(p) && p.state !== 'unavailable').sort((a, b) => order(a) - order(b))[0] ?? lead;
+}
+
 /** "Playing in 2 rooms", "Paused in the Living room", "Nothing playing". */
 export function homeLine(home: MediaHome): string {
   const groups = groupsOf(home.players).filter((g) => g.some(isActive));

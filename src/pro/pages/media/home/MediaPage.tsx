@@ -10,7 +10,7 @@
 import { useEffect, useState, type ComponentType } from 'react';
 import { Modal } from '@heroui/react';
 import { cn } from '@/lib/utils';
-import { greeting, homeLine, isActive, leadPlayer, type Player } from '../../../lib/mediaHome';
+import { greeting, homeLine, isActive, leadPlayer, libraryPlayer, type Player } from '../../../lib/mediaHome';
 import { MediaDarkContext, PickerContext, QuickGrid, ShelfRow, useTicking, type DesignProps, type PickerProps } from './parts';
 import { IdleBar, type IdleConcept } from './idleConcepts';
 import { ElsewhereList } from './elsewhereConcepts';
@@ -52,11 +52,13 @@ export default function MediaPage({ home, width, dark, act, Hero = HeroImmersive
   // The player beside the list once the list keeps three columns of quick picks.
   const side = width >= 940 && playing;
   const main = side ? width - SIDE - 20 : width;
-  const shelves = shelvesFor(home, lead);
+  // Taps play on the player whose library shows (the lead, or another when the lead has none).
+  const target = libraryPlayer(home, lead);
+  const shelves = shelvesFor(home, target);
   // Quick picks: what you played lately, else the first shelf the player offers (TV apps stay a row).
   const recent = shelves.find((s) => s.kind === 'recent') ?? shelves.find((s) => s.kind !== 'apps');
-  const leadId = lead?.id ?? null;
-  useEffect(() => onTarget?.(leadId), [leadId, onTarget]);
+  const targetId = target?.id ?? null;
+  useEffect(() => onTarget?.(targetId), [targetId, onTarget]);
   const open = (id: string) => {
     setChosen(id);
     if (!side) setSheet(true);
@@ -70,23 +72,23 @@ export default function MediaPage({ home, width, dark, act, Hero = HeroImmersive
               <h2 className={cn('font-bold tracking-tight', phone ? 'text-[26px]' : 'text-[32px]')}>{greeting(home.now)}</h2>
               <p className="text-[14px] text-muted">{homeLine(home)}</p>
             </header>
-            {!playing ? <Idle.Top home={home} target={lead} act={act} width={main} dark={dark} onPick={setChosen} /> : null}
+            {!playing ? <Idle.Top home={home} target={target} act={act} width={main} dark={dark} onPick={setChosen} /> : null}
             {recent ? (
               <section aria-label="Start something" className="flex flex-col gap-2.5">
                 <h3 className="text-[19px] font-semibold tracking-tight">Start something</h3>
-                <PlaysIn target={lead} />
-                <QuickGrid items={recent.items.slice(0, phone ? 6 : 8)} target={lead} act={act} cols={main < 640 ? 2 : main < 1000 ? 3 : 4} />
+                <PlaysIn target={target} />
+                <QuickGrid items={recent.items.slice(0, phone ? 6 : 8)} target={target} act={act} cols={main < 640 ? 2 : main < 1000 ? 3 : 4} />
               </section>
             ) : null}
             <ElsewhereList home={home} except={null} act={act} now={now} dark={dark} width={main} onOpen={open} title="Playing in your home" />
             {shelves
               .filter((s) => s !== recent)
               .map((s) => (
-                <ShelfRow key={s.id} shelf={s} target={lead} act={act} tile={phone ? 128 : 150} />
+                <ShelfRow key={s.id} shelf={s} target={target} act={act} tile={phone ? 128 : 150} />
               ))}
             {!playing && Idle.Bar ? (
               <div className="sticky bottom-3 z-10">
-                <Idle.Bar home={home} target={lead} act={act} width={main} dark={dark} onPick={setChosen} />
+                <Idle.Bar home={home} target={target} act={act} width={main} dark={dark} onPick={setChosen} />
               </div>
             ) : null}
           </div>
