@@ -209,3 +209,11 @@ describe('integration down', () => {
     expect(home.vehicles[0].seen).toBe(Date.parse(T));
   });
 });
+
+describe('fordpassVin', () => {
+  it('reads the VIN from FordPass entity ids', async () => {
+    const { fordpassVin } = await import('@/services/mobility/entityLookup');
+    expect(fordpassVin({ 'sensor.fordpass_wf0ab1cd2ef345678_soc': {}, 'sensor.other': {} })).toBe('wf0ab1cd2ef345678');
+    expect(fordpassVin({ 'sensor.other': {} })).toBe('');
+  });
+});

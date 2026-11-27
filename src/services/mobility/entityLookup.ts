@@ -128,3 +128,12 @@ export function resolveZone(
 
   return { zoneName: 'In Home Zone', isAtHome: true };
 }
+
+/** The VIN FordPass puts in its entity ids (`sensor.fordpass_<vin>_soc`), read from HA so none is hard-coded; '' when there is no FordPass car. */
+export function fordpassVin(states: Record<string, any> | null | undefined): string {
+  for (const id of Object.keys(states ?? {})) {
+    const m = /^[a-z_]+\.fordpass_([a-z0-9]{17})_/.exec(id);
+    if (m) return m[1];
+  }
+  return '';
+}
