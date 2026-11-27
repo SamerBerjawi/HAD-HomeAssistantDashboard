@@ -33,6 +33,8 @@ export interface VehicleSource {
   calls: (a: MobilityAction) => HaCall[];
   /** Speed entity to fetch 24 h of history for, if any. */
   speedEntity?: string | null;
+  /** Odometer entity whose monthly long-term statistics give the Distance history, if any. */
+  odometerEntity?: string | null;
 }
 
 export interface VehicleAdapter {

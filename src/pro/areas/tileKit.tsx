@@ -36,7 +36,8 @@ export function TileIconButton({
   className,
   style,
   size = 34,
-  pressed
+  pressed,
+  isDisabled
 }: {
   icon: IconSvgElement;
   label: string;
@@ -45,6 +46,7 @@ export function TileIconButton({
   style?: CSSProperties;
   size?: number;
   pressed?: boolean;
+  isDisabled?: boolean;
 }) {
   return (
     <Button
@@ -52,6 +54,7 @@ export function TileIconButton({
       variant="ghost"
       aria-label={label}
       aria-pressed={pressed}
+      isDisabled={isDisabled}
       onPress={onPress}
       data-tile-control=""
       className={cn('min-w-0 shrink-0 rounded-full p-0', className)}
@@ -63,13 +66,14 @@ export function TileIconButton({
 }
 
 /** A small text chip inside a tile (presets, modes). */
-export function TileChip({ children, label, onPress, active, className, style }: { children: ReactNode; label: string; onPress: () => void; active?: boolean; className?: string; style?: CSSProperties }) {
+export function TileChip({ children, label, onPress, active, className, style, isDisabled }: { children: ReactNode; label: string; onPress: () => void; active?: boolean; className?: string; style?: CSSProperties; isDisabled?: boolean }) {
   return (
     <Button
       size="sm"
       variant="ghost"
       aria-label={label}
       aria-pressed={active}
+      isDisabled={isDisabled}
       onPress={onPress}
       data-tile-control=""
       className={cn('h-7 min-w-0 shrink-0 rounded-full px-2.5 text-[12px] font-semibold', className)}

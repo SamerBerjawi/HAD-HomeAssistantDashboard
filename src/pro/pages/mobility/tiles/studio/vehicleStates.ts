@@ -36,6 +36,7 @@ export function vehicleStates(): VehicleState[] {
     { id: 'low', label: 'Low charge', ...low },
     { id: 'other', label: 'Second car (fewer parts)', v: fleet.vehicles[1], now: fleet.now },
     { id: 'bike', label: 'The bike', v: bike.vehicles.find((x) => x.kind === 'bike')!, now: bike.now },
+    { id: 'lights', label: 'Warning lights on', v: { ...charging.v, condition: { ...charging.v.condition, warnings: ['Tire pressure low', 'Washer fluid low', '1 message from Ford'] } }, now: charging.now },
     { id: 'alarm', label: 'Alarm going off', v: { ...charging.v, security: { ...charging.v.security, alarm: 'triggered' } }, now: charging.now },
     { id: 'stolen', label: 'Bike stolen', v: { ...bikeV, security: { ...bikeV.security, stolen: true } }, now: bike.now }
   ];

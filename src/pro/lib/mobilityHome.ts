@@ -38,7 +38,7 @@ export interface Climate {
   outside: number | null;
   target: number | null;
   /** What can be switched on with the climate (FordPass: windscreen, rear window, seats, wheel). */
-  extras: { id: string; label: string; on: boolean }[];
+  extras: { id: string; label: string; on: boolean; /** false: this car has the switch but it reports nothing (shown greyed). */ available?: boolean }[];
   /** The climate comes on by starting the car remotely (FordPass's remote start switch), so the control says so. */
   remoteStart?: boolean;
 }
@@ -134,6 +134,29 @@ export interface Condition {
   batteryInserted: boolean | null;
 }
 
+/** A month of a vehicle's history (HA long-term statistics, or the server's daily snapshot). */
+export interface VehicleMonth {
+  /** The month's first day, epoch ms. */
+  start: number;
+  /** Distance driven that month, in the vehicle's unit. */
+  distance: number;
+  /** Energy used per 100 (kWh), when the car reports it. */
+  per100: number | null;
+  /** Mean outside temperature, °C. */
+  outside: number | null;
+  /** Charging that month: sessions, kWh added, the share of it at home (0–1), sessions to 100 %, the typical start and end %. */
+  charges: { sessions: number; kwh: number; home: number; full: number; from: number; to: number } | null;
+}
+
+export interface VehicleHistory {
+  /** Oldest first; the last is the current month so far. */
+  months: VehicleMonth[];
+  /** A lease's mileage allowance: per year, over `years` from `since`, with the odometer then. Set by the owner. */
+  allowance: { perYear: number; years: number; since: number; odometerAtStart: number } | null;
+  /** What a kWh costs at home (the Energy page's tariff), for costs. */
+  price: { perKwh: number; currency: string } | null;
+}
+
 /** Something the page can ask the vehicle to do, when the integration offers it. */
 export type VehicleActionId = 'lock' | 'unlock' | 'climate' | 'charge-start' | 'charge-pause' | 'target' | 'honk' | 'refresh';
 
@@ -178,6 +201,8 @@ export interface Vehicle {
   mode: string | null;
   condition: Condition;
   actions: VehicleActionId[];
+  /** Its history by month, for Statistics; absent when there is none. */
+  history?: VehicleHistory | null;
 }
 
 /** What the page asks a vehicle to do; an adapter turns it into Home Assistant service calls. */

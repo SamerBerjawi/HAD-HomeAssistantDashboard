@@ -4,7 +4,7 @@
  * "rcctemperature", …). Read from the integration's source on 2026-11-27; state values Ford sends
  * (charging, plug, alarm, deep sleep) are matched loosely because they are Ford's backend strings.
  *
- * Not offered by FordPass: battery health, distance today, the car's address,
+ * Not offered by FordPass: battery health, distance today (summed from the drives), the car's address,
  * the version of a waiting update (only the installed one, once installed).
  */
 import type { HAState } from '@/types';
@@ -45,6 +45,20 @@ function openings(s: HAState | null, fallback: Opening): { what: Opening; where:
       const what: Opening = /hood|bonnet/i.test(k) ? 'bonnet' : /tailgate|trunk|boot|liftgate|frunk/i.test(k) ? 'boot' : fallback;
       return { what, where: what === fallback ? words(k) : '' };
     });
+}
+
+/**
+ * The dashboard warning lights on now (FordPass's `indicators` sensor: one attribute per light).
+ * Matched loosely, as Ford's names and values vary: a light is on when its value (or its
+ * `value` field) is true / "on" / "active". shortcut: read from the attribute names only, not yet
+ * checked on a live car; refine when the owner's attributes are seen.
+ */
+export function fordIndicators(st: HAState | null): string[] {
+  if (!st) return [];
+  const isOn = (x: unknown): boolean => (x && typeof x === 'object' ? isOn((x as { value?: unknown }).value) : x === true || (typeof x === 'string' && /^(on|true|active|warning)$/i.test(x.trim())));
+  return Object.entries(st.attributes ?? {})
+    .filter(([k, x]) => !/friendly|icon|unit|attribution|device_class|state_class|updated|time/i.test(k) && isOn(x))
+    .map(([k]) => words(k).replace(/ (indicator|warning|light)$/, '').replace(/^./, (c) => c.toUpperCase()));
 }
 
 function tyres(s: HAState | null): Tyres | null {
@@ -160,7 +174,8 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
   const tempNumber = s('number', 'rcctemperature');
   const tempSelect = s('select', 'rcctemperature');
   const tempRaw = tempNumber?.state ?? tempSelect?.state ?? null;
-  const extras = EXTRAS.map((x) => ({ x, st: s(x.domain, x.key) })).filter((e) => e.st);
+  // An extra whose entity exists but is unavailable (not fitted on this model) stays, greyed.
+  const extras = EXTRAS.filter((x) => entry(d, x.domain, x.key)).map((x) => ({ x, st: s(x.domain, x.key) }));
   // The "ignition" switch is FordPass's remote start (on while Ford's countdown runs); the status
   // sensor says "Active" or "Inactive" (exact words: "Inactive" contains "active"). The countdown
   // sensor is Ford's raw timer without the expiry check, so it counts only while running.
@@ -175,7 +190,7 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
           cabin: num(s('sensor', 'cabintemperature')?.state),
           outside: num(s('sensor', 'outsidetemp')?.state),
           target: tempRaw === null ? null : /^hi/i.test(tempRaw) ? 30.5 : /^lo/i.test(tempRaw) ? 15.5 : num(tempRaw.replace('_', '.')),
-          extras: extras.map(({ x, st }) => ({ id: x.id, label: x.label, on: x.domain === 'switch' ? on(st) : seatOn(st) }))
+          extras: extras.map(({ x, st }) => ({ id: x.id, label: x.label, on: !!st && (x.domain === 'switch' ? on(st) : seatOn(st)), ...(st ? {} : { available: false }) }))
         }
       : null;
 
@@ -249,7 +264,7 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
       batteryHealth: null,
       batteryKwh: kwh !== null && kwh >= 5 && kwh <= 250 ? kwh : null,
       batteryTemp: num(chg?.attributes?.batteryTemperature),
-      warnings: messages > 0 ? [messages === 1 ? '1 message from Ford' : `${messages} messages from Ford`] : [],
+      warnings: [...fordIndicators(s('sensor', 'indicators')), ...(messages > 0 ? [messages === 1 ? '1 message from Ford' : `${messages} messages from Ford`] : [])],
       software: software(s),
       batteryInserted: null
     },
@@ -267,6 +282,7 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
   return {
     vehicle,
     speedEntity: speedId,
+    odometerEntity: odometer?.entity_id ?? null,
     calls: (a) => {
       switch (a.type) {
         case 'lock':

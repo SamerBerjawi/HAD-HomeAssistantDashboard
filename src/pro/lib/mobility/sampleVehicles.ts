@@ -4,7 +4,8 @@
  * the bike what the Cowboy integration offers, and the "fleet" state adds a second car from
  * another make (with fewer parts) to show the page leaving out what a vehicle lacks.
  */
-import type { Charging, Climate, MobilityHome, Vehicle } from '../mobilityHome';
+import type { Charging, Climate, MobilityHome, Vehicle, VehicleHistory, VehicleMonth } from '../mobilityHome';
+import { monthShare } from './vehicleStats';
 
 export type StudioMobilityId = 'charging' | 'ready' | 'driving' | 'attention' | 'fleet' | 'quiet';
 
@@ -47,10 +48,45 @@ const fordClimate = (p: Partial<Climate>): Climate => ({
     { id: 'windscreen', label: 'Windscreen', on: false },
     { id: 'rear', label: 'Rear window', on: false },
     { id: 'wheel', label: 'Steering wheel', on: false },
-    { id: 'seat-driver', label: 'Driver seat', on: false }
+    { id: 'seat-driver', label: 'Driver seat', on: false },
+    { id: 'seat-passenger', label: 'Passenger seat', on: false },
+    // Fitted on some trims only: the switch exists but this car reports nothing (greyed).
+    { id: 'seat-rear-left', label: 'Rear left seat', on: false, available: false },
+    { id: 'seat-rear-right', label: 'Rear right seat', on: false, available: false }
   ],
   ...p
 });
+
+/** Brussels' mean temperature by month, °C. */
+const TEMP = [3, 4, 7, 10, 14, 17, 19, 19, 15, 11, 7, 4];
+const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Two years of months up to `now` (the last one so far): seasonal, an August trip, deterministic. */
+function sampleMonths(now: number, perMonth: number, ev: boolean): VehicleMonth[] {
+  const d = new Date(now);
+  return Array.from({ length: 24 }, (_, i) => {
+    const start = new Date(d.getFullYear(), d.getMonth() - 23 + i, 1).getTime();
+    const mo = new Date(start).getMonth();
+    const w = ((i * 53) % 17) / 17 - 0.5;
+    const t = TEMP[mo] + Math.round(w * 2);
+    const distance = Math.round(perMonth * (1 + 0.25 * w) * (mo === 7 ? 1.45 : mo === 11 ? 0.8 : 1) * (new Date(start).getFullYear() === d.getFullYear() ? 1.08 : 1) * (i === 23 ? monthShare(now) : 1));
+    const per100 = ev ? r1(15.5 + (18 - t) * 0.42 + w) : null;
+    return {
+      start,
+      distance,
+      per100,
+      outside: t,
+      charges: per100 !== null ? { sessions: Math.max(1, Math.round(distance / 85)), kwh: Math.round(((distance * per100) / 100) * 1.08), home: r1(0.82 + w * 0.2), full: mo === 6 || mo === 7 ? 2 : w > 0.3 ? 1 : 0, from: 28 + Math.round(w * 12), to: 90 } : null
+    };
+  });
+}
+
+function fordHistory(now: number, odometer: number): VehicleHistory {
+  const months = sampleMonths(now, 850, true);
+  const since = new Date(2025, 0, 15).getTime();
+  const driven = months.filter((m) => m.start >= new Date(2025, 0, 1).getTime()).reduce((a, m) => a + m.distance, 0);
+  return { months, allowance: { perYear: 10_000, years: 4, since, odometerAtStart: odometer - driven }, price: { perKwh: 0.32, currency: 'EUR' } };
+}
 
 function ford(id: StudioMobilityId, now: number): Vehicle {
   const base: Vehicle = {
@@ -89,7 +125,8 @@ function ford(id: StudioMobilityId, now: number): Vehicle {
       software: { installed: '2.3.1', latest: null, stage: 'idle', lastUpdate: at(3, 10) - 9 * 86400_000, nextWindow: null, blocked: null, auto: true },
       batteryInserted: null
     },
-    actions: ['lock', 'unlock', 'climate', 'charge-start', 'charge-pause', 'target', 'honk', 'refresh']
+    actions: ['lock', 'unlock', 'climate', 'charge-start', 'charge-pause', 'target', 'honk', 'refresh'],
+    history: fordHistory(now, 21_436)
   };
   if (id === 'charging') return { ...base, condition: { ...base.condition, software: { ...(base.condition.software as NonNullable<Vehicle['condition']['software']>), stage: 'downloading' } }, level: 61, range: 262, charging: fordCharging({ plugged: true, state: 'charging', power: 7.2, readyAt: at(7, 10) }), security: { ...base.security }, today: 0 };
   if (id === 'ready' || id === 'fleet') return { ...base, level: 90, range: 386, charging: fordCharging({ plugged: true, state: 'complete', lastSessionKwh: 21.8 }), climate: fordClimate({ running: true, minutesLeft: 8, cabin: 17, extras: fordClimate({}).extras.map((e) => ({ ...e, on: e.id === 'windscreen' || e.id === 'seat-driver' })) }) };
@@ -152,6 +189,7 @@ function cowboy(id: StudioMobilityId, now: number): Vehicle {
     lastTrip: { title: atWork ? 'Morning ride' : 'Evening ride', distance: 6.1, minutes: 19, endedAt: atWork ? at(8, 52) : at(18, 24) - 86400_000, energyKwh: null, co2SavedKg: 0.9, calories: 142 },
     lifetime: { co2SavedKg: 412, hours: 214 },
     mode: 'Adaptive',
+    history: { months: sampleMonths(now, 140, false), allowance: null, price: null },
     condition: { tyres: null, battery12v: null, oil: null, batteryHealth: 96, batteryKwh: null, batteryTemp: null, warnings: [], software: { installed: '1.18.4', latest: id === 'attention' ? '1.19.0' : null, stage: id === 'attention' ? 'available' : 'idle', lastUpdate: null, nextWindow: null, blocked: null, auto: null }, batteryInserted: id !== 'attention' },
     actions: []
   };

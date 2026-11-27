@@ -19,7 +19,8 @@ import { buildMobilityHome, mobilityCalls } from '../lib/mobility/adapters';
 import { applyVehiclePicture, pictureSource, type PictureSource } from '../lib/mobility/pictures';
 import { NO_PICTURE, readCarPictures, withCarPicture } from '../areas/ha/carPictures';
 import type { UserDashboardConfig } from '@/types/userConfig';
-import type { Vehicle } from '../lib/mobilityHome';
+import type { Vehicle, VehicleMonth } from '../lib/mobilityHome';
+import { monthsFromOdometer, type OdometerStat } from '../lib/mobility/vehicleStats';
 import { useServiceCall } from '../widgets/shared/useServiceCall';
 import { useMinuteTick } from './useMinuteTick';
 
@@ -87,6 +88,29 @@ export function useMobilityHome() {
     };
   }, [speedIds]);
 
+  // Distance by month for Statistics: two years of each odometer's monthly long-term statistics
+  // (needs a state_class on the sensor; none means no history and the tiles say so). Hourly.
+  const odoIds = built.sources.map((s) => s.odometerEntity).filter((x): x is string => !!x).join(',');
+  const [months, setMonths] = useState<Record<string, VehicleMonth[]>>({});
+  useEffect(() => {
+    if (!odoIds) return;
+    let cancelled = false;
+    const load = async () => {
+      const end = new Date();
+      const start = new Date(end.getFullYear(), end.getMonth() - 23, 1);
+      const res = await haWebSocketService
+        .sendRequest<Record<string, OdometerStat[]>>('recorder/statistics_during_period', { start_time: start.toISOString(), end_time: end.toISOString(), statistic_ids: odoIds.split(','), period: 'month', types: ['change', 'state', 'max'] })
+        .catch(() => null);
+      if (!cancelled && res) setMonths(Object.fromEntries(Object.entries(res).map(([id, recs]) => [id, monthsFromOdometer(recs ?? [])])));
+    };
+    void load();
+    const timer = setInterval(() => void load(), 3600_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [odoIds]);
+
   // Demo mode: the sample vehicles, their controls acting on the sample.
   const demo = haWebSocketService.isDemo() && built.home.vehicles.length === 0;
   const [sample, setSample] = useState<MobilityHome>(() => studioMobilityHome('fleet'));
@@ -115,7 +139,15 @@ export function useMobilityHome() {
     [call, setOptimistic, demo]
   );
 
-  const liveHome = useMemo(() => ({ ...built.home, vehicles: built.home.vehicles.map((v) => applyVehiclePicture(v, choices)) }), [built.home, choices]);
+  const liveHome = useMemo(() => {
+    const odo = new Map(built.sources.map((s) => [s.vehicle.id, s.odometerEntity]));
+    const withHistory = (v: Vehicle): Vehicle => {
+      const m = months[odo.get(v.id) ?? ''];
+      // shortcut: distance only; efficiency, charging and the allowance need the server's daily snapshot and Customize.
+      return m?.length ? { ...v, history: { months: m, allowance: null, price: null } } : v;
+    };
+    return { ...built.home, vehicles: built.home.vehicles.map((v) => withHistory(applyVehiclePicture(v, choices))) };
+  }, [built.home, built.sources, choices, months]);
   const home = demo ? sample : liveHome;
 
   // The owner's picture per vehicle: the integration's, their own upload, or none. Saved at once.

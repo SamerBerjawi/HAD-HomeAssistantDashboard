@@ -11,7 +11,7 @@ import { HeaterIcon, SeatSelectorIcon, SteeringIcon, TemperatureIcon, WindPowerI
 import { cn } from '@/lib/utils';
 import { TileChip, TileFrame, TileIconButton, TileName, TileState } from '../../../../areas/tileKit';
 import type { Vehicle } from '../../../../lib/mobilityHome';
-import { IconChip, VHUE, type VehicleTileProps } from '../vehicleTileKit';
+import { IconChip, VHUE, type VehicleTileProps, NOT_ON_CAR } from '../vehicleTileKit';
 
 type Extra = NonNullable<Vehicle['climate']>['extras'][number];
 
@@ -21,7 +21,8 @@ const HOT = VHUE.heat;
 
 const extrasOf = (v: Vehicle) => v.climate?.extras ?? [];
 const countOn = (x: Extra[]) => x.filter((e) => e.on).length;
-const summary = (x: Extra[]) => (countOn(x) ? `${countOn(x)} of ${x.length} on` : 'All off');
+const usable = (x: Extra[]) => x.filter((e) => e.available !== false).length;
+const summary = (x: Extra[]) => (countOn(x) ? `${countOn(x)} of ${usable(x)} on` : 'All off');
 const toggle = (act: VehicleTileProps['act'], e: Extra) => () => act({ type: 'extra', id: e.id, on: !e.on });
 
 function Unavailable({ v }: { v: Vehicle }) {
@@ -30,7 +31,7 @@ function Unavailable({ v }: { v: Vehicle }) {
       <div className="flex h-full flex-col p-3.5">
         <IconChip icon={HeaterIcon} on={false} />
         <TileName className="mt-auto">Extras</TileName>
-        <TileState>{v.climate ? 'None this car offers' : 'Not offered'}</TileState>
+        <TileState>{NOT_ON_CAR}</TileState>
       </div>
     </TileFrame>
   );
@@ -41,11 +42,12 @@ function Spot({ e, act, px }: { e: Extra; act: VehicleTileProps['act']; px: numb
   return (
     <TileIconButton
       icon={ICON[e.id] ?? TemperatureIcon}
-      label={`${e.label} ${e.on ? 'on' : 'off'}`}
+      label={e.available === false ? `${e.label}: not available on this car` : `${e.label} ${e.on ? 'on' : 'off'}`}
       pressed={e.on}
       size={px}
       onPress={toggle(act, e)}
-      className={e.on ? undefined : 'bg-[color-mix(in_srgb,currentColor_8%,transparent)]'}
+      isDisabled={e.available === false}
+      className={cn(e.on ? undefined : 'bg-[color-mix(in_srgb,currentColor_8%,transparent)]', e.available === false && 'opacity-35')}
       style={e.on ? { background: `color-mix(in srgb, ${HOT} 24%, var(--surface))`, color: HOT, boxShadow: `0 0 14px -3px ${HOT}` } : undefined}
     />
   );
@@ -74,7 +76,8 @@ export function ExtrasChips({ v, size, act }: VehicleTileProps) {
       label={`${e.label} ${e.on ? 'on' : 'off'}`}
       active={e.on}
       onPress={toggle(act, e)}
-      className={cn('gap-1 px-2.5', size === 'l' ? 'h-9' : 'h-8', !e.on && 'bg-[color-mix(in_srgb,currentColor_7%,transparent)]')}
+      isDisabled={e.available === false}
+      className={cn('gap-1 px-2.5', size === 'l' ? 'h-9' : 'h-8', !e.on && 'bg-[color-mix(in_srgb,currentColor_7%,transparent)]', e.available === false && 'opacity-35')}
       style={e.on ? { background: `color-mix(in srgb, ${HOT} 22%, transparent)`, color: HOT } : undefined}
     >
       <HugeiconsIcon icon={ICON[e.id] ?? TemperatureIcon} size={14} />
@@ -167,15 +170,16 @@ function Row({ e, act, dense }: { e: Extra; act: VehicleTileProps['act']; dense:
     <Button
       variant="ghost"
       aria-pressed={e.on}
-      aria-label={`${e.label} ${e.on ? 'on' : 'off'}`}
+      aria-label={e.available === false ? `${e.label}: not available on this car` : `${e.label} ${e.on ? 'on' : 'off'}`}
       onPress={toggle(act, e)}
+      isDisabled={e.available === false}
       data-tile-control=""
       className={cn('h-auto w-full min-w-0 justify-start gap-2 rounded-xl px-2 text-left text-[var(--foreground)] data-[hovered=true]:bg-[color-mix(in_srgb,currentColor_6%,transparent)]', dense ? 'py-1' : 'py-1.5')}
     >
       <HugeiconsIcon icon={ICON[e.id] ?? TemperatureIcon} size={16} style={e.on ? { color: HOT } : undefined} className={e.on ? undefined : 'opacity-60'} />
       <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{dense ? SHORT[e.id] ?? e.label : e.label}</span>
       <span className="text-[12px] font-semibold tabular-nums" style={e.on ? { color: HOT } : { opacity: 0.45 }}>
-        {e.on ? 'On' : 'Off'}
+        {e.available === false ? 'n/a' : e.on ? 'On' : 'Off'}
       </span>
     </Button>
   );
@@ -185,7 +189,7 @@ export function ExtrasRows({ v, size, act }: VehicleTileProps) {
   const x = extrasOf(v);
   if (!x.length) return <Unavailable v={v} />;
   if (size === 'xs') {
-    const all = countOn(x) === x.length;
+    const all = countOn(x) === usable(x);
     return (
       <TileFrame label="Extras" className="pro-surface">
         <div className="flex h-full items-center gap-2 px-3">
@@ -195,7 +199,7 @@ export function ExtrasRows({ v, size, act }: VehicleTileProps) {
           </div>
           <TileChip
             label={all ? 'Turn all extras off' : 'Turn all extras on'}
-            onPress={() => x.filter((e) => e.on === all).forEach((e) => act({ type: 'extra', id: e.id, on: !all }))}
+            onPress={() => x.filter((e) => e.on === all && e.available !== false).forEach((e) => act({ type: 'extra', id: e.id, on: !all }))}
             className={cn(!all && 'bg-[color-mix(in_srgb,currentColor_7%,transparent)]')}
             style={all ? { background: `color-mix(in srgb, ${HOT} 22%, transparent)`, color: HOT } : undefined}
           >

@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { TileFrame, TileName, TileState } from '../../../../areas/tileKit';
 import { glowStyle, OrbButton } from '../../../../areas/tiles/ambient/ambientKit';
 import { clock, has, type Vehicle } from '../../../../lib/mobilityHome';
-import { Big, chargingWords, IconChip, pct, VHUE, type VehicleTileProps } from '../vehicleTileKit';
+import { Big, chargingWords, IconChip, NOT_ON_CAR, pct, VHUE, type VehicleTileProps } from '../vehicleTileKit';
 
 /** Whether the tile can start or pause the charge now, and what pressing does. */
 function control(v: Vehicle, act: VehicleTileProps['act']) {
@@ -36,11 +36,24 @@ function ToLimit({ v, className }: { v: Vehicle; className?: string }) {
   );
 }
 
+function Unavailable() {
+  return (
+    <TileFrame label="Charging" className="pro-surface opacity-70">
+      <div className="flex h-full flex-col p-3.5">
+        <IconChip icon={PlugSocketIcon} on={false} />
+        <TileName className="mt-auto">Charging</TileName>
+        <TileState>{NOT_ON_CAR}</TileState>
+      </div>
+    </TileFrame>
+  );
+}
+
 // ---------------------------------------------------------------------------------------------
 // A · Orb
 // ---------------------------------------------------------------------------------------------
 
 export function ChargingOrb({ v, size, act }: VehicleTileProps) {
+  if (!v.charging) return <Unavailable />;
   const w = chargingWords(v);
   const k = control(v, act);
   const on = w.tone === 'on';
@@ -123,6 +136,7 @@ function Cable({ v, width, height }: { v: Vehicle; width: number; height: number
 }
 
 export function ChargingPlug({ v, size, act }: VehicleTileProps) {
+  if (!v.charging) return <Unavailable />;
   const w = chargingWords(v);
   const k = control(v, act);
   const hue = w.tone === 'warn' ? VHUE.low : VHUE.charge;
@@ -225,6 +239,7 @@ function Line({ v, now, labels }: { v: Vehicle; now: number; labels: boolean }) 
 }
 
 export function ChargingTimeline({ v, size, act, now }: VehicleTileProps) {
+  if (!v.charging) return <Unavailable />;
   const w = chargingWords(v);
   const k = control(v, act);
   const hue = w.tone === 'warn' ? VHUE.low : VHUE.charge;

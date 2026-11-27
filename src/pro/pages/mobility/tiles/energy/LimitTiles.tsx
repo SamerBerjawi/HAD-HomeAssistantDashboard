@@ -11,7 +11,7 @@ import { MinusSignIcon, PlusSignIcon, Target02Icon } from '@hugeicons/core-free-
 import { cn } from '@/lib/utils';
 import { TileFrame, TileIconButton, TileName, TileState } from '../../../../areas/tileKit';
 import { has, type Vehicle } from '../../../../lib/mobilityHome';
-import { Big, IconChip, pct, VHUE, wash, type VehicleTileProps } from '../vehicleTileKit';
+import { Big, IconChip, pct, VHUE, wash, type VehicleTileProps, NOT_ON_CAR } from '../vehicleTileKit';
 
 function limitOf(v: Vehicle) {
   const c = v.charging;
@@ -31,7 +31,7 @@ function Unavailable({ v }: { v: Vehicle }) {
       <div className="flex h-full flex-col p-3.5">
         <IconChip icon={Target02Icon} on={false} />
         <TileName className="mt-auto">Charge limit</TileName>
-        <TileState>{v.charging?.target != null ? `${v.charging.target}% · set in the car` : 'Not offered'}</TileState>
+        <TileState>{v.charging?.target != null ? `${v.charging.target}% · set in the car` : NOT_ON_CAR}</TileState>
       </div>
     </TileFrame>
   );

@@ -1,34 +1,34 @@
 /**
  * The Mobility page in the Room page's layout (owner, 2026-11-27; docs/pro-ui/VEHICLE_TILES.md):
- * the rail (the vehicle's picture, its name with the other vehicles, facts, readiness, on this
- * page) and the sections as tile grids with a summary in each heading. Energy, Cabin and Security use
- * the batch 1–3 picks (or the recommendations); the other sections use the Room page's chosen tiles as
- * stand-ins until their batch. Live: the controls change the sample.
+ * the sections as tile grids (batch 1–5 picks) framed by batch 6's parts, each switchable here:
+ * the rail (Room rail, Garage, Showroom), the sections and views (All, All | Now, Moment order)
+ * and the phone (Picture header, Compact, Bottom dock). Live: the controls change the sample.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Button, ToggleButton, ToggleButtonGroup } from '@heroui/react';
-import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
+import { HugeiconsIcon } from '@hugeicons/react';
 import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
-  BatteryFullIcon,
+  Copy01Icon,
   ElectricPlugsIcon,
+  EngineIcon,
+  PauseIcon,
   GridViewIcon,
-  Notification03Icon,
-  Route01Icon,
-  SquareLock02Icon,
-  SquareUnlock02Icon,
-  TemperatureIcon
+  Notification03Icon
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import { ChosenTile } from '../../../../areas/tiles/chosenTiles';
 import type { TileSize } from '../../../../areas/tileTypes';
 import { applySampleAction, has, readiness, type MobilityAction, type MobilityHome, type Vehicle } from '../../../../lib/mobilityHome';
+import { GuardedLockButton } from '../../../../areas/tiles/security/LockTiles';
 import { STUDIO_MOBILITY_STATES, studioMobilityHome, type StudioMobilityId } from '../../../../lib/mobility/sampleVehicles';
-import { TONE, toneIcon, VehicleArt } from '../../home/parts';
-import { chargingWords, rangeText } from '../vehicleTileKit';
-import { VEHICLE_TYPES, type VehicleTileType } from './vehicleCatalog';
+import { TONE, VehicleArt } from '../../home/parts';
+import { FactRow, momentWhy, nowIds, ReadyCard, VehicleStage } from '../../page/vehiclePageKit';
+import { chargingWords, partApplies, rangeText } from '../vehicleTileKit';
+import { VEHICLE_TYPES, type VehicleConceptId, type VehicleTileType } from './vehicleCatalog';
+import { PAGE_PARTS, type PagePart } from './pageParts';
 import { roomStandIns, type StandIn } from './roomStandIns';
 import { readVehiclePicks } from './useVehiclePicks';
 
@@ -40,26 +40,6 @@ const SPAN: Record<TileSize, string> = { xs: 'col-span-1 row-span-1', s: 'col-sp
 function conceptFor(t: VehicleTileType) {
   const p = t.chosen ?? readVehiclePicks()[t.id]?.concept;
   return t.concepts.find((c) => c.id === p) ?? t.concepts.find((c) => c.id === t.recommended)!;
-}
-
-function Fact({ icon, text, hue }: { icon: IconSvgElement; text: string; hue?: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[15px]">
-      <HugeiconsIcon icon={icon} size={17} style={hue ? { color: hue } : undefined} className={hue ? undefined : 'opacity-60'} />
-      {text}
-    </span>
-  );
-}
-
-function facts(v: Vehicle) {
-  const out: { icon: IconSvgElement; text: string; hue?: string }[] = [];
-  if (v.level !== null) out.push({ icon: BatteryFullIcon, text: `${v.level}%`, hue: TONE.good });
-  const r = rangeText(v);
-  if (r) out.push({ icon: Route01Icon, text: r });
-  if (v.security.locked !== null) out.push({ icon: v.security.locked ? SquareLock02Icon : SquareUnlock02Icon, text: v.security.locked ? 'Locked' : 'Unlocked', hue: v.security.locked ? undefined : TONE.warn });
-  if (v.charging?.plugged) out.push({ icon: ElectricPlugsIcon, text: chargingWords(v).word, hue: v.charging.state === 'charging' ? TONE.good : undefined });
-  if (v.climate?.cabin != null) out.push({ icon: TemperatureIcon, text: `${v.climate.cabin}° inside`, hue: v.climate.running ? 'hsl(22 95% 58%)' : undefined });
-  return out;
 }
 
 function Pick<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { id: T; text: string }[]; onChange: (v: T) => void }) {
@@ -88,12 +68,48 @@ function Pick<T extends string>({ label, value, options, onChange }: { label: st
   );
 }
 
+const PAGE_KEY = 'had.pro.vehicleStudio.pagePicks';
+type PagePicks = Record<PagePart['id'], VehicleConceptId>;
+
+function readPagePicks(): PagePicks {
+  const base = Object.fromEntries(PAGE_PARTS.map((p) => [p.id, p.chosen ?? p.recommended])) as PagePicks;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(PAGE_KEY) ?? '{}') as Partial<PagePicks>;
+    // A chosen part opens on the choice; the picker still lets you compare.
+    return Object.fromEntries(PAGE_PARTS.map((p) => [p.id, p.chosen ?? saved[p.id] ?? base[p.id]])) as PagePicks;
+  } catch {
+    return base;
+  }
+}
+
 export default function VehiclePageSim() {
   const [stateId, setStateId] = useState<StudioMobilityId>('charging');
   const [screen, setScreen] = useState<Screen>('desktop');
   const [dark, setDark] = useState(true);
   const [home, setHome] = useState<MobilityHome>(() => studioMobilityHome('charging'));
   const [id, setId] = useState('ford');
+  const [picks, setPicksState] = useState<PagePicks>(readPagePicks);
+  const [view, setView] = useState<'all' | 'now'>('all');
+  const [copied, setCopied] = useState(false);
+  const setPick = (part: PagePart['id'], c: VehicleConceptId) => {
+    const next = { ...picks, [part]: c };
+    setPicksState(next);
+    setCopied(false);
+    try {
+      window.localStorage.setItem(PAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* blocked storage: works for this visit */
+    }
+  };
+  const copy = async () => {
+    const text = PAGE_PARTS.map((p) => `${p.title} ${picks[p.id]} (${p.concepts.find((c) => c.id === picks[p.id])?.name})`).join(', ');
+    try {
+      await navigator.clipboard.writeText(`Vehicle page · ${text}.`);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
   const v = home.vehicles.find((x) => x.id === id) ?? home.vehicles[0];
   const act = (vid: string) => (a: MobilityAction) => setHome((h) => ({ ...h, vehicles: h.vehicles.map((x) => (x.id === vid ? applySampleAction(x, a) : x)) }));
   const r = readiness(v, home.now);
@@ -101,13 +117,16 @@ export default function VehiclePageSim() {
   const stand = useMemo(() => roomStandIns(v), [v]);
   const i = home.vehicles.indexOf(v);
 
-  const batch1 = VEHICLE_TYPES.filter((t) => t.batch === 1);
-  const energy = v.kind === 'car' && v.charging ? batch1 : batch1.filter((t) => t.id === 'battery');
-  const cabin = v.climate ? VEHICLE_TYPES.filter((t) => t.batch === 2 && (t.id !== 'extras' || v.climate!.extras.length) && (t.id !== 'temp' || v.climate!.target !== null)) : [];
-  const security = (['doors', 'alarm', 'openings'] as const)
-    .filter((id) => (id === 'doors' ? v.security.locked !== null : id === 'openings' ? v.kind === 'car' : v.security.alarm !== null || v.kind === 'bike' || has(v, 'honk')))
-    .map((id) => VEHICLE_TYPES.find((t) => t.id === id)!);
-  const SIZE: Record<VehicleTileType['id'], TileSize> = { battery: 'w', charging: phone ? 'w' : 's', limit: phone ? 'w' : 's', climate: 'w', temp: 's', extras: 's', doors: 's', alarm: 's', openings: 'w' };
+  // Every part the vehicle's kind has; one its model reports nothing for draws itself greyed.
+  const parts = (batch: number) => VEHICLE_TYPES.filter((t) => t.batch === batch && partApplies(t.id, v));
+  const energy = parts(1);
+  const cabin = parts(2);
+  // Doors and alarm first so two Smalls share a row on phone, Openings (Wide) under them.
+  const security = (['doors', 'alarm', 'openings'] as const).map((id) => VEHICLE_TYPES.find((t) => t.id === id)!).filter((t) => partApplies(t.id, v));
+  const where = parts(4);
+  const condition = parts(5);
+  const stats = parts(7);
+  const SIZE: Record<VehicleTileType['id'], TileSize> = { battery: 'w', charging: phone ? 'w' : 's', limit: phone ? 'w' : 's', climate: 'w', temp: 's', extras: 's', doors: 's', alarm: 's', openings: 'w', location: 'w', today: 's', trip: 's', tyres: 's', health: 's', software: 's', warnings: 's', distance: 'w', efficiency: phone ? 'w' : 's', sessions: phone ? 'w' : 's', allowance: 'w' };
   const drawn = (list: readonly VehicleTileType[]) =>
     list.map((t) => {
       const C = conceptFor(t).Component;
@@ -117,7 +136,7 @@ export default function VehiclePageSim() {
         </div>
       );
     });
-  const sections: { id: string; title: string; summary: string; body: React.ReactNode; note?: string }[] = [
+  const sections: { id: string; title: string; summary: string; body: ReactNode; note?: string }[] = [
     {
       id: 'energy',
       title: 'Energy',
@@ -126,9 +145,15 @@ export default function VehiclePageSim() {
     },
     { id: 'cabin', title: v.climate?.remoteStart ? 'Remote start' : 'Cabin', summary: v.climate ? (v.climate.running ? `On, ${v.climate.target}°` : 'Off') : '', body: drawn(cabin) },
     { id: 'security', title: 'Security', summary: v.security.locked === false ? 'Unlocked' : v.security.open.length ? `${v.security.open.length} open` : 'All closed', body: drawn(security) },
-    { id: 'where', title: 'Where', summary: v.motion?.moving ? 'Driving' : v.place?.zone ?? 'Away', body: tiles(stand.where), note: 'Batch 4' },
-    { id: 'condition', title: 'Condition', summary: r.checks.some((c) => c.tone === 'warn' || c.tone === 'bad') ? 'Needs a look' : 'All fine', body: tiles(stand.condition), note: 'Batch 5' }
+    { id: 'where', title: 'Where', summary: v.motion?.moving ? 'Driving' : v.place?.zone ?? 'Away', body: [...drawn(where), ...tiles(stand.where)] },
+    { id: 'condition', title: 'Condition', summary: r.checks.some((c) => c.tone === 'warn' || c.tone === 'bad') ? 'Needs a look' : 'All fine', body: drawn(condition) },
+    { id: 'stats', title: 'Statistics', summary: v.history?.months.length ? `${Math.round(v.history.months.at(-1)!.distance).toLocaleString()} ${v.unit} this month` : '', body: drawn(stats) }
   ].filter((s) => (Array.isArray(s.body) ? s.body.length : true));
+  const why = momentWhy(v);
+  const ordered = picks.sections === 'C' ? [...sections].sort((a, b) => (why[a.id] ? 0 : 1) - (why[b.id] ? 0 : 1)) : sections;
+  const now = nowIds(v);
+  const nowTiles = VEHICLE_TYPES.filter((t) => now.has(t.id) && partApplies(t.id, v));
+  const showNow = picks.sections === 'B' && view === 'now';
 
   function tiles(list: StandIn[]) {
     return list.map((it) => (
@@ -142,60 +167,243 @@ export default function VehiclePageSim() {
     ));
   }
 
-  const rail = (
-    <div className={cn('flex flex-col gap-4', !phone && 'sticky top-4 self-start')}>
-      <div className="relative grid aspect-[4/3] place-items-center overflow-hidden rounded-[26px]" style={{ background: 'radial-gradient(120% 90% at 50% 100%, color-mix(in oklab, var(--foreground) 10%, transparent), transparent 60%), linear-gradient(180deg, color-mix(in oklab, var(--foreground) 4%, var(--surface)), var(--surface))' }}>
-        <span aria-hidden className="absolute bottom-[18%] left-1/2 h-4 w-[70%] -translate-x-1/2 rounded-[50%]" style={{ background: 'radial-gradient(closest-side, color-mix(in oklab, var(--foreground) 22%, transparent), transparent)' }} />
-        <VehicleArt v={v} size={phone ? 110 : 104} stage />
+  const switchVehicle = () => setId(home.vehicles[(i + 1) % home.vehicles.length].id);
+  const picture = (px: number) => <VehicleStage v={v} px={px} />;
+  const nameButton = (cls: string) => (
+    <Button variant="ghost" className="h-auto min-w-0 gap-1.5 rounded-xl px-0 text-left text-[var(--foreground)] data-[hovered=true]:bg-transparent" onPress={switchVehicle} aria-label={`${v.name}: switch vehicle`}>
+      <span className={cn('truncate font-semibold tracking-[-0.03em]', cls)}>{v.name}</span>
+      <HugeiconsIcon icon={ArrowDown01Icon} size={18} className="shrink-0 opacity-60" />
+    </Button>
+  );
+  const factRow = <FactRow v={v} />;
+  const ready = (compact?: boolean) => <ReadyCard r={r} compact={compact} />;
+  const label = (text: string) => <p className="mb-2 text-[13px] font-semibold uppercase tracking-wide opacity-60">{text}</p>;
+  const chips = (sticky: boolean) => (
+    <div className={cn('flex gap-2 overflow-x-auto py-2', sticky && 'sticky top-0 z-10 -mx-5 bg-[var(--background)] px-5')}>
+      {ordered.map((x) => (
+        <span key={x.id} className="shrink-0 rounded-full bg-[color-mix(in_oklab,var(--foreground)_8%,transparent)] px-3 py-1.5 text-[13px]">
+          {x.title}
+        </span>
+      ))}
+    </div>
+  );
+  const onThisPage = (
+    <nav aria-label="On this page">
+      {label('On this page')}
+      {ordered.map((x) => (
+        <p key={x.id} className="py-2 text-[15px]">
+          {x.title} <span className="opacity-60">{x.summary}</span>
+        </p>
+      ))}
+    </nav>
+  );
+
+  // ---- Rail (tablet and desktop) ----
+  const railA = (
+    <div className="sticky top-4 flex flex-col gap-4 self-start">
+      {picture(104)}
+      <div>
+        {nameButton('text-[34px] leading-tight')}
+        <div className="mt-2">{factRow}</div>
       </div>
       <div>
-        <Button variant="ghost" className="h-auto min-w-0 gap-1.5 rounded-xl px-0 text-left text-[var(--foreground)] data-[hovered=true]:bg-transparent" onPress={() => setId(home.vehicles[(i + 1) % home.vehicles.length].id)} aria-label={`${v.name}: switch vehicle`}>
-          <span className={cn('font-semibold tracking-[-0.03em]', phone ? 'text-[30px]' : 'text-[34px] leading-tight')}>{v.name}</span>
-          <HugeiconsIcon icon={ArrowDown01Icon} size={18} className="opacity-60" />
-        </Button>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-          {facts(v).map((f) => (
-            <Fact key={f.text} {...f} />
-          ))}
-        </div>
+        {label('Ready to go?')}
+        {ready()}
       </div>
-      <div>
-        <p className="mb-2 text-[13px] font-semibold uppercase tracking-wide opacity-60">Ready to go?</p>
-        <div className="flex items-center gap-3 rounded-[22px] p-3.5" style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${TONE[r.tone]} 16%, var(--surface)), var(--surface) 80%)` }}>
-          <span className="grid size-10 shrink-0 place-items-center rounded-full" style={{ background: `color-mix(in srgb, ${TONE[r.tone]} 18%, transparent)`, color: TONE[r.tone] }}>
-            <HugeiconsIcon icon={toneIcon(r.tone)} size={18} />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-[17px] font-semibold" style={{ color: TONE[r.tone] }}>
-              {r.title}
-            </p>
-            <p className="truncate text-[13px] opacity-70">{r.detail}</p>
+      {onThisPage}
+    </div>
+  );
+  const railB = (
+    <div className="sticky top-4 flex flex-col gap-2 self-start">
+      {label('Garage')}
+      {home.vehicles.map((x) => {
+        const open = x.id === v.id;
+        const rx = readiness(x, home.now);
+        return (
+          <div key={x.id} className={cn('rounded-[22px] transition-colors', open ? 'bg-[var(--surface)] p-3' : '')}>
+            <Button variant="ghost" onPress={() => setId(x.id)} aria-pressed={open} className="h-auto w-full min-w-0 justify-start gap-3 rounded-2xl px-2 py-2 text-left text-[var(--foreground)]">
+              <span className="w-16 shrink-0">
+                <VehicleArt v={x} size={28} stage />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[16px] font-semibold">{x.name}</span>
+                <span className="block truncate text-[13px]" style={{ color: TONE[rx.tone] }}>
+                  {rx.title}
+                </span>
+              </span>
+            </Button>
+            {open ? (
+              <div className="mt-2 flex flex-col gap-3 px-1">
+                {picture(92)}
+                {factRow}
+                {ready(true)}
+              </div>
+            ) : null}
           </div>
-        </div>
+        );
+      })}
+    </div>
+  );
+  const big = [
+    { k: 'Charge', v: v.level !== null ? `${v.level}%` : '—' },
+    { k: 'Range', v: rangeText(v) ?? '—' },
+    { k: v.security.locked === null ? 'Doors' : v.security.locked ? 'Locked' : 'Unlocked', v: v.security.locked === null ? '—' : v.security.locked ? '✓' : '!' }
+  ];
+  const railC = (
+    <div className="sticky top-4 flex flex-col gap-4 self-start">
+      <div className="relative">
+        {picture(128)}
+        <div className="absolute inset-x-4 top-3">{nameButton('text-[28px]')}</div>
       </div>
-      {!phone ? (
-        <nav aria-label="On this page">
-          <p className="mb-1 text-[13px] font-semibold uppercase tracking-wide opacity-60">On this page</p>
-          {sections.map((s) => (
-            <p key={s.id} className="py-2 text-[15px]">
-              {s.title} <span className="opacity-60">{s.summary}</span>
+      <div className="grid grid-cols-3 gap-2">
+        {big.map((x) => (
+          <div key={x.k} className="rounded-2xl bg-[var(--surface)] px-3 py-2.5">
+            <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]" style={x.v === '!' ? { color: TONE.warn } : undefined}>
+              {x.v}
             </p>
-          ))}
-        </nav>
-      ) : (
-        <div className="flex gap-2 overflow-x-auto">
-          {sections.map((s) => (
-            <span key={s.id} className="shrink-0 rounded-full bg-[color-mix(in_oklab,var(--foreground)_8%,transparent)] px-3 py-1.5 text-[13px]">
-              {s.title}
-            </span>
-          ))}
+            <p className="text-[12px] opacity-60">{x.k}</p>
+          </div>
+        ))}
+      </div>
+      {ready(true)}
+      {chips(false)}
+    </div>
+  );
+  const rail = picks.rail === 'B' ? railB : picks.rail === 'C' ? railC : railA;
+
+  // ---- Phone header ----
+  const compactHeader = (
+    <div className="flex items-center gap-3">
+      <div className="w-24 shrink-0">{picture(40)}</div>
+      <div className="min-w-0 flex-1">
+        {nameButton('text-[24px]')}
+        <p className="truncate text-[14px] font-semibold" style={{ color: TONE[r.tone] }}>
+          {r.title}
+        </p>
+        <p className="truncate text-[12px] opacity-60">{r.detail}</p>
+      </div>
+    </div>
+  );
+  const phoneHeader =
+    picks.phone === 'A' ? (
+      <div className="flex flex-col gap-4">
+        {picture(110)}
+        <div>
+          {nameButton('text-[30px]')}
+          <div className="mt-2">{factRow}</div>
         </div>
-      )}
+        {ready()}
+      </div>
+    ) : (
+      compactHeader
+    );
+  const charging = v.charging?.state === 'charging';
+  const dock =
+    picks.phone === 'C' ? (
+      <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex items-center gap-2 border-t border-[color-mix(in_oklab,var(--foreground)_8%,transparent)] bg-[color-mix(in_srgb,var(--background)_88%,transparent)] px-5 py-3 backdrop-blur-md">
+        <span className="size-2.5 shrink-0 rounded-full" style={{ background: TONE[r.tone] }} />
+        <p className="min-w-0 flex-1 truncate text-[14px] font-semibold">{r.title}</p>
+        {v.security.locked !== null ? <GuardedLockButton name={v.name} locked={!!v.security.locked} available={has(v, v.security.locked ? 'unlock' : 'lock')} onLock={() => act(v.id)({ type: 'lock' })} onUnlock={() => act(v.id)({ type: 'unlock' })} compact /> : null}
+        {v.climate && has(v, 'climate') ? (
+          <Button isIconOnly size="sm" variant={v.climate.running ? 'primary' : 'secondary'} aria-label={v.climate.running ? 'Stop remote start' : 'Remote start'} aria-pressed={v.climate.running} onPress={() => act(v.id)({ type: 'climate', on: !v.climate!.running })} className="size-9 min-w-0 rounded-full">
+            <HugeiconsIcon icon={EngineIcon} size={16} />
+          </Button>
+        ) : null}
+        {v.charging?.plugged && has(v, charging ? 'charge-pause' : 'charge-start') ? (
+          <Button isIconOnly size="sm" variant={charging ? 'primary' : 'secondary'} aria-label={charging ? 'Pause charging' : 'Start charging'} aria-pressed={charging} onPress={() => act(v.id)({ type: 'charge', on: !charging })} className="size-9 min-w-0 rounded-full">
+            <HugeiconsIcon icon={charging ? PauseIcon : ElectricPlugsIcon} size={16} />
+          </Button>
+        ) : null}
+      </div>
+    ) : null;
+
+  // ---- Content: the views ----
+  const viewSwitch =
+    picks.sections === 'B' ? (
+      <ToggleButtonGroup aria-label="View" size="sm" selectionMode="single" disallowEmptySelection selectedKeys={new Set([view])} onSelectionChange={(k) => setView([...k][0] === 'now' ? 'now' : 'all')}>
+        <ToggleButton id="all" className="text-[13px]">
+          All
+        </ToggleButton>
+        <ToggleButton id="now" className="text-[13px]">
+          Now · {nowTiles.length}
+        </ToggleButton>
+      </ToggleButtonGroup>
+    ) : (
+      <span />
+    );
+  const grid = (body: ReactNode) => <div className={cn('grid auto-rows-[68px] gap-3 [grid-auto-flow:dense]', phone ? 'grid-cols-2' : 'grid-cols-4')}>{body}</div>;
+  const content = showNow ? (
+    <div className="flex flex-col gap-6">
+      <p className={cn('font-semibold tracking-[-0.02em]', phone ? 'text-[20px]' : 'text-[24px]')}>
+        <span style={{ color: TONE[r.tone] }}>{r.title}.</span> <span className="font-normal opacity-60">{r.detail}</span>
+      </p>
+      {nowTiles.length ? grid(drawn(nowTiles)) : <p className="text-[15px] opacity-60">Nothing on, nothing to check.</p>}
+      <div>
+        {label('Everything else')}
+        {sections.map((x) => (
+          <p key={x.id} className="flex items-baseline gap-2.5 border-t border-[color-mix(in_oklab,var(--foreground)_8%,transparent)] py-3 text-[15px]">
+            <span className="font-semibold">{x.title}</span>
+            <span className="opacity-60">{x.summary}</span>
+            <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="ml-auto opacity-40" />
+          </p>
+        ))}
+      </div>
+    </div>
+  ) : (
+    ordered.map((x) => (
+      <section key={x.id} aria-label={x.title} className="flex flex-col gap-3">
+        <h3 className="flex items-baseline gap-2.5">
+          <span className="text-[19px] font-semibold">{x.title}</span>
+          <span className="text-[15px] opacity-60">{x.summary}</span>
+          {picks.sections === 'C' && why[x.id] ? (
+            <span className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)' }}>
+              First: {why[x.id]}
+            </span>
+          ) : null}
+        </h3>
+        {grid(x.body)}
+      </section>
+    ))
+  );
+  const topBar = (
+    <div className="flex items-center justify-between gap-2">
+      {viewSwitch}
+      <div className="flex items-center gap-3 text-[14px] opacity-80">
+        {!phone ? (
+          <span className="inline-flex items-center gap-1.5">
+            <HugeiconsIcon icon={GridViewIcon} size={16} /> All vehicles
+          </span>
+        ) : null}
+        <HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
+        <HugeiconsIcon icon={ArrowRight01Icon} size={18} />
+        <HugeiconsIcon icon={Notification03Icon} size={18} />
+      </div>
     </div>
   );
 
   return (
     <section className="pro-surface flex flex-col gap-4 p-5">
+      <div className="grid gap-3 lg:grid-cols-3">
+        {PAGE_PARTS.map((p) => {
+          const c = p.concepts.find((x) => x.id === picks[p.id])!;
+          return (
+            <article key={p.id} className="flex flex-col gap-2 rounded-2xl bg-default/40 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">{p.title}</h3>
+                <span className="text-[11px] text-muted">{p.chosen ? `Chosen: ${p.chosen}` : `Recommended: ${p.recommended}`}</span>
+              </div>
+              <Pick label={p.job} value={picks[p.id]} options={p.concepts.map((x) => ({ id: x.id, text: `${x.id} · ${x.name}` }))} onChange={(x) => setPick(p.id, x)} />
+              <p className="text-xs">{c.idea}</p>
+              <p className="text-[11px] text-muted">
+                + {c.strengths.join('; ')} · − {c.tradeoffs.join('; ')}
+              </p>
+            </article>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted">
+        {PAGE_PARTS.map((p) => `${p.title}: ${p.why}`).join(' ')}
+      </p>
       <div className="flex flex-wrap items-end gap-4">
         <Pick
           label="Moment"
@@ -209,42 +417,34 @@ export default function VehiclePageSim() {
         />
         <Pick label="Screen" value={screen} options={[{ id: 'desktop' as Screen, text: 'Desktop' }, { id: 'phone' as Screen, text: 'Phone 375 px' }]} onChange={setScreen} />
         <Pick label="Theme" value={dark ? 'dark' : 'light'} options={[{ id: 'light', text: 'Light' }, { id: 'dark', text: 'Dark' }]} onChange={(t) => setDark(t === 'dark')} />
-        <p className="text-xs text-muted">Energy, Cabin and Security use the batch 1–3 choices (or your picks, else the recommendation). The other sections are the Room page’s tiles as stand-ins until their batch. Tap the name to switch vehicle.</p>
+        <Button size="sm" variant="secondary" onPress={copy} className="gap-1.5">
+          <HugeiconsIcon icon={Copy01Icon} size={14} />
+          {copied ? 'Copied' : 'Copy selection'}
+        </Button>
       </div>
 
       <div className={cn('overflow-x-auto', dark && 'dark')}>
-        <div className="pro rounded-2xl bg-[var(--background)] p-5 text-foreground" data-page="mobility" style={phone ? { width: 375 } : { width: 1240 }}>
-          <div className={cn('grid gap-8', phone ? 'grid-cols-1' : 'grid-cols-[300px_minmax(0,1fr)]')}>
-            {rail}
-            <div className="flex min-w-0 flex-col gap-7">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex rounded-full bg-[color-mix(in_oklab,var(--foreground)_8%,transparent)] p-1 text-[14px]">
-                  <span className="rounded-full bg-[color-mix(in_oklab,var(--accent)_25%,transparent)] px-3 py-1 font-semibold text-[var(--accent)]">All</span>
-                  <span className="px-3 py-1">Now · {r.checks.filter((c) => c.tone !== 'good').length}</span>
-                </div>
-                <div className="flex items-center gap-3 text-[14px] opacity-80">
-                  {!phone ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <HugeiconsIcon icon={GridViewIcon} size={16} /> All vehicles
-                    </span>
-                  ) : null}
-                  <HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
-                  <HugeiconsIcon icon={ArrowRight01Icon} size={18} />
-                  <HugeiconsIcon icon={Notification03Icon} size={18} />
-                </div>
+        <div className="pro rounded-2xl bg-[var(--background)] text-foreground" data-page="mobility" style={phone ? { width: 375 } : { width: 1240 }}>
+          {phone ? (
+            // A phone screen: scrolls inside, so the sticky chips and the dock behave as on a phone.
+            <div className="h-[760px] overflow-y-auto px-5 pt-5">
+              <div className="flex flex-col gap-4">
+                {phoneHeader}
+                {chips(true)}
+                {topBar}
+                <div className="flex flex-col gap-7 pb-5">{content}</div>
               </div>
-              {sections.map((s) => (
-                <section key={s.id} aria-label={s.title} className="flex flex-col gap-3">
-                  <h3 className="flex items-baseline gap-2.5">
-                    <span className="text-[19px] font-semibold">{s.title}</span>
-                    <span className="text-[15px] opacity-60">{s.summary}</span>
-                    {s.note ? <span className="ml-auto rounded-full border border-dashed border-current px-2 py-0.5 text-[10px] opacity-40">Room tiles · {s.note}</span> : null}
-                  </h3>
-                  <div className={cn('grid auto-rows-[68px] gap-3 [grid-auto-flow:dense]', phone ? 'grid-cols-2' : 'grid-cols-4')}>{s.body}</div>
-                </section>
-              ))}
+              {dock}
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-8 p-5">
+              {rail}
+              <div className="flex min-w-0 flex-col gap-7">
+                {topBar}
+                {content}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { HADevice, HAEntityRegistryEntry, HAState, HAZone } from '@/types';
 import { buildMobilityHome, mobilityCalls } from '@/pro/lib/mobility/adapters';
 import type { HaContext } from '@/pro/lib/mobility/kit';
-import { fordUpdateStage } from '@/pro/lib/mobility/adapters/fordpass';
+import { fordIndicators, fordUpdateStage } from '@/pro/lib/mobility/adapters/fordpass';
 import { quarterHourSpeeds } from '@/pro/hooks/useMobilityHome';
 import { readiness } from '@/pro/lib/mobilityHome';
 
@@ -116,6 +116,19 @@ describe('FordPass adapter', () => {
     expect(mobilityCalls(sources, id, { type: 'temp', value: 22.5 })[0]).toMatchObject({ domain: 'number', service: 'set_value', data: { value: 22.5 } });
     expect(mobilityCalls(sources, id, { type: 'extra', id: 'seat-driver', on: true })[0]).toMatchObject({ data: { option: 'heated3' } });
     expect(mobilityCalls(sources, id, { type: 'honk' })).toEqual([]);
+  });
+
+  it('reads the warning lights that are on from the indicators sensor', () => {
+    expect(fordIndicators(null)).toEqual([]);
+    const st = { entity_id: 'sensor.car_indicators', state: '2', attributes: { friendly_name: 'Indicators', tirePressureLow: true, ADAPTIVE_CRUISE_CONTROL: { value: false }, washerFluidLowIndicator: { value: 'ON' }, oilLife: 'off' } } as never;
+    expect(fordIndicators(st)).toEqual(['Tire pressure low', 'Washer fluid low']);
+  });
+
+  it('keeps an extra this model reports nothing for, greyed', () => {
+    const ents = [...FORD, F('select.car_seat_rl', 'rccseatrearleft', 'unavailable')];
+    const extras = buildMobilityHome(ctx(ents, DEVICES, [HOME])).home.vehicles[0]?.climate?.extras;
+    expect(extras?.find((e) => e.id === 'seat-rear-left')).toEqual({ id: 'seat-rear-left', label: 'Rear left seat', on: false, available: false });
+    expect(extras?.find((e) => e.id === 'windscreen')?.available).toBeUndefined();
   });
 
   it('reads remote start as the climate, "Inactive" as off', () => {

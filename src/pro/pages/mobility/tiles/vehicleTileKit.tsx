@@ -5,7 +5,7 @@
  * as one family: 26 px radius, semibold name, state under it, round icon chips, colour for what is
  * on or needs a look.
  */
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import { cn } from '@/lib/utils';
 import type { TileSize } from '../../../areas/tileTypes';
@@ -130,4 +130,54 @@ export function securityWords(v: Vehicle): { word: string; detail: string; tone:
   if (s.open.length) return { word: s.open.length === 1 ? `${openLabel(s.open[0])} open` : `${s.open.length} open`, detail: s.locked ? 'Locked' : '', tone: 'watch' };
   if (s.locked) return { word: 'Locked', detail: s.alarm === 'armed' ? 'Alarm set · all closed' : 'All closed', tone: 'safe' };
   return { word: 'Unknown', detail: 'Not reporting its locks', tone: 'idle' };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Which parts a vehicle gets (owner, 2026-11-27): every part its kind has, greyed when this model
+// reports nothing for it, so cars of one kind share a layout and nothing silently disappears.
+// ---------------------------------------------------------------------------------------------
+
+export const NOT_ON_CAR = 'Not available on this car';
+const CAR_ONLY = new Set(['climate', 'temp', 'extras', 'doors', 'openings', 'tyres', 'allowance']);
+const PLUG_IN = new Set(['charging', 'limit', 'efficiency', 'sessions']);
+
+/** Whether a part belongs on this vehicle's page at all (not whether it has data: missing data shows greyed). */
+export function partApplies(id: string, v: Vehicle): boolean {
+  if (PLUG_IN.has(id)) return v.kind === 'car' && (v.powertrain === 'ev' || v.powertrain === 'phev');
+  if (CAR_ONLY.has(id)) return v.kind === 'car';
+  return true;
+}
+
+/** Whether the tile sits in dark mode (the studio draws both themes side by side, so ask the DOM). */
+export function useDark<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [dark, setDark] = useState(false);
+  // Every render: the studio flips themes around a mounted tile.
+  useLayoutEffect(() => setDark(!!ref.current?.closest('.dark')));
+  return [ref, dark] as const;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Condition (batch 5)
+// ---------------------------------------------------------------------------------------------
+
+export const OK = 'hsl(152 55% 42%)';
+export const WARN = 'hsl(36 95% 50%)';
+export const BAD = 'hsl(4 82% 54%)';
+
+/** The car's health readings with a verdict each (12 V, oil, battery health and temperature). */
+export function healthReadings(v: Vehicle): { id: string; name: string; value: string; note: string; hue: string; share: number | null }[] {
+  const c = v.condition;
+  const out: ReturnType<typeof healthReadings> = [];
+  if (c.battery12v !== null) {
+    // Volts on most makes; a few report %.
+    const volts = c.battery12v < 20;
+    const low = volts ? c.battery12v < 12.0 : c.battery12v < 40;
+    const bad = volts ? c.battery12v < 11.6 : c.battery12v < 20;
+    out.push({ id: '12v', name: '12 V battery', value: volts ? `${c.battery12v.toFixed(1)} V` : `${c.battery12v}%`, note: bad ? 'Very low, may not start' : low ? 'Low, drive or charge soon' : 'Good', hue: bad ? BAD : low ? WARN : OK, share: volts ? Math.max(0, Math.min(1, (c.battery12v - 11) / 2)) : c.battery12v / 100 });
+  }
+  if (c.oil !== null) out.push({ id: 'oil', name: 'Oil life', value: `${c.oil}%`, note: c.oil < 5 ? 'Change it now' : c.oil < 15 ? 'Change it soon' : 'Good', hue: c.oil < 5 ? BAD : c.oil < 15 ? WARN : OK, share: c.oil / 100 });
+  if (c.batteryHealth !== null) out.push({ id: 'health', name: 'Battery health', value: `${c.batteryHealth}%`, note: c.batteryHealth < 80 ? 'Worn, range is lower' : 'Good', hue: c.batteryHealth < 80 ? WARN : OK, share: c.batteryHealth / 100 });
+  if (c.batteryTemp !== null) out.push({ id: 'temp', name: 'Battery temperature', value: `${Math.round(c.batteryTemp)}°`, note: c.batteryTemp < 0 ? 'Cold, charges slower' : c.batteryTemp > 40 ? 'Hot' : 'Good', hue: c.batteryTemp > 40 ? WARN : c.batteryTemp < 0 ? VHUE.info : OK, share: Math.max(0, Math.min(1, (c.batteryTemp + 10) / 55)) });
+  return out;
 }

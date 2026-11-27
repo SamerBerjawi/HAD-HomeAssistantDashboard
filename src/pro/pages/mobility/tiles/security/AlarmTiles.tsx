@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { TileFrame, TileName, TileState } from '../../../../areas/tileKit';
 import { ALARM, SAFE } from '../../../../areas/tiles/security/securityParts';
 import { has, type Vehicle } from '../../../../lib/mobilityHome';
-import { IconChip, VHUE, type VehicleTileProps } from '../vehicleTileKit';
+import { IconChip, VHUE, type VehicleTileProps, NOT_ON_CAR } from '../vehicleTileKit';
 
 /** The alarm in words: Set, Off, Going off; bikes report stolen and crashed instead. */
 function alarmOf(v: Vehicle): { word: string; detail: string; hue: string; alert: boolean } | null {
@@ -34,7 +34,7 @@ function Unavailable() {
       <div className="flex h-full flex-col p-3.5">
         <IconChip icon={SecurityIcon} on={false} />
         <TileName className="mt-auto">Alarm</TileName>
-        <TileState>Not offered</TileState>
+        <TileState>{NOT_ON_CAR}</TileState>
       </div>
     </TileFrame>
   );

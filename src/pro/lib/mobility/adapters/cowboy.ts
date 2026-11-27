@@ -97,7 +97,7 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
     },
     actions: []
   };
-  return { vehicle, calls: () => [] };
+  return { vehicle, odometerEntity: odometer?.entity_id ?? null, calls: () => [] };
 }
 
 export const cowboy: VehicleAdapter = { id: 'cowboy', platform: 'cowboy', build };

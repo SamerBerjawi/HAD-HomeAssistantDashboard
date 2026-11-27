@@ -15,7 +15,7 @@ import { GuardedLockButton } from '../../../../areas/tiles/security/LockTiles';
 import { ALARM, SAFE, WATCH } from '../../../../areas/tiles/security/securityParts';
 import { has, type Vehicle } from '../../../../lib/mobilityHome';
 import { VehicleSilhouette } from '../../home/parts';
-import { IconChip, openLabel, securityWords, VHUE, wash, type VehicleTileProps } from '../vehicleTileKit';
+import { IconChip, openLabel, securityWords, VHUE, wash, type VehicleTileProps, NOT_ON_CAR } from '../vehicleTileKit';
 
 const TONE = { safe: SAFE, watch: WATCH, alarm: ALARM, idle: VHUE.idle } as const;
 
@@ -25,7 +25,7 @@ function Unavailable({ v }: { v: Vehicle }) {
       <div className="flex h-full flex-col p-3.5">
         <IconChip icon={SquareLock02Icon} on={false} />
         <TileName className="mt-auto">Doors</TileName>
-        <TileState>{v.kind === 'bike' ? 'No lock on this bike' : 'Not reporting its locks'}</TileState>
+        <TileState>{NOT_ON_CAR}</TileState>
       </div>
     </TileFrame>
   );

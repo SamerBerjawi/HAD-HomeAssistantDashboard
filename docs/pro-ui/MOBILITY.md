@@ -164,7 +164,7 @@ FordPass and Cowboy entities (the preview runs in demo mode); Ford's state strin
 alarm, deep sleep) are matched loosely and may need tuning then. Tests: `tests/mobilityAdapters.test.ts`.
 
 **Built: the live page (2026-11-27).** `ProMobility.tsx` now renders the picks on live data:
-`pages/mobility/home/` holds the page (`MobilityPage.tsx`, round 1's B with every round's pick as
+`pages/mobility/home/` held the page until 2026-11-27, when `page/VehiclePage.tsx` replaced it on the live page (docs/pro-ui/VEHICLE_TILES.md); it stays for the old studio's Design B (`MobilityPage.tsx`, round 1's B with every round's pick as
 its default) and the chosen parts (`parts`, `heroConcepts`, `chargeClimateConcepts`,
 `whereTripsConcepts`, `conditionConcepts`); the studio's `designs/` files re-export them. The sample
 vehicles moved to `lib/mobility/sampleVehicles.ts` and the sample controls to `applySampleAction` in

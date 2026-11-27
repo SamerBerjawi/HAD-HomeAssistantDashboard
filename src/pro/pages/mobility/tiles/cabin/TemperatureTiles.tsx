@@ -13,7 +13,7 @@ import { TileChip, TileFrame, TileName, TileState } from '../../../../areas/tile
 import { GlassButton } from '../../../../areas/tiles/ambient/ambientKit';
 import { arcPath, RING_START, RING_SWEEP } from '../../../../areas/gestures';
 import type { Vehicle } from '../../../../lib/mobilityHome';
-import { Big, climateWords, deg, IconChip, stepTemp, TEMP_MAX, TEMP_MIN, VHUE, type VehicleTileProps } from '../vehicleTileKit';
+import { Big, climateWords, deg, IconChip, stepTemp, TEMP_MAX, TEMP_MIN, VHUE, type VehicleTileProps, NOT_ON_CAR } from '../vehicleTileKit';
 
 /** The hue of a set point: cool below 20°, warm above 22°, calm between. */
 const tempHue = (t: number) => (t < 20 ? VHUE.cool : t > 22 ? VHUE.heat : 'hsl(36 85% 56%)');
@@ -24,7 +24,7 @@ function Unavailable({ v }: { v: Vehicle }) {
       <div className="flex h-full flex-col p-3.5">
         <IconChip icon={TemperatureIcon} on={false} />
         <TileName className="mt-auto">Temperature</TileName>
-        <TileState>{v.climate ? 'Set in the car' : 'Not offered'}</TileState>
+        <TileState>{NOT_ON_CAR}</TileState>
       </div>
     </TileFrame>
   );

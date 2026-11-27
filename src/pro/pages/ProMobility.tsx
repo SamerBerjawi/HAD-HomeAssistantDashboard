@@ -9,15 +9,13 @@ import { haWebSocketService } from '@/services/haWebSocket';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
 import { useMobilityHome } from '../hooks/useMobilityHome';
 import { useBoxSize } from '../widgets/shared/useBoxSize';
-import { useInDark } from '../widgets/shared/useInDark';
-import MobilityPage from './mobility/home/MobilityPage';
+import VehiclePage from './mobility/page/VehiclePage';
 import { VehiclePicturesContext } from './mobility/home/VehiclePicture';
 import { MobilityLoading, MobilityNotSetUp, MobilityUnreachable } from './mobility/MobilityStates';
 
 export default function ProMobility() {
   const { home, act, loading, notSetUp, offline, lastSeen, pictures } = useMobilityHome();
   const box = useBoxSize<HTMLDivElement>({ width: 375, height: 0 });
-  const { ref: darkRef, isDark } = useInDark<HTMLDivElement>();
   const width = box.width;
   const haUrl = useAutoLayoutStore((s) => s.serverUrl);
 
@@ -29,12 +27,12 @@ export default function ProMobility() {
 
   const page = (
     <VehiclePicturesContext.Provider value={pictures}>
-      <MobilityPage home={home} width={width} dark={isDark} act={act} />
+      <VehiclePage home={home} width={width} act={act} />
     </VehiclePicturesContext.Provider>
   );
   return (
     <div ref={box.ref} className="min-w-0">
-      <div ref={darkRef}>
+      <div>
         {loading ? (
           <MobilityLoading width={width} />
         ) : offline ? (

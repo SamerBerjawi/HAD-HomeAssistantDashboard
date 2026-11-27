@@ -57,6 +57,7 @@ function build(d: Device, ctx: HaContext): VehicleSource | null {
   };
   return {
     vehicle,
+    odometerEntity: odometer?.entity_id ?? null,
     calls: (a) => (a.type === 'lock' || a.type === 'unlock' ? call('lock', a.type, lockSt?.entity_id, {}, { state: a.type === 'lock' ? 'locked' : 'unlocked' }) : [])
   };
 }
