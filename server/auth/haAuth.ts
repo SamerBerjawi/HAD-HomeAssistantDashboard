@@ -21,7 +21,19 @@ interface HaWsAdminMessage {
   type?: unknown;
   id?: unknown;
   success?: unknown;
-  result?: { is_admin?: unknown } | null;
+  result?: {
+    id?: unknown;
+    name?: unknown;
+    username?: unknown;
+    is_admin?: unknown;
+    is_owner?: unknown;
+  } | null;
+}
+
+export interface HaUserInfo {
+  id: string;
+  name: string;
+  isAdmin: boolean;
 }
 
 export interface HaAuthOptions {
@@ -39,6 +51,13 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
   const TOKEN_CACHE_MAX_ENTRIES = 500;
   // SEC-010: a revoked HA token must stop working here quickly, so cache successes briefly
   const VALID_TOKEN_CACHE_MS = 60 * 1000;
+  // A token Home Assistant rejected (401/403) never becomes valid again, and every check of it
+  // makes HA log "Login attempt failed" for this server's IP. Remember the rejection for longer,
+  // so a client still holding an expired token can't cause one log entry every 30 seconds.
+  const REJECTED_TOKEN_CACHE_MS = 10 * 60 * 1000;
+  // Any other answer (a proxy's 502, HA starting up) may change soon.
+  const UNCERTAIN_TOKEN_CACHE_MS = 30 * 1000;
+  const invalidCacheMs = (status: number) => (status === 401 || status === 403 ? REJECTED_TOKEN_CACHE_MS : UNCERTAIN_TOKEN_CACHE_MS);
   // Entries are keyed by token, so without a bound every refreshed OAuth token stays forever
   setInterval(() => {
     const now = Date.now();
@@ -178,7 +197,7 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
 
       tokenValidationCache.set(cacheKey, {
         valid: isValid,
-        expiresAt: Date.now() + (isValid ? VALID_TOKEN_CACHE_MS : 30 * 1000)
+        expiresAt: Date.now() + (isValid ? VALID_TOKEN_CACHE_MS : invalidCacheMs(haRes.status))
       });
 
       if (!isValid) {
@@ -208,7 +227,7 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
           const isValid = retryRes.status === 200;
           tokenValidationCache.set(cacheKey, {
             valid: isValid,
-            expiresAt: Date.now() + (isValid ? VALID_TOKEN_CACHE_MS : 30 * 1000)
+            expiresAt: Date.now() + (isValid ? VALID_TOKEN_CACHE_MS : invalidCacheMs(retryRes.status))
           });
           return isValid;
         } catch {
@@ -310,15 +329,15 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
     next();
   }
 
-  // SEC-005: camera sources, asset uploads and statistics sync are admin-only. Any other valid
-  // HA user may still read everything and save layout/preferences.
-  const adminCache = new Map<string, { admin: boolean; expiresAt: number }>();
+  // SEC-005: camera sources, asset uploads, statistics sync, and shared layout settings are admin-only.
+  // Non-admin HA users may still read everything and save their own userLayouts / personal preferences.
+  const userCache = new Map<string, { user: HaUserInfo | null; expiresAt: number }>();
 
-  function queryHaIsAdmin(haBase: string, token: string): Promise<boolean | null> {
+  function queryHaCurrentUser(haBase: string, token: string): Promise<HaUserInfo | null> {
     return new Promise((resolve) => {
       let settled = false;
       let ws: WebSocket | null = null;
-      const finish = (value: boolean | null) => {
+      const finish = (value: HaUserInfo | null) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -341,29 +360,60 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
         } else if (msg.type === 'auth_ok') {
           ws!.send(JSON.stringify({ id: 1, type: 'auth/current_user' }));
         } else if (msg.type === 'auth_invalid') {
-          finish(false);
+          finish(null);
         } else if (msg.id === 1 && msg.type === 'result') {
-          finish(msg.success ? Boolean(msg.result?.is_admin) : null);
+          if (!msg.success || !msg.result) {
+            finish(null);
+            return;
+          }
+          const r = msg.result;
+          const id =
+            typeof r.id === 'string' && r.id
+              ? r.id
+              : typeof r.username === 'string' && r.username
+              ? r.username
+              : '';
+          const name =
+            typeof r.name === 'string' && r.name
+              ? r.name
+              : typeof r.username === 'string' && r.username
+              ? r.username
+              : 'Home Assistant User';
+          const isAdmin = Boolean(r.is_admin || r.is_owner);
+          finish({ id, name, isAdmin });
         }
       };
     });
   }
 
-  async function isHaAdmin(token: string): Promise<boolean> {
+  async function getHaUser(token: string): Promise<HaUserInfo | null> {
+    if (!token) return null;
     // Mock tokens are admins unless they say otherwise, so tests can exercise both roles
-    if (isMockToken(token)) return !/^(test|mock)_nonadmin/.test(token);
-    const base = getTrustedHaBase();
-    if (!base) return false;
-    const key = `${base}|${token}`;
-    const cached = adminCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return cached.admin;
-    const result = await queryHaIsAdmin(base, token);
-    // Unknown (HA unreachable) is denied but not cached for long
-    adminCache.set(key, { admin: result === true, expiresAt: Date.now() + (result === null ? 10_000 : 60_000) });
-    if (adminCache.size > TOKEN_CACHE_MAX_ENTRIES) {
-      adminCache.delete(adminCache.keys().next().value as string);
+    if (isMockToken(token)) {
+      const isNonAdmin = /^(test|mock)_nonadmin/.test(token);
+      return {
+        id: token,
+        name: isNonAdmin ? 'Mock User' : 'Mock Admin',
+        isAdmin: !isNonAdmin
+      };
     }
-    return result === true;
+    const base = getTrustedHaBase();
+    if (!base) return null;
+    const key = `${base}|${token}`;
+    const cached = userCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.user;
+    const user = await queryHaCurrentUser(base, token);
+    // Unknown (HA unreachable) is denied/null and not cached for long
+    userCache.set(key, { user, expiresAt: Date.now() + (user === null ? 10_000 : 60_000) });
+    if (userCache.size > TOKEN_CACHE_MAX_ENTRIES) {
+      userCache.delete(userCache.keys().next().value as string);
+    }
+    return user;
+  }
+
+  async function isHaAdmin(token: string): Promise<boolean> {
+    const user = await getHaUser(token);
+    return user?.isAdmin === true;
   }
 
   async function requireHAAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -380,7 +430,8 @@ export function createHaAuth({ configDir, haDispatcher }: HaAuthOptions) {
     resolveTargetHaBase,
     requireHAAuth,
     requireHAAdmin,
-    isHaAdmin
+    isHaAdmin,
+    getHaUser
   };
 }
 

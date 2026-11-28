@@ -7,6 +7,31 @@ export type TileLayoutMode = 'compact' | 'full' | 'hybrid';
 
 export type LayoutBreakpoint = 'mobile' | 'laptop' | 'desktop';
 
+export type LayoutMode = 'auto' | 'custom';
+
+export type AreaPrimaryMetric = 'auto' | 'temperature' | 'humidity' | 'power' | 'air_quality' | 'none';
+
+export type EntityDisplayRole = 'auto' | 'light' | 'switch' | 'plug' | 'helper';
+
+export interface LayoutSharingConfig {
+  shareLayoutsWithUsers: boolean;
+}
+
+export interface UserLayoutOverlay {
+  useSharedLayout?: boolean;
+  overviewMode?: LayoutMode;
+  roomsMode?: LayoutMode;
+  roomModes?: Record<string, LayoutMode>;
+  proOverviewLayout?: Record<string, unknown>;
+  proRooms?: Record<string, unknown>;
+  proAreaLayouts?: Record<string, unknown>;
+  favoriteAreas?: string[];
+  defaultOverviewTab?: string;
+  roomDefaultViews?: Record<string, 'all' | 'now'>;
+  classicOverview?: OverviewConfig;
+  classicResponsiveLayoutOverrides?: ResponsiveLayoutOverrides;
+}
+
 export interface BreakpointLayoutOverride {
   colSpan?: 1 | 2 | 3 | 4 | 6 | 8 | 12;
   rowSpan?: 1 | 2 | 3 | 4;
@@ -123,6 +148,11 @@ export interface UserDashboardConfig {
       color?: string | null;
       backgroundImageUrl?: string | null;
       picture?: string | null;
+      primaryMetric?: AreaPrimaryMetric | null;
+      primaryTempEntityId?: string | null;
+      primaryHumidityEntityId?: string | null;
+      quickActions?: string[] | null;
+      extraEntityIds?: string[] | null;
       order?: number;
     }>;
   };
@@ -130,7 +160,18 @@ export interface UserDashboardConfig {
     hiddenEntityIds?: string[];
     nameOverrides?: Record<string, string>;
     iconOverrides?: Record<string, string>;
-    customizations?: Record<string, { customName?: string; name?: string; customIcon?: string; icon?: string; hidden?: boolean }>;
+    customizations?: Record<
+      string,
+      {
+        customName?: string;
+        name?: string;
+        customIcon?: string;
+        icon?: string;
+        hidden?: boolean;
+        displayRole?: EntityDisplayRole | null;
+        confirmAction?: boolean | null;
+      }
+    >;
   };
   cameras: {
     defaultStreamType: 'auto' | 'live' | 'snapshot';
@@ -164,7 +205,17 @@ export interface UserDashboardConfig {
     selectedWeatherEntityId?: string | null;
     selectedAlarmEntityId?: string | null;
     dismissedNotificationIds?: string[];
+    overviewMode?: LayoutMode;
+    roomsMode?: LayoutMode;
+    roomModes?: Record<string, LayoutMode>;
+    proOverviewLayout?: Record<string, unknown>;
+    proRooms?: Record<string, unknown>;
+    proAreaLayouts?: Record<string, unknown>;
+    defaultOverviewTab?: string;
+    roomDefaultViews?: Record<string, 'all' | 'now'>;
   };
+  layoutSharing?: LayoutSharingConfig;
+  userLayouts?: Record<string, UserLayoutOverlay>;
   profile?: {
     name?: string;
     email?: string;
@@ -240,6 +291,7 @@ export interface ConfigContextType {
   lastSuccessfulSync: string | null;
   isDragActive?: boolean;
   setDragActive?: (active: boolean) => void;
+  currentUser?: { id: string; name: string; isAdmin: boolean } | null;
   updateConfig: (
     partialOrUpdater:
       | DeepPartial<UserDashboardConfig>
@@ -249,6 +301,7 @@ export interface ConfigContextType {
   flushPendingSave: () => Promise<UserDashboardConfig>;
   uploadVehicleAsset: (fileOrDataUrl: File | string, key: string) => Promise<string>;
   resetConfig: () => Promise<UserDashboardConfig>;
+  refreshConfig?: () => Promise<void>;
   exportConfigJson: () => string;
   importConfigJson: (jsonStr: string) => Promise<boolean>;
 }
@@ -330,6 +383,10 @@ export const DEFAULT_USER_CONFIG: UserDashboardConfig = {
     selectedAlarmEntityId: null,
     dismissedNotificationIds: []
   },
+  layoutSharing: {
+    shareLayoutsWithUsers: true
+  },
+  userLayouts: {},
   profile: {
     name: 'Samer Berjawi',
     email: 'admin@homz.ai',

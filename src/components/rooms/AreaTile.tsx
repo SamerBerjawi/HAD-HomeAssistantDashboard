@@ -31,6 +31,7 @@ import { AreaData } from '../../types/rooms';
 import DynamicPhosphorIcon from '../ui/DynamicPhosphorIcon';
 import { getClimateModeTheme } from '../../utils/climateTheme';
 import { useEntityPopup } from '../../contexts/EntityPopupContext';
+import { useEditMode } from '../../contexts/EditModeContext';
 import { useLongPress } from '../../hooks/useLongPress';
 
 interface AreaTileProps {
@@ -59,6 +60,7 @@ function AreaTileComponent({
   onToggleLocks
 }: AreaTileProps) {
   const { openEntityDetails } = useEntityPopup();
+  const { isEditMode } = useEditMode();
 
   const {
     sensors,
@@ -112,14 +114,16 @@ function AreaTileComponent({
   const primaryHazardId =
     entities?.binarySensors?.find?.((s) => s.entity_id.includes('smoke') || s.entity_id.includes('leak') || s.attributes?.device_class === 'smoke' || s.attributes?.device_class === 'moisture')?.entity_id;
 
-  // Long press / right-click tile handler
+  // Long press / right-click tile handler (disabled in Edit Mode so taps/drags never open a room)
   const tileLongPressHandlers = useLongPress({
     threshold: 500,
     onLongPress: () => {
+      if (isEditMode) return;
       const targetId = primaryClimateId || primaryLightId || primaryTempId || primarySwitchId;
       if (targetId) openEntityDetails(targetId);
     },
     onClick: () => {
+      if (isEditMode) return;
       onSelectArea(area.areaId);
     }
   });

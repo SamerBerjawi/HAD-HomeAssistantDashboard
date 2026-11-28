@@ -16,7 +16,7 @@ import {
 import { AuthState } from '../types/auth';
 import type { SyncStatusEventDetail } from './configSyncRules';
 import { haWebSocketService } from './haWebSocket';
-import { getStoredHAAuth, getActiveHAToken, refreshHAOAuthToken } from './haAuth';
+import { getStoredHAAuth, getUsableHAToken, refreshHAOAuthToken } from './haAuth';
 import { getStoredAuthConfig } from './authStorage';
 
 const STORAGE_KEY_CONFIG = 'had_dashboard_config';
@@ -50,7 +50,9 @@ export function getAuthHeaders(): Record<string, string> {
     'Accept': 'application/json'
   };
   if (typeof window !== 'undefined') {
-    const token = getActiveHAToken();
+    // An expired OAuth token is left out: the server would check it with Home Assistant, which
+    // logs it as a failed login. Callers that can wait use getAuthHeadersAsync (refreshes first).
+    const token = getUsableHAToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -149,6 +151,11 @@ export class RemoteStorageDriver implements IConfigStorageDriver {
   private lastKnownServerVersion: number | null = null;
   private lastSavedSignature: string | null = null;
   private isReplaying = false;
+  private lastLoadedCurrentUser: { id: string; name: string; isAdmin: boolean } | null = null;
+
+  public getCurrentUser(): { id: string; name: string; isAdmin: boolean } | null {
+    return this.lastLoadedCurrentUser;
+  }
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -181,6 +188,13 @@ export class RemoteStorageDriver implements IConfigStorageDriver {
             if (response.ok) {
               const data = await response.json();
               if (data && data.success && data.config) {
+                if (data.currentUser && typeof data.currentUser === 'object' && typeof data.currentUser.id === 'string') {
+                  this.lastLoadedCurrentUser = {
+                    id: data.currentUser.id,
+                    name: typeof data.currentUser.name === 'string' ? data.currentUser.name : 'Home Assistant User',
+                    isAdmin: Boolean(data.currentUser.isAdmin)
+                  };
+                }
                 return {
                   config: data.config,
                   serverVersion: data.serverVersion !== undefined ? Number(data.serverVersion) : undefined
@@ -464,7 +478,7 @@ export class RemoteStorageDriver implements IConfigStorageDriver {
               try {
                 const fetchLatest = await fetch('/api/config', {
                   method: 'GET',
-                  headers: getAuthHeaders(),
+                  headers: await getAuthHeadersAsync(),
                   signal: AbortSignal.timeout(4000)
                 });
                 if (fetchLatest.ok) {
@@ -639,7 +653,7 @@ export class RemoteStorageDriver implements IConfigStorageDriver {
       try {
         const response = await fetch('/api/assets', {
           method: 'POST',
-          headers: getAuthHeaders(),
+          headers: await getAuthHeadersAsync(),
           body: JSON.stringify({
             dataUrl: uploadDataUrl,
             key,

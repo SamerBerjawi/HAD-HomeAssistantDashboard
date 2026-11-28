@@ -178,12 +178,13 @@ async function startServer() {
 
   const configStore = createConfigStore({ configDir });
 
-  const { envHaUrl, getTrustedHaBase, resolveTargetHaBase, requireHAAuth, requireHAAdmin, isHaAdmin } =
+  const { envHaUrl, getTrustedHaBase, resolveTargetHaBase, requireHAAuth, requireHAAdmin, isHaAdmin, getHaUser } =
     createHaAuth({ configDir, haDispatcher });
 
   const { broadcastConfigUpdate, closeSseClients } = registerConfigRoutes(app, {
     requireHAAuth,
     isHaAdmin,
+    getHaUser,
     configStore,
     // prewarmCameraStreams is created below by registerCameraRoutes (which needs broadcastConfigUpdate)
     onCameraSourcesChanged: () => void prewarmCameraStreams()

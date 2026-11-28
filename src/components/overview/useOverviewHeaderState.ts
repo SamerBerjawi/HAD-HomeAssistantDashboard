@@ -9,6 +9,7 @@ import { MouseSensor, TouchSensor, useSensor, useSensors, DragStartEvent, DragEn
 import { arrayMove } from '@dnd-kit/sortable';
 import { useUserConfig } from '../../contexts/ConfigContext';
 import { useEditMode } from '../../contexts/EditModeContext';
+import { useClassicLayoutScope } from '../../hooks/useClassicLayoutScope';
 import { OverviewTileVisibilityMode } from '../../types/userConfig';
 import { useAutoLayoutStore } from '../../store/useAutoLayoutStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -77,7 +78,9 @@ export function useOverviewHeaderState(darkMode: boolean) {
     areasMap: s.areasMap
   })));
 
-  const { config, updateConfig, flushPendingSave, setDragActive } = useUserConfig();
+  const { config, flushPendingSave, setDragActive } = useUserConfig();
+  const layoutScope = useClassicLayoutScope();
+  const { effectiveClassicOverview, saveClassicOverview } = layoutScope;
 
   // Camera preview and stream modal state
   const [selectedCameraForModal, setSelectedCameraForModal] = useState<ResolvedEntity | null>(null);
@@ -450,7 +453,7 @@ export function useOverviewHeaderState(darkMode: boolean) {
 
   const { isEditMode, setEditMode } = useEditMode();
 
-  const overviewConfig = config.overview || {};
+  const overviewConfig = effectiveClassicOverview || {};
   const currentTileOrder = useMemo(
     () => buildCurrentTileOrder(overviewConfig.tileOrder, surveillanceCameras),
     [overviewConfig.tileOrder, surveillanceCameras]
@@ -459,7 +462,8 @@ export function useOverviewHeaderState(darkMode: boolean) {
   // Ensure default camera tile size is 1x
   useEffect(() => {
     if (overviewConfig.tileSizes?.cameras === '2x') {
-      updateConfig((prev) => withCamerasTileSize1x(prev));
+      const next = withCamerasTileSize1x({ ...config, overview: effectiveClassicOverview }).overview;
+      if (next) void saveClassicOverview(next);
     }
   }, []);
 
@@ -558,9 +562,15 @@ export function useOverviewHeaderState(darkMode: boolean) {
   const displayTilesRef = useRef(displayTiles);
   displayTilesRef.current = displayTiles;
 
+  const scopedConfigForOverview = useMemo(
+    () => ({ ...config, overview: effectiveClassicOverview }),
+    [config, effectiveClassicOverview]
+  );
+
   const handleReorder = useCallback((newOrder: string[]) => {
-    updateConfig((prev) => applyTileReorder(prev, currentTileOrderRef.current, newOrder));
-  }, [updateConfig]);
+    const next = applyTileReorder(scopedConfigForOverview, currentTileOrderRef.current, newOrder).overview;
+    if (next) void saveClassicOverview(next);
+  }, [scopedConfigForOverview, saveClassicOverview]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveId(null);
@@ -590,51 +600,61 @@ export function useOverviewHeaderState(darkMode: boolean) {
 
   const handleToggleSize = useCallback((tileId: string) => {
     const nextSize = getNextTileSize(tileSizes, tileId);
-    updateConfig((prev) => withTileSize(prev, tileId, nextSize));
-  }, [tileSizes, updateConfig]);
+    const next = withTileSize(scopedConfigForOverview, tileId, nextSize).overview;
+    if (next) void saveClassicOverview(next);
+  }, [tileSizes, scopedConfigForOverview, saveClassicOverview]);
 
   const handleToggleHide = useCallback((tileId: string) => {
     const nextSet = toggleInSet(hiddenTilesSet, tileId);
-    updateConfig((prev) => withHiddenTiles(prev, Array.from(nextSet)));
-  }, [hiddenTilesSet, updateConfig]);
+    const next = withHiddenTiles(scopedConfigForOverview, Array.from(nextSet)).overview;
+    if (next) void saveClassicOverview(next);
+  }, [hiddenTilesSet, scopedConfigForOverview, saveClassicOverview]);
 
   const handleAddWidget = useCallback((widgetId: string) => {
     const { nextSet, nextOrder } = computeAddWidget(hiddenTilesSet, currentTileOrder, widgetId);
-    updateConfig((prev) => withTileOrderAndHidden(prev, nextOrder, nextSet));
-  }, [hiddenTilesSet, currentTileOrder, updateConfig]);
+    const next = withTileOrderAndHidden(scopedConfigForOverview, nextOrder, nextSet).overview;
+    if (next) void saveClassicOverview(next);
+  }, [hiddenTilesSet, currentTileOrder, scopedConfigForOverview, saveClassicOverview]);
 
   const handleRemoveWidget = useCallback((widgetId: string) => {
     const nextSet = new Set(hiddenTilesSet);
     nextSet.add(widgetId);
-    updateConfig((prev) => withHiddenTiles(prev, Array.from(nextSet)));
-  }, [hiddenTilesSet, updateConfig]);
+    const next = withHiddenTiles(scopedConfigForOverview, Array.from(nextSet)).overview;
+    if (next) void saveClassicOverview(next);
+  }, [hiddenTilesSet, scopedConfigForOverview, saveClassicOverview]);
 
   const handleAddAllWidgets = useCallback(() => {
-    updateConfig((prev) => withHiddenTiles(prev, []));
-  }, [updateConfig]);
+    const next = withHiddenTiles(scopedConfigForOverview, []).overview;
+    if (next) void saveClassicOverview(next);
+  }, [scopedConfigForOverview, saveClassicOverview]);
 
   const handleUnhideAll = useCallback(() => {
-    updateConfig((prev) => withHiddenTiles(prev, []));
-  }, [updateConfig]);
+    const next = withHiddenTiles(scopedConfigForOverview, []).overview;
+    if (next) void saveClassicOverview(next);
+  }, [scopedConfigForOverview, saveClassicOverview]);
 
   const handleToggleBadges = useCallback(() => {
-    updateConfig((prev) => withHideBadgesToggled(prev));
-  }, [updateConfig]);
+    const next = withHideBadgesToggled(scopedConfigForOverview).overview;
+    if (next) void saveClassicOverview(next);
+  }, [scopedConfigForOverview, saveClassicOverview]);
 
   const handleToggleHiddenFromAll = useCallback((tileId: string) => {
     const nextSet = toggleInSet(hiddenFromAllSet, tileId);
-    updateConfig((prev) => withHiddenFromAllTiles(prev, Array.from(nextSet)));
-  }, [hiddenFromAllSet, updateConfig]);
+    const next = withHiddenFromAllTiles(scopedConfigForOverview, Array.from(nextSet)).overview;
+    if (next) void saveClassicOverview(next);
+  }, [hiddenFromAllSet, scopedConfigForOverview, saveClassicOverview]);
 
   const handleSetTileMode = useCallback((tileId: string, mode: OverviewTileVisibilityMode) => {
     const { nextOrder, nextHiddenTiles, nextHiddenFromAll } =
       computeTileVisibilityMode(hiddenTilesSet, hiddenFromAllSet, currentTileOrder, tileId, mode);
-    updateConfig((prev) => withTileVisibility(prev, nextOrder, nextHiddenTiles, nextHiddenFromAll));
-  }, [hiddenTilesSet, hiddenFromAllSet, currentTileOrder, updateConfig]);
+    const next = withTileVisibility(scopedConfigForOverview, nextOrder, nextHiddenTiles, nextHiddenFromAll).overview;
+    if (next) void saveClassicOverview(next);
+  }, [hiddenTilesSet, hiddenFromAllSet, currentTileOrder, scopedConfigForOverview, saveClassicOverview]);
 
   const handleResetLayout = useCallback(() => {
-    updateConfig((prev) => withResetLayout(prev));
-  }, [updateConfig]);
+    const next = withResetLayout(scopedConfigForOverview).overview;
+    if (next) void saveClassicOverview(next, true);
+  }, [scopedConfigForOverview, saveClassicOverview]);
 
   const getTileClickHandler = useCallback((tileId: string) => {
     switch (tileId) {
@@ -715,7 +735,7 @@ export function useOverviewHeaderState(darkMode: boolean) {
     handleToggleSwitchBatch, handleToggleVacuum, handleTouchEnd, handleTouchStart, handleUnhideAll,
     hasAnyActiveBadge, hiddenFromAllSet, hiddenTilesSet, hideBadges, homeUsers, hourlyForecast, humidity,
     isAlarmArmed, isArmAwayModalOpen, isCameraModalOpen, isEditMode, isNight, isPlayingMedia, isVacuumCharging,
-    isVacuumCleaning, isWidgetDrawerOpen, justSwipedRef, leakSensors, lightEntities, mediaEntities,
+    isVacuumCleaning, isWidgetDrawerOpen, justSwipedRef, layoutScope, leakSensors, lightEntities, mediaEntities,
     mediaPalette, motionSensors, mouseSensor, onLights, onSwitches, openDoors, openDoorsDrawer,
     openSensorsDrawer, openUsersDrawer, openWindows, openWindowsDrawer, openedDrawers, openingsTab,
     otherContactSensors, overviewConfig, overviewTabs, playingMediaEntities, playingSongTitle, pointerStartXRef,
@@ -725,7 +745,7 @@ export function useOverviewHeaderState(darkMode: boolean) {
     setIsCameraModalOpen, setIsWidgetDrawerOpen, setOpenedDrawers, setOpeningsTab, setSelectedCameraForModal,
     setSelectedUser, setSensorsTab, singlePlayingMedia, smokeSensors, states, sunState, surveillanceCameras,
     switchEntities, tempUnit, tileBaseClass, tileSizes, todayForecast, touchSensor, touchStartXRef,
-    touchStartYRef, updateConfig, updateEntityState, userEntities, vacuumBattery, vacuumEntities,
+    touchStartYRef, saveClassicOverview, updateEntityState, userEntities, vacuumBattery, vacuumEntities,
     weatherCondInfo, weatherCondition, weatherEntities, weatherHigh, weatherLow, windowSensors
   };
 }

@@ -48,10 +48,12 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [driverName, setDriverName] = useState<string>('Isolated LocalStorage');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
+  const [serverUser, setServerUser] = useState<{ id: string; name: string; isAdmin: boolean } | null>(null);
 
   const activeDriverRef = useRef<IConfigStorageDriver>(new LocalStorageDriver());
   const pendingSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestConfigRef = useRef<UserDashboardConfig>(DEFAULT_USER_CONFIG);
+  const refreshConfigFnRef = useRef<(() => Promise<void>) | null>(null);
 
   // Active Drag Session Guard: Prevents incoming SSE or cross-tab updates from interrupting in-progress drag
   const [isDragActive, setIsDragActiveState] = useState<boolean>(false);
@@ -94,6 +96,10 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setSyncStatus((cur) => reduceSyncStatus(cur, { type: 'load_started' }));
       try {
         const loaded = await driver.loadConfig();
+        if (isMounted && 'getCurrentUser' in driver && typeof (driver as { getCurrentUser?: () => { id: string; name: string; isAdmin: boolean } | null }).getCurrentUser === 'function') {
+          const driverUser = (driver as { getCurrentUser: () => { id: string; name: string; isAdmin: boolean } | null }).getCurrentUser();
+          if (driverUser?.id) setServerUser(driverUser);
+        }
         if (isMounted && loaded) {
           if (decideRemoteApply(isDragActiveRef.current) === 'defer') {
             // Guard: Drag session in progress! Defer applying remote config
@@ -134,6 +140,7 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     // Initial load
+    refreshConfigFnRef.current = () => loadData(true);
     loadData();
 
     // 1. Re-sync when WebSocket connection status transitions to 'connected'
@@ -203,10 +210,13 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (authState.isAuthenticated && !authState.isDemo) {
       configSyncService.start();
       unsubscribeSync = configSyncService.subscribe({
-        onConfigChanged: () => {
-          if (isMounted) {
-            loadData(true);
+        onConfigChanged: (data) => {
+          if (!isMounted) return;
+          const payload = data && typeof data === 'object' ? (data as { scope?: string; userId?: string }) : null;
+          if (payload?.scope === 'user' && payload.userId && authState.user?.id && payload.userId !== authState.user.id) {
+            return;
           }
+          loadData(true);
         },
         onReconcileNeeded: () => {
           if (isMounted) {
@@ -476,6 +486,25 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const isSyncingRemote = driverType === 'remote_ha' || driverType === 'remote_nas';
 
+  const currentUser = useMemo(() => {
+    if (!authState.isAuthenticated || authState.isDemo) return null;
+    if (serverUser?.id) return serverUser;
+    if (authState.user?.id) {
+      return {
+        id: authState.user.id,
+        name: authState.user.name,
+        isAdmin: Boolean(authState.user.isOwner)
+      };
+    }
+    return null;
+  }, [authState.isAuthenticated, authState.isDemo, authState.user, serverUser]);
+
+  const refreshConfig = useCallback(async () => {
+    if (refreshConfigFnRef.current) {
+      await refreshConfigFnRef.current();
+    }
+  }, []);
+
   // Memoized so the ~30 consumers only re-render when config or sync state changes
   const contextValue = useMemo<ConfigContextType>(() => ({
     config,
@@ -489,13 +518,15 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     lastSuccessfulSync,
     isDragActive,
     setDragActive,
+    currentUser,
     updateConfig,
     flushPendingSave,
     uploadVehicleAsset,
     resetConfig,
+    refreshConfig,
     exportConfigJson,
     importConfigJson
-  }), [config, isLoading, isSaving, lastSaved, driverType, driverName, isSyncingRemote, syncStatus, lastSuccessfulSync, isDragActive, setDragActive, updateConfig, flushPendingSave, uploadVehicleAsset, resetConfig, exportConfigJson, importConfigJson]);
+  }), [config, isLoading, isSaving, lastSaved, driverType, driverName, isSyncingRemote, syncStatus, lastSuccessfulSync, isDragActive, setDragActive, currentUser, updateConfig, flushPendingSave, uploadVehicleAsset, resetConfig, refreshConfig, exportConfigJson, importConfigJson]);
 
   return (
     <ConfigContext.Provider value={contextValue}>

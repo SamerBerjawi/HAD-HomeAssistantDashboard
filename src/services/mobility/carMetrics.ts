@@ -5,7 +5,7 @@
 
 import { CarEvMetrics, isCarCharging, isCarPluggedIn } from '../../types/mobility';
 import type { HAZone } from '../../types';
-import { findEntity, parseNum, parseNumOptional, resolveZone } from './entityLookup';
+import { findEntity as findEntityIn, fordpassVin, parseNum, parseNumOptional, resolveZone } from './entityLookup';
 import { generateSpeedTimeseries, type SpeedPoint } from './speedHistory';
 
 export interface CarMetricsInput {
@@ -16,32 +16,46 @@ export interface CarMetricsInput {
   customBrandLogo?: string;
   customVehicleImage?: string;
   speedHistory: SpeedPoint[];
+  /**
+   * Optional: filled with the entity ids the derivation picked. Callers use it to recompute only
+   * when one of those entities changes (or the set of entities does), not on every state event.
+   */
+  usedEntityIds?: Set<string>;
 }
 
 /** Pure derivation of car EV metrics from the HA entity map (no React, no side effects). */
 export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
-  const { states, resolvedZones, isDemo, speedHistory } = input;
+  const { resolvedZones, isDemo, speedHistory } = input;
+  const states = input.states;
+  const used = input.usedEntityIds;
+  const vin = fordpassVin(states);
+  // Every lookup goes through here, so the caller learns which entities the car reads.
+  const findEntity = (map: Record<string, any>, domain: string, patterns: string[]) => {
+    const found = findEntityIn(map, domain, patterns);
+    if (used && typeof found?.entity_id === 'string') used.add(found.entity_id);
+    return found;
+  };
   const effectiveCarLogo = input.customBrandLogo;
   const effectiveCarImage = input.customVehicleImage;
   const trackerEntity = findEntity(states, 'device_tracker', [
-    'sensor.fordpass_wf0tk1em3pma07438_tracker',
-    'fordpass_wf0tk1em3pma07438_tracker',
+    `sensor.fordpass_${vin}_tracker`,
+    `fordpass_${vin}_tracker`,
     '_tracker',
     '_vehicle',
     '_car'
   ]);
 
   const ignitionEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_ignitionstatus',
-    'fordpass_wf0tk1em3pma07438_ignitionstatus',
+    `sensor.fordpass_${vin}_ignitionstatus`,
+    `fordpass_${vin}_ignitionstatus`,
     '_ignitionstatus',
     '_ignition_state',
     'ignition'
   ]);
 
   const socEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_soc',
-    'fordpass_wf0tk1em3pma07438_soc',
+    `sensor.fordpass_${vin}_soc`,
+    `fordpass_${vin}_soc`,
     '_soc',
     '_battery_level',
     '_state_of_charge',
@@ -52,8 +66,8 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   
   // Explicit lookup for range
   const rangeEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_elveh',
-    'fordpass_wf0tk1em3pma07438_elveh',
+    `sensor.fordpass_${vin}_elveh`,
+    `fordpass_${vin}_elveh`,
     '_elveh',
     'electric_range',
     'remaining_range',
@@ -62,8 +76,8 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const chargingEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_elvehcharging',
-    'fordpass_wf0tk1em3pma07438_elvehcharging',
+    `sensor.fordpass_${vin}_elvehcharging`,
+    `fordpass_${vin}_elvehcharging`,
     '_elvehcharging',
     'charging_status',
     'charging_state',
@@ -74,8 +88,8 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const powerEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_elvehchargingpower',
-    'fordpass_wf0tk1em3pma07438_elvehchargingpower',
+    `sensor.fordpass_${vin}_elvehchargingpower`,
+    `fordpass_${vin}_elvehchargingpower`,
     '_elvehchargingpower',
     'charging_power',
     'charger_power',
@@ -83,8 +97,8 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const plugEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_elvehplug',
-    'fordpass_wf0tk1em3pma07438_elvehplug',
+    `sensor.fordpass_${vin}_elvehplug`,
+    `fordpass_${vin}_elvehplug`,
     '_elvehplug',
     'plug_status',
     'charger_type'
@@ -95,15 +109,15 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const doorLockSensor = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_doorlock',
-    'fordpass_wf0tk1em3pma07438_doorlock',
+    `sensor.fordpass_${vin}_doorlock`,
+    `fordpass_${vin}_doorlock`,
     '_doorlock',
     '_doors_locked'
   ]);
 
   const doorLockDomain = findEntity(states, 'lock', [
-    'lock.fordpass_wf0tk1em3pma07438_doorlock',
-    'fordpass_wf0tk1em3pma07438_doorlock',
+    `lock.fordpass_${vin}_doorlock`,
+    `fordpass_${vin}_doorlock`,
     '_doorlock',
     '_doors',
     '_vehicle',
@@ -111,29 +125,29 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const windowEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_windowposition',
-    'fordpass_wf0tk1em3pma07438_windowposition',
+    `sensor.fordpass_${vin}_windowposition`,
+    `fordpass_${vin}_windowposition`,
     '_windowposition',
     '_windows'
   ]);
 
   const odoEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_odometer',
-    'fordpass_wf0tk1em3pma07438_odometer',
+    `sensor.fordpass_${vin}_odometer`,
+    `fordpass_${vin}_odometer`,
     '_odometer',
     'odometer',
     'mileage'
   ]);
 
   const alarmEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_alarm',
-    'fordpass_wf0tk1em3pma07438_alarm',
+    `sensor.fordpass_${vin}_alarm`,
+    `fordpass_${vin}_alarm`,
     '_alarm'
   ]);
 
   const cabinTempEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_cabintemperature',
-    'fordpass_wf0tk1em3pma07438_cabintemperature',
+    `sensor.fordpass_${vin}_cabintemperature`,
+    `fordpass_${vin}_cabintemperature`,
     '_cabintemperature',
     'inside_temperature',
     'cabin_temperature',
@@ -141,14 +155,14 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const indicatorsEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_indicators',
-    'fordpass_wf0tk1em3pma07438_indicators',
+    `sensor.fordpass_${vin}_indicators`,
+    `fordpass_${vin}_indicators`,
     '_indicators'
   ]);
 
   const battery12VEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_battery',
-    'fordpass_wf0tk1em3pma07438_battery',
+    `sensor.fordpass_${vin}_battery`,
+    `fordpass_${vin}_battery`,
     '_battery',
     '12v_battery',
     'battery_12v',
@@ -156,15 +170,15 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const outdoorTempEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_outsidetemp',
-    'fordpass_wf0tk1em3pma07438_outsidetemp',
+    `sensor.fordpass_${vin}_outsidetemp`,
+    `fordpass_${vin}_outsidetemp`,
     '_outsidetemp',
     'outside_temperature',
     'outdoor_temp'
   ]);
 
   const climateEntity = findEntity(states, 'climate', [
-    'climate.fordpass_wf0tk1em3pma07438',
+    `climate.fordpass_${vin}`,
     '_vehicle',
     '_car',
     '_interior',
@@ -172,16 +186,16 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const remoteClimateSwitch = findEntity(states, 'switch', [
-    'switch.fordpass_wf0tk1em3pma07438_ignition',
-    'fordpass_wf0tk1em3pma07438_ignition',
+    `switch.fordpass_${vin}_ignition`,
+    `fordpass_${vin}_ignition`,
     '_ignition',
     '_climate',
     '_preconditioning'
   ]);
 
   const countdownEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_remotestartcountdown',
-    'fordpass_wf0tk1em3pma07438_remotestartcountdown',
+    `sensor.fordpass_${vin}_remotestartcountdown`,
+    `fordpass_${vin}_remotestartcountdown`,
     '_remotestartcountdown'
   ]);
 
@@ -196,8 +210,8 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
     'charge_limit',
     'target_soc'
   ]) || findEntity(states, 'select', [
-    'select.fordpass_wf0tk1em3pma07438_elvehtargetcharge',
-    'fordpass_wf0tk1em3pma07438_elvehtargetcharge',
+    `select.fordpass_${vin}_elvehtargetcharge`,
+    `fordpass_${vin}_elvehtargetcharge`,
     '_elvehtargetcharge',
     '_target_charge',
     '_charge_limit',
@@ -220,44 +234,44 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
   ]);
 
   const energyConsumedEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_lastenergyconsumed',
-    'fordpass_wf0tk1em3pma07438_lastenergyconsumed',
+    `sensor.fordpass_${vin}_lastenergyconsumed`,
+    `fordpass_${vin}_lastenergyconsumed`,
     '_lastenergyconsumed'
   ]);
 
   const chargeLogEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_energytransferlogentry',
-    'fordpass_wf0tk1em3pma07438_energytransferlogentry',
+    `sensor.fordpass_${vin}_energytransferlogentry`,
+    `fordpass_${vin}_energytransferlogentry`,
     '_energytransferlogentry'
   ]);
 
   const speedEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_speed',
-    'fordpass_wf0tk1em3pma07438_speed',
+    `sensor.fordpass_${vin}_speed`,
+    `fordpass_${vin}_speed`,
     '_speed'
   ]);
 
   const gearEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_gearleverposition',
-    'fordpass_wf0tk1em3pma07438_gearleverposition',
+    `sensor.fordpass_${vin}_gearleverposition`,
+    `fordpass_${vin}_gearleverposition`,
     '_gearleverposition'
   ]);
 
   const gpsSensor = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_gps',
-    'fordpass_wf0tk1em3pma07438_gps',
+    `sensor.fordpass_${vin}_gps`,
+    `fordpass_${vin}_gps`,
     '_gps'
   ]);
 
   const lastRefreshEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_lastrefresh',
-    'fordpass_wf0tk1em3pma07438_lastrefresh',
+    `sensor.fordpass_${vin}_lastrefresh`,
+    `fordpass_${vin}_lastrefresh`,
     '_lastrefresh'
   ]);
 
   const tirePressureSensor = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_tirepressure',
-    'fordpass_wf0tk1em3pma07438_tirepressure',
+    `sensor.fordpass_${vin}_tirepressure`,
+    `fordpass_${vin}_tirepressure`,
     '_tirepressure',
     '_tire_pressure'
   ]);
@@ -270,44 +284,44 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
 
   // Software updates entities
   const autoUpdatesSwitch = findEntity(states, 'switch', [
-    'switch.fordpass_wf0tk1em3pma07438_autosoftwareupdates',
-    'fordpass_wf0tk1em3pma07438_autosoftwareupdates',
+    `switch.fordpass_${vin}_autosoftwareupdates`,
+    `fordpass_${vin}_autosoftwareupdates`,
     '_autosoftwareupdates'
   ]);
 
   const firmwareHistorySensor = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_firmwareupdatehistory',
-    'fordpass_wf0tk1em3pma07438_firmwareupdatehistory',
+    `sensor.fordpass_${vin}_firmwareupdatehistory`,
+    `fordpass_${vin}_firmwareupdatehistory`,
     '_firmwareupdatehistory'
   ]);
 
   const firmwareStatusSensor = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_firmwareupgstatus',
-    'fordpass_wf0tk1em3pma07438_firmwareupgstatus',
+    `sensor.fordpass_${vin}_firmwareupgstatus`,
+    `fordpass_${vin}_firmwareupgstatus`,
     '_firmwareupgstatus'
   ]);
 
   const lastFirmwareSensor = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_lastfirmwareupdate',
-    'fordpass_wf0tk1em3pma07438_lastfirmwareupdate',
+    `sensor.fordpass_${vin}_lastfirmwareupdate`,
+    `fordpass_${vin}_lastfirmwareupdate`,
     '_lastfirmwareupdate'
   ]);
 
   const otaReadinessSensor = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_otareadiness',
-    'fordpass_wf0tk1em3pma07438_otareadiness',
+    `sensor.fordpass_${vin}_otareadiness`,
+    `fordpass_${vin}_otareadiness`,
     '_otareadiness'
   ]);
 
   const otaScheduleSensor = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_otaschedule',
-    'fordpass_wf0tk1em3pma07438_otaschedule',
+    `sensor.fordpass_${vin}_otaschedule`,
+    `fordpass_${vin}_otaschedule`,
     '_otaschedule'
   ]);
 
   const oilEntity = findEntity(states, 'sensor', [
-    'sensor.fordpass_wf0tk1em3pma07438_oil',
-    'fordpass_wf0tk1em3pma07438_oil',
+    `sensor.fordpass_${vin}_oil`,
+    `fordpass_${vin}_oil`,
     '_oil',
     'oil_life'
   ]);
@@ -475,16 +489,16 @@ export function deriveCarMetrics(input: CarMetricsInput): CarEvMetrics {
     speedTimeseries: isDemo ? generateSpeedTimeseries(speed ?? 0) : speedHistory,
 
     controls: {
-      lockDoorButtonId: 'button.fordpass_wf0tk1em3pma07438_doorlock',
-      unlockDoorLockId: doorLockDomain?.entity_id || 'lock.fordpass_wf0tk1em3pma07438_doorlock',
-      startClimateSwitchId: remoteClimateSwitch?.entity_id || 'switch.fordpass_wf0tk1em3pma07438_ignition',
-      extendClimateButtonId: 'button.fordpass_wf0tk1em3pma07438_extendremotestart',
-      flashHonkDefaultButtonId: 'button.fordpass_wf0tk1em3pma07438_hafdefault',
-      updateDataButtonId: 'button.fordpass_wf0tk1em3pma07438_update_data',
-      requestRefreshButtonId: 'button.fordpass_wf0tk1em3pma07438_request_refresh',
-      startChargingButtonId: 'button.fordpass_wf0tk1em3pma07438_evstart',
-      chargeSwitchId: 'switch.fordpass_wf0tk1em3pma07438_elvehcharge',
-      autoSoftwareUpdatesSwitchId: 'switch.fordpass_wf0tk1em3pma07438_autosoftwareupdates',
+      lockDoorButtonId: `button.fordpass_${vin}_doorlock`,
+      unlockDoorLockId: doorLockDomain?.entity_id || `lock.fordpass_${vin}_doorlock`,
+      startClimateSwitchId: remoteClimateSwitch?.entity_id || `switch.fordpass_${vin}_ignition`,
+      extendClimateButtonId: `button.fordpass_${vin}_extendremotestart`,
+      flashHonkDefaultButtonId: `button.fordpass_${vin}_hafdefault`,
+      updateDataButtonId: `button.fordpass_${vin}_update_data`,
+      requestRefreshButtonId: `button.fordpass_${vin}_request_refresh`,
+      startChargingButtonId: `button.fordpass_${vin}_evstart`,
+      chargeSwitchId: `switch.fordpass_${vin}_elvehcharge`,
+      autoSoftwareUpdatesSwitchId: `switch.fordpass_${vin}_autosoftwareupdates`,
       climateEntityId: climateEntity?.entity_id,
       targetSocEntityId: targetSocEntity?.entity_id,
       chargePortEntityId: chargePortEntity?.entity_id,

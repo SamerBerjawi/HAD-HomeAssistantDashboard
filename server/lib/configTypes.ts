@@ -17,6 +17,8 @@ export interface ServerConfig extends JsonObject {
   updatedAt?: string;
   cameras?: JsonObject & { sources?: Record<string, CameraSourceJson> };
   canvas?: JsonObject & { pinCode?: string };
+  layoutSharing?: JsonObject & { shareLayoutsWithUsers?: boolean };
+  userLayouts?: Record<string, JsonObject>;
 }
 
 export interface PersistedConfig {

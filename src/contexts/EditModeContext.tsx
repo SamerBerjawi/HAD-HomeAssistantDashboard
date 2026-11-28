@@ -11,6 +11,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useUserConfig } from './ConfigContext';
 import { useAutoLayoutStore } from '../store/useAutoLayoutStore';
+import { useClassicLayoutScope } from '../hooks/useClassicLayoutScope';
 import { LayoutBreakpoint, BreakpointLayoutOverride } from '../types/userConfig';
 
 export type { LayoutBreakpoint, BreakpointLayoutOverride };
@@ -36,6 +37,8 @@ export interface EditModeContextType {
   cycleTileSize: (id: string, currentCols?: number, currentRows?: number, breakpoint?: LayoutBreakpoint) => Promise<void>;
   reorderTiles: (orderedIds: string[], breakpoint?: LayoutBreakpoint) => Promise<void>;
   getTileLayout: (id: string, breakpoint?: LayoutBreakpoint) => BreakpointLayoutOverride | undefined;
+  resetBreakpointOverrides: (ids?: string[], breakpoint?: LayoutBreakpoint) => Promise<void>;
+  copyBreakpointLayout: (sourceBp: LayoutBreakpoint, targetBp: LayoutBreakpoint) => Promise<void>;
 }
 
 const EditModeContext = createContext<EditModeContextType | undefined>(undefined);
@@ -81,6 +84,7 @@ const BREAKPOINT_SIZE_CYCLES: Record<LayoutBreakpoint, Array<[1 | 2 | 3 | 4 | 6 
 export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const { config, updateConfig, flushPendingSave } = useUserConfig();
+  const { effectiveResponsiveOverrides, saveResponsiveOverrides } = useClassicLayoutScope();
 
   // Track physical device breakpoint
   const [detectedBreakpoint, setDetectedBreakpoint] = useState<LayoutBreakpoint>(() => getDeviceBreakpoint());
@@ -110,15 +114,15 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Effective active breakpoint: when editing, respects user's selected target preview breakpoint
   const activeBreakpoint = isEditMode ? editingBreakpoint : detectedBreakpoint;
 
-  // Active layout overrides for the current active breakpoint (with fallback to legacy layoutOverrides)
+  // Active layout overrides for the current active breakpoint (scoped + fallback to legacy layoutOverrides)
   const activeLayoutOverrides = useMemo<Record<string, BreakpointLayoutOverride>>(() => {
-    const responsive = config?.responsiveLayoutOverrides?.[activeBreakpoint];
+    const responsive = effectiveResponsiveOverrides?.[activeBreakpoint];
     const legacy = config?.layoutOverrides;
     return {
       ...(legacy || {}),
       ...(responsive || {})
     };
-  }, [config?.responsiveLayoutOverrides, config?.layoutOverrides, activeBreakpoint]);
+  }, [effectiveResponsiveOverrides, config?.layoutOverrides, activeBreakpoint]);
 
   const toggleEditMode = useCallback(() => {
     setIsEditMode(prev => {
@@ -176,12 +180,9 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       return {
-        ...prev,
         entities: {
-          ...prev.entities,
           hiddenEntityIds: Array.from(currentHiddenList),
           customizations: {
-            ...(prev.entities?.customizations || {}),
             [entityId]: {
               ...(prev.entities?.customizations?.[entityId] || {}),
               hidden: nextHidden
@@ -207,9 +208,7 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       return {
-        ...prev,
         rooms: {
-          ...prev.rooms,
           hiddenAreas: Array.from(currentHiddenAreas)
         }
       };
@@ -224,27 +223,14 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   ) => {
     if (!id) return;
     const targetBp = breakpoint || activeBreakpoint;
-
-    await updateConfig((prev) => {
-      const currentResponsive = prev.responsiveLayoutOverrides || {};
-      const currentBpMap = currentResponsive[targetBp] || {};
-      const existing = currentBpMap[id] || prev.layoutOverrides?.[id] || {};
-
-      return {
-        ...prev,
-        responsiveLayoutOverrides: {
-          ...currentResponsive,
-          [targetBp]: {
-            ...currentBpMap,
-            [id]: {
-              ...existing,
-              ...layout
-            }
-          }
-        }
-      };
+    const existing = effectiveResponsiveOverrides?.[targetBp]?.[id] || config?.layoutOverrides?.[id] || {};
+    await saveResponsiveOverrides(targetBp, {
+      [id]: {
+        ...existing,
+        ...layout
+      }
     });
-  }, [activeBreakpoint, updateConfig]);
+  }, [activeBreakpoint, effectiveResponsiveOverrides, config?.layoutOverrides, saveResponsiveOverrides]);
 
   // Set explicit tile dimensions for target breakpoint
   const setTileDimensions = useCallback(
@@ -282,7 +268,7 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   ) => {
     if (!id) return;
     const targetBp = breakpoint || activeBreakpoint;
-    const bpOverrides = config?.responsiveLayoutOverrides?.[targetBp]?.[id];
+    const bpOverrides = effectiveResponsiveOverrides?.[targetBp]?.[id];
     const legacy = config?.layoutOverrides?.[id];
     const existing = bpOverrides || legacy;
     const activeCols = existing?.colSpan || currentCols;
@@ -302,7 +288,7 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const [nextCols, nextRows] = cycle[nextIndex];
     await updateTileLayout(id, { colSpan: nextCols, rowSpan: nextRows }, targetBp);
-  }, [activeBreakpoint, config?.responsiveLayoutOverrides, config?.layoutOverrides, updateTileLayout]);
+  }, [activeBreakpoint, effectiveResponsiveOverrides, config?.layoutOverrides, updateTileLayout]);
 
   // Reorder tiles via drag-and-drop for target breakpoint
   const reorderTiles = useCallback(async (
@@ -311,28 +297,19 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   ) => {
     if (!orderedIds || orderedIds.length === 0) return;
     const targetBp = breakpoint || activeBreakpoint;
+    const currentBpMap = effectiveResponsiveOverrides?.[targetBp] || {};
+    const patchMap: Record<string, BreakpointLayoutOverride> = {};
 
-    await updateConfig((prev) => {
-      const currentResponsive = prev.responsiveLayoutOverrides || {};
-      const currentBpMap = { ...(currentResponsive[targetBp] || {}) };
-
-      orderedIds.forEach((id, index) => {
-        const existing = currentBpMap[id] || prev.layoutOverrides?.[id] || {};
-        currentBpMap[id] = {
-          ...existing,
-          order: index
-        };
-      });
-
-      return {
-        ...prev,
-        responsiveLayoutOverrides: {
-          ...currentResponsive,
-          [targetBp]: currentBpMap
-        }
+    orderedIds.forEach((id, index) => {
+      const existing = currentBpMap[id] || config?.layoutOverrides?.[id] || {};
+      patchMap[id] = {
+        ...existing,
+        order: index
       };
     });
-  }, [activeBreakpoint, updateConfig]);
+
+    await saveResponsiveOverrides(targetBp, patchMap);
+  }, [activeBreakpoint, effectiveResponsiveOverrides, config?.layoutOverrides, saveResponsiveOverrides]);
 
   // Get layout overrides for an id in the target breakpoint
   const getTileLayout = useCallback((
@@ -340,10 +317,43 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     breakpoint?: LayoutBreakpoint
   ): BreakpointLayoutOverride | undefined => {
     const targetBp = breakpoint || activeBreakpoint;
-    const bpOverride = config?.responsiveLayoutOverrides?.[targetBp]?.[id];
+    const bpOverride = effectiveResponsiveOverrides?.[targetBp]?.[id];
     if (bpOverride) return bpOverride;
     return config?.layoutOverrides?.[id];
-  }, [activeBreakpoint, config?.responsiveLayoutOverrides, config?.layoutOverrides]);
+  }, [activeBreakpoint, effectiveResponsiveOverrides, config?.layoutOverrides]);
+
+  const resetBreakpointOverrides = useCallback(async (
+    ids?: string[],
+    breakpoint?: LayoutBreakpoint
+  ) => {
+    const targetBp = breakpoint || activeBreakpoint;
+    const currentMap = effectiveResponsiveOverrides?.[targetBp] || {};
+    const targetIds = ids && ids.length > 0 ? ids : Object.keys(currentMap);
+    if (targetIds.length === 0) return;
+    const nullMap = Object.fromEntries(targetIds.map((id) => [id, null]));
+    await saveResponsiveOverrides(targetBp, nullMap, true);
+  }, [activeBreakpoint, effectiveResponsiveOverrides, saveResponsiveOverrides]);
+
+  const copyBreakpointLayout = useCallback(async (
+    sourceBp: LayoutBreakpoint,
+    targetBp: LayoutBreakpoint
+  ) => {
+    if (sourceBp === targetBp) return;
+    const srcMap = effectiveResponsiveOverrides?.[sourceBp] || {};
+    const allowed = BREAKPOINT_ALLOWED_COLUMNS[targetBp];
+    const nextMap: Record<string, BreakpointLayoutOverride> = {};
+    for (const [id, entry] of Object.entries(srcMap)) {
+      if (!entry) continue;
+      let colSpan = entry.colSpan;
+      if (colSpan && !allowed.includes(colSpan)) {
+        colSpan = allowed.reduce((best, c) =>
+          Math.abs(c - colSpan!) < Math.abs(best - colSpan!) ? c : best
+        , allowed[0]);
+      }
+      nextMap[id] = { ...entry, ...(colSpan ? { colSpan } : {}) };
+    }
+    await saveResponsiveOverrides(targetBp, nextMap, true);
+  }, [effectiveResponsiveOverrides, saveResponsiveOverrides]);
 
   const value = useMemo<EditModeContextType>(() => ({
     isEditMode,
@@ -363,7 +373,9 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTileWidth,
     cycleTileSize,
     reorderTiles,
-    getTileLayout
+    getTileLayout,
+    resetBreakpointOverrides,
+    copyBreakpointLayout
   }), [
     isEditMode,
     setEditMode,
@@ -382,7 +394,9 @@ export const EditModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTileWidth,
     cycleTileSize,
     reorderTiles,
-    getTileLayout
+    getTileLayout,
+    resetBreakpointOverrides,
+    copyBreakpointLayout
   ]);
 
   return (

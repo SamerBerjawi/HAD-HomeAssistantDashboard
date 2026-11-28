@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { cameraSourcesChanged, checkConfigWriteGuards, deepMergeConfig, hasMaterialDashboardConfig, isValidDashboardConfig } from '../server/lib/configRules';
+import {
+  cameraSourcesChanged,
+  checkConfigWriteGuards,
+  deepMergeConfig,
+  hasMaterialDashboardConfig,
+  isValidDashboardConfig,
+  layoutSharingChanged,
+  unauthorizedUserLayoutsModified
+} from '../server/lib/configRules';
 
 describe('deepMergeConfig', () => {
   it('merges nested objects, replaces arrays, deletes on null, skips undefined', () => {
@@ -9,6 +17,67 @@ describe('deepMergeConfig', () => {
   it('replaces camera sources wholesale so deleted sources stay deleted', () => {
     const out = deepMergeConfig({ cameras: { sources: { a: 1, b: 2 } } }, { cameras: { sources: { a: 1 } } });
     expect(out).toEqual({ cameras: { sources: { a: 1 } } });
+  });
+  it('replaces atomic layout device buckets and proRooms.sizes wholesale', () => {
+    const base = {
+      preferences: {
+        proRooms: { cardSize: 'large', sizes: { kitchen: 'expanded', bath: 'compact' } },
+        proOverviewLayout: {
+          version: 1,
+          phone: { hidden: ['a'], styles: { x: 's1' } },
+          desktop: { hidden: ['b'] }
+        },
+        proAreaLayouts: {
+          version: 1,
+          kitchen: { phone: { sizes: { 'light.a': 'w' }, hidden: [] } }
+        }
+      }
+    };
+    const out = deepMergeConfig(base, {
+      preferences: {
+        proRooms: { sizes: { kitchen: 'compact' } },
+        proOverviewLayout: { phone: { hidden: [], styles: {} } },
+        proAreaLayouts: { kitchen: { phone: { sizes: {}, hidden: [] } } }
+      }
+    });
+    expect(out.preferences).toEqual({
+      proRooms: { cardSize: 'large', sizes: { kitchen: 'compact' } },
+      proOverviewLayout: {
+        version: 1,
+        phone: { hidden: [], styles: {} },
+        desktop: { hidden: ['b'] }
+      },
+      proAreaLayouts: {
+        version: 1,
+        kitchen: { phone: { sizes: {}, hidden: [] } }
+      }
+    });
+  });
+  it('replaces per-device proRooms buckets wholesale without sibling loss', () => {
+    const base = {
+      preferences: {
+        proRooms: {
+          version: 2,
+          phone: { cardSize: 'compact', sizes: { kitchen: 'compact', bath: 'standard' } },
+          desktop: { cardSize: 'large', sizes: { living: 'expanded' } }
+        }
+      }
+    };
+    const out = deepMergeConfig(base, {
+      preferences: {
+        proRooms: {
+          version: 2,
+          phone: { cardSize: 'standard', sizes: { kitchen: 'standard' } }
+        }
+      }
+    });
+    expect(out.preferences).toEqual({
+      proRooms: {
+        version: 2,
+        phone: { cardSize: 'standard', sizes: { kitchen: 'standard' } },
+        desktop: { cardSize: 'large', sizes: { living: 'expanded' } }
+      }
+    });
   });
 });
 
@@ -72,5 +141,21 @@ describe('cameraSourcesChanged', () => {
     expect(cameraSourcesChanged(cur, { cameras: { sources: { a: 2 } } })).toBe(true);
     expect(cameraSourcesChanged(cur, { cameras: { sources: {} } })).toBe(true);
     expect(cameraSourcesChanged(null, { cameras: { sources: { a: 1 } } })).toBe(true);
+  });
+});
+
+describe('layoutSharingChanged & unauthorizedUserLayoutsModified', () => {
+  it('detects changes to layoutSharing.shareLayoutsWithUsers', () => {
+    expect(layoutSharingChanged(null, {})).toBe(false);
+    expect(layoutSharingChanged({ layoutSharing: { shareLayoutsWithUsers: true } }, { layoutSharing: { shareLayoutsWithUsers: true } })).toBe(false);
+    expect(layoutSharingChanged({ layoutSharing: { shareLayoutsWithUsers: true } }, { layoutSharing: { shareLayoutsWithUsers: false } })).toBe(true);
+  });
+
+  it('allows a user to edit their own userLayouts entry while rejecting edits to others', () => {
+    const cur = { userLayouts: { alice: { overviewMode: 'custom' }, bob: { overviewMode: 'auto' } } } as never;
+    expect(unauthorizedUserLayoutsModified(cur, { userLayouts: { alice: { overviewMode: 'auto' }, bob: { overviewMode: 'auto' } } }, 'alice')).toBe(false);
+    expect(unauthorizedUserLayoutsModified(cur, { userLayouts: { bob: { overviewMode: 'custom' } } }, 'alice')).toBe(true);
+    expect(unauthorizedUserLayoutsModified(cur, { userLayouts: { bob: null } }, 'alice')).toBe(true);
+    expect(unauthorizedUserLayoutsModified(cur, { userLayouts: null }, 'alice')).toBe(true);
   });
 });

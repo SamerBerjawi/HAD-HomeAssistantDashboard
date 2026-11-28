@@ -20,7 +20,8 @@
     "test:visual": "playwright test --project=visual-desktop-light --project=visual-desktop-dark --project=visual-mobile-light --project=visual-mobile-dark",
     "test:visual:update": "playwright test --project=visual-desktop-light --project=visual-desktop-dark --project=visual-mobile-light --project=visual-mobile-dark --update-snapshots",
     "dev:pro": "UI=pro tsx server.ts",
-    "build:pro": "vite build --config vite.pro.config.ts && node scripts/compress-dist.cjs dist-pro"
+    "build:pro": "vite build --config vite.pro.config.ts && node scripts/compress-dist.cjs dist-pro",
+    "build:cards": "vite build --config vite.cards.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -39,7 +40,8 @@
     "@phosphor-icons/react": "^2.1.10",
     "@react-aria/ssr": "^3.10.1",
     "@react-aria/utils": "^3.34.1",
-    "@tailwindcss/vite": "^4.1.14",
+    "@tensorflow-models/coco-ssd": "^2.2.3",
+    "@tensorflow/tfjs": "^4.22.0",
     "@types/leaflet": "^1.9.22",
     "@types/react-grid-layout": "^1.3.6",
     "@untitledui/icons": "^0.0.22",
@@ -53,7 +55,6 @@
     "@visx/sankey": "^4.0.1-alpha.0",
     "@visx/scale": "^4.0.1-alpha.0",
     "@visx/shape": "^4.0.1-alpha.0",
-    "@vitejs/plugin-react": "^5.0.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "d3-array": "^3.2.4",
@@ -79,12 +80,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
+    "@tailwindcss/vite": "^4.1.14",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/react": "~19.2.18",
     "@types/react-dom": "~19.2.7",
+    "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "^3.2.7",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",

@@ -11,7 +11,7 @@ import { useUserConfig } from './useUserConfig';
 import { haWebSocketService } from '../services/haWebSocket';
 import { getAuthHeaders } from '../services/configStorageService';
 import { CarEvMetrics, BikeMetrics } from '../types/mobility';
-import { findEntity } from '../services/mobility/entityLookup';
+import { findEntity, fordpassVin } from '../services/mobility/entityLookup';
 import { bucketSpeedHistory, type SpeedPoint } from '../services/mobility/speedHistory';
 import { deriveCarMetrics } from '../services/mobility/carMetrics';
 import { deriveBikeMetrics } from '../services/mobility/bikeMetrics';
@@ -30,14 +30,15 @@ export function useMobilityData() {
   const [optimisticBike, setOptimisticBike] = useState<Partial<BikeMetrics>>({});
 
   // 24h speed history from the FordPass speed sensor's recorder history
+  const vin = useMemo(() => fordpassVin(states), [states]);
   const speedEntityId = useMemo(
     () =>
       findEntity(states, 'sensor', [
-        'sensor.fordpass_wf0tk1em3pma07438_speed',
-        'fordpass_wf0tk1em3pma07438_speed',
+        `sensor.fordpass_${vin}_speed`,
+        `fordpass_${vin}_speed`,
         '_speed'
       ])?.entity_id as string | undefined,
-    [states]
+    [states, vin]
   );
   const [speedHistory, setSpeedHistory] = useState<SpeedPoint[]>([]);
 

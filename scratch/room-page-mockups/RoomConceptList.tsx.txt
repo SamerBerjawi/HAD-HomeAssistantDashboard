@@ -1,0 +1,190 @@
+/**
+ * Room page mockup B · "Room remote" (docs/pro-ui/ROOM_PAGE.md §2). A slim header card, the
+ * scenes, the readings in one row, then every device by kind as rows with its control in reach
+ * (switches, brightness sliders, −/+ for the thermostat), and today's changes at the end. Built
+ * from the details-sheet kit, so it reads like a widget's sheet opened into a page.
+ */
+import { Button } from '@heroui/react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { MinusSignIcon, PauseIcon, PlayIcon, PlusSignIcon, SunriseIcon } from '@hugeicons/core-free-icons';
+import { cn } from '@/lib/utils';
+import { ACTION_LABEL } from '../../lib/overviewThermostat';
+import { agoText, type RoomDevice, type RoomGroupId } from '../../lib/roomPage';
+import { ToggleSwitch } from '../../widgets/controls/ControlParts';
+import { SheetRow, SheetSection, SheetSlider, SheetTile, SheetTiles } from '../../widgets/shared/sheet/SheetKit';
+import { actionHue, useThermostatActions } from '../../widgets/thermostat/concepts/shared';
+import { useHaPicture } from '../../widgets/shared/useHaPicture';
+import { useRoomLights } from '../rooms/shared';
+import { canToggle, GROUP_META, HeroLightsButton, RoomBackdrop, roomEyebrow, roomFacts, ScenePills, temp, useRoomDeviceActions, type RoomPageData } from './shared';
+
+type Actions = ReturnType<typeof useRoomDeviceActions>;
+
+const READING_LABEL: Record<string, string> = { temperature: 'Temperature', humidity: 'Humidity', illuminance: 'Light level', power: 'Power', carbon_dioxide: 'CO₂', pm25: 'PM2.5', aqi: 'Air quality', volatile_organic_compounds: 'VOC' };
+
+function MediaRow({ d, act }: { d: RoomDevice; act: Actions }) {
+  const cover = useHaPicture(d.picture);
+  const playing = d.state === 'playing';
+  return (
+    <SheetRow
+      media={
+        <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-default text-muted">
+          {cover ? <img src={cover} alt="" className="size-full object-cover" /> : <HugeiconsIcon icon={GROUP_META.media.icon} size={17} />}
+        </span>
+      }
+      title={d.name}
+      subtitle={d.detail}
+      trailing={
+        <Button isIconOnly size="sm" variant={playing ? 'primary' : 'secondary'} onPress={() => act.toggle(d)} aria-label={playing ? 'Pause' : 'Play'} className="rounded-full">
+          <HugeiconsIcon icon={playing ? PauseIcon : PlayIcon} size={15} />
+        </Button>
+      }
+    />
+  );
+}
+
+function DeviceRows({ group, list, act }: { group: RoomGroupId; list: RoomDevice[]; act: Actions }) {
+  const icon = GROUP_META[group].icon;
+  if (group === 'media') return <>{list.map((d) => <MediaRow key={d.entityId} d={d} act={act} />)}</>;
+  const status = group === 'openings' || group === 'motion' || group === 'locks';
+  return (
+    <>
+      {list.map((d) => (
+        <SheetRow
+          key={d.entityId}
+          icon={icon}
+          tone={d.isOn ? (status ? 'warning' : 'active') : 'default'}
+          title={d.name}
+          subtitle={status && d.lastChanged ? `${d.detail} · ${agoText(d.lastChanged)}` : d.detail}
+          trailing={canToggle(d) ? <ToggleSwitch isSelected={d.isOn} onChange={() => act.toggle(d)} label={d.name} tone={group === 'lights' ? 'warning' : 'accent'} /> : null}
+        >
+          {group === 'lights' && d.brightness !== null ? (
+            <SheetSlider value={d.brightness} min={1} label={`${d.name} brightness`} icon={SunriseIcon} warm onCommit={(v) => act.brightness(d, v)} />
+          ) : null}
+        </SheetRow>
+      ))}
+    </>
+  );
+}
+
+function ClimateRows({ data }: { data: RoomPageData }) {
+  const { step } = useThermostatActions();
+  const t = data.room.thermostat;
+  if (!t) return null;
+  const hue = actionHue(t.action);
+  return (
+    <SheetRow
+      icon={GROUP_META.climate.icon}
+      tone={t.action === 'off' ? 'default' : 'active'}
+      title={t.shortName || 'Thermostat'}
+      subtitle={
+        <span>
+          <span style={hue ? { color: hue } : undefined} className="font-semibold">
+            {ACTION_LABEL[t.action]}
+          </span>
+          {` · now ${temp(t.current)}`}
+        </span>
+      }
+      trailing={
+        <span className="flex items-center gap-1.5">
+          <Button isIconOnly size="sm" variant="secondary" onPress={() => step(t, -1)} aria-label="Lower the temperature" className="rounded-full">
+            <HugeiconsIcon icon={MinusSignIcon} size={15} />
+          </Button>
+          <span className="min-w-11 text-center text-lg font-semibold tabular-nums">{temp(t.target)}</span>
+          <Button isIconOnly size="sm" variant="secondary" onPress={() => step(t, 1)} aria-label="Raise the temperature" className="rounded-full">
+            <HugeiconsIcon icon={PlusSignIcon} size={15} />
+          </Button>
+        </span>
+      }
+    />
+  );
+}
+
+/**
+ * Every device group as sheet rows with its control, then today's changes. Mockup C uses it under
+ * the tiles with `skip` for the groups the tiles already show.
+ */
+export function RoomDeviceSections({ data, skip = [] }: { data: RoomPageData; skip?: readonly RoomGroupId[] }) {
+  const { page } = data;
+  const g = page.groups;
+  const act = useRoomDeviceActions();
+  const groups = page.order.filter((id) => id !== 'readings' && id !== 'scenes' && id !== 'cameras' && !skip.includes(id));
+  return (
+    <>
+      {groups.map((id) => {
+        const list = g[id] ?? [];
+        const on = list.filter((d) => d.isOn).length;
+        return (
+          <SheetSection
+            key={id}
+            title={GROUP_META[id].title}
+            aside={
+              id === 'lights' ? (
+                <Button size="sm" variant="ghost" onPress={() => act.setAll(list, on === 0)} className="h-6 rounded-full px-2 text-xs">
+                  {on ? 'All off' : 'All on'}
+                </Button>
+              ) : id !== 'climate' && on ? (
+                `${on} ${id === 'openings' ? 'open' : id === 'motion' ? 'detected' : 'on'}`
+              ) : undefined
+            }
+          >
+            {id === 'climate' ? <ClimateRows data={data} /> : <DeviceRows group={id} list={list} act={act} />}
+          </SheetSection>
+        );
+      })}
+
+      {page.today.length ? (
+        <SheetSection title="Today">
+          {page.today.map((e) => (
+            <SheetRow key={`${e.entityId}-${e.at}`} icon={GROUP_META[e.group].icon} title={e.name} subtitle={e.text} trailing={<span className="text-xs text-muted tabular-nums">{agoText(e.at)}</span>} />
+          ))}
+        </SheetSection>
+      ) : null}
+
+    </>
+  );
+}
+
+/** B's slim hero: eyebrow, name, facts, temperature and the lights button on the room's picture. */
+export function RoomHeaderCard({ data }: { data: RoomPageData }) {
+  const { room, page } = data;
+  const roomLights = useRoomLights();
+  return (
+    <section className="relative isolate flex min-h-28 items-end gap-3 overflow-hidden rounded-[22px] p-3.5 text-white" aria-label={room.name}>
+      <RoomBackdrop room={room} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-semibold text-white/85">{roomEyebrow(room)}</p>
+        <h2 className="truncate text-xl font-semibold leading-tight">{room.name}</h2>
+        <p className="truncate text-xs text-white/80">{roomFacts(room) || `${page.deviceCount} devices`}</p>
+      </div>
+      <span className="text-4xl font-extralight leading-none tracking-tighter tabular-nums">{temp(room.temperature)}</span>
+      <HeroLightsButton room={room} onPress={() => roomLights.toggle(room)} withLabel={false} />
+    </section>
+  );
+}
+
+export default function RoomConceptList({ data }: { data: RoomPageData }) {
+  const { room, page } = data;
+  const g = page.groups;
+  const act = useRoomDeviceActions();
+  const readings = (g.readings ?? []).filter((d) => d.deviceClass !== 'energy').slice(0, 4);
+
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      <RoomHeaderCard data={data} />
+
+      <ScenePills scenes={g.scenes ?? []} onScene={act.scene} />
+
+      {readings.length ? (
+        <SheetTiles>
+          {readings.map((d) => (
+            <SheetTile key={d.entityId} icon={GROUP_META.readings.icon} label={READING_LABEL[d.deviceClass ?? ''] ?? (d.deviceClass ?? 'Reading').replace(/_/g, ' ')} value={d.detail} note={d.name} />
+          ))}
+        </SheetTiles>
+      ) : null}
+
+      <RoomDeviceSections data={data} />
+
+      <p className={cn('px-1 pb-2 text-center text-xs text-muted')}>{page.deviceCount} devices in this room</p>
+    </div>
+  );
+}

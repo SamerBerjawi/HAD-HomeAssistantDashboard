@@ -1,6 +1,8 @@
 @import "tailwindcss";
 /* Scan all of src/ even when the Vite root is a subfolder (the pro build uses src/pro) */
 @source "./";
+/* Exclude Pro UI from Classic's CSS bundle; Pro scans all of src/ via src/pro/pro.css (@source "../"). */
+@source not "./pro";
 
 @custom-variant dark (&:is(.dark *));
 

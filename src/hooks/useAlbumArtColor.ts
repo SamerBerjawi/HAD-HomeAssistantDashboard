@@ -279,7 +279,7 @@ function extractColorsFromImageData(imageData: ImageData): { h: number; s: numbe
 }
 
 import { loadHAImageBlob } from '../services/haImageService';
-import { getActiveHAToken } from '../services/haAuth';
+import { getFreshHAToken } from '../services/haAuth';
 import { useRef } from 'react';
 
 /**
@@ -288,7 +288,7 @@ import { useRef } from 'react';
  * Tier 1: Direct in-browser load with crossOrigin="anonymous" (fastest, zero-proxy for Spotify, Apple Music, and standard CDNs).
  * Tier 2: Authenticated server proxy fallback via /api/image-proxy with content-type verification and blob URL creation.
  */
-async function extractPaletteFromUrl(url: string): Promise<{ h: number; s: number; l: number } | null> {
+export async function extractPaletteFromUrl(url: string): Promise<{ h: number; s: number; l: number } | null> {
   if (!url) return null;
 
   const tryExtractFromSrc = (src: string, isProxy = false): Promise<{ h: number; s: number; l: number } | null> => {
@@ -373,7 +373,9 @@ async function extractPaletteFromUrl(url: string): Promise<{ h: number; s: numbe
 
   // Tier 2: Proxy fallback to bypass strict CORS / tainted canvas restrictions
   try {
-    const activeToken = getActiveHAToken();
+    // A fresh token: the proxy checks it with Home Assistant, which logs an expired one as a failed login
+    const activeToken = await getFreshHAToken();
+    if (!activeToken) return null;
     // The token goes in the Authorization header only, never the URL (SEC-013)
     const proxyEndpoint = `/api/image-proxy?url=${encodeURIComponent(url)}`;
     const proxyRes = await fetchWithTimeout(proxyEndpoint, {

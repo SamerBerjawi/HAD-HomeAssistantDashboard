@@ -1,212 +1,62 @@
-import { useState } from 'react';
-import { Button, Chip } from '@heroui/react';
-import { HugeiconsIcon } from '@hugeicons/react';
-import {
-  Shield01Icon,
-  SquareLock02Icon,
-  SquareUnlock02Icon,
-  Alert02Icon,
-  CheckmarkCircle02Icon,
-  DoorIcon,
-  FireIcon,
-  Camera01Icon
-} from '@hugeicons/core-free-icons';
+/**
+ * Pro Security page, redesigned in the Security Studio (docs/pro-ui/SECURITY.md, approved by the
+ * owner 2026-11-26): the one clear answer first (Slide hero with the Summary line), cameras right
+ * below (Stage + filmstrip, live over WebRTC), then the devices that want a look and everything
+ * else in tabs (Today is a tab). The same layout on phone and desktop. Loading, empty and
+ * "HA unreachable" states as reviewed in the studio's round 6.
+ */
+import { createContext, useContext, useEffect, useRef } from 'react';
+import { haWebSocketService } from '@/services/haWebSocket';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
-import CameraFeedSection from '@/components/views/security/CameraFeedSection';
-import { errorMessageField } from '@/lib/errors';
-import { entityName, useSecurityData } from '../hooks/useSecurityData';
+import type { ResolvedEntity } from '@/types';
+import { ProCameraPlayer } from '../components/security/ProCameraPlayer';
+import { useSecurityHome } from '../hooks/useSecurityHome';
+import { useBoxSize } from '../widgets/shared/useBoxSize';
+import { cn } from '@/lib/utils';
+import SecurityHero from './security/SecurityHero';
+import { CamerasStage, StillView, type CameraViewProps } from './security/CameraStage';
+import { DevicesTabs } from './security/SecurityDevices';
+import { SecurityEmpty, SecurityError, SecurityLoading } from './security/SecurityStates';
 
-const ALARM_MODES = [
-  { state: 'armed_home', service: 'alarm_arm_home', label: 'Home' },
-  { state: 'armed_away', service: 'alarm_arm_away', label: 'Away' },
-  { state: 'armed_night', service: 'alarm_arm_night', label: 'Night' }
-] as const;
+const CameraEntities = createContext<Record<string, ResolvedEntity>>({});
+const SNAPSHOT_REFRESH_MS = 25_000;
 
-function Card({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="pro-surface p-5 flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold">{title}</h2>
-        {aside}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function Metric({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="pro-surface p-4 flex flex-col gap-1">
-      <span className="text-sm text-muted">{label}</span>
-      <span className="text-2xl font-bold tracking-tight">{value}</span>
-      <span className="text-xs text-muted">{hint}</span>
-    </div>
-  );
+/** A camera on the page: the live WebRTC player for the big view, HA snapshots for thumbnails. */
+function LiveView({ c, live, radius, className }: CameraViewProps) {
+  const entity = useContext(CameraEntities)[c.entityId];
+  if (!entity) return <StillView c={c} live={live} radius={radius} className={className} />;
+  return <ProCameraPlayer camera={entity} live={live && c.available} refreshIntervalMs={live ? undefined : SNAPSHOT_REFRESH_MS} className={cn('aspect-video w-full', radius, className)} />;
 }
 
 export default function ProSecurity() {
-  const data = useSecurityData();
-  const callHAService = useAutoLayoutStore((s) => s.callHAService);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const run = async (key: string, domain: string, service: string, entityId: string) => {
-    setBusy(key);
-    setError(null);
-    try {
-      await callHAService(domain, service, {}, { entity_id: entityId });
-    } catch (e) {
-      setError(errorMessageField(e) || 'Home Assistant rejected the command');
-    } finally {
-      setBusy(null);
-    }
+  const { home, act, camerasById, isLoading, isEmpty, offline } = useSecurityHome();
+  const box = useBoxSize<HTMLDivElement>({ width: 375, height: 0 });
+  const width = box.width;
+  const haUrl = useAutoLayoutStore((s) => s.serverUrl);
+  // When HA was last reachable, for "showing the last known state from 12:04".
+  const lastSeen = useRef(Date.now());
+  useEffect(() => {
+    if (!offline) lastSeen.current = Date.now();
+  });
+  const retry = () => {
+    const url = haWebSocketService.getCurrentUrl();
+    const token = haWebSocketService.getCurrentToken();
+    if (url && token) haWebSocketService.connect(url, token, true);
   };
 
-  if (data.isLoading) {
-    return <p className="text-muted">Loading security devices…</p>;
-  }
-  if (data.total === 0) {
-    return (
-      <div className="pro-surface p-8 text-center flex flex-col items-center gap-3">
-        <HugeiconsIcon icon={Shield01Icon} size={32} className="text-muted" />
-        <h2 className="text-lg font-semibold">No security devices yet</h2>
-        <p className="text-muted max-w-md">
-          Add alarm panels, locks, cameras or door, window, motion and leak sensors in Home Assistant and they appear here.
-        </p>
-      </div>
-    );
-  }
-
-  const alarm = data.activeAlarm;
-  const alarmState = alarm?.state || 'disarmed';
-  const armed = alarmState.startsWith('armed');
-  const triggered = alarmState === 'triggered';
-  const alarmLabel = alarmState.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  const page = (
+    <div className="flex flex-col gap-6">
+      <SecurityHero home={home} width={width} act={act} />
+      {home.cameras.length ? <CamerasStage home={home} width={width} View={LiveView} /> : null}
+      {home.devices.length ? <DevicesTabs home={home} width={width} act={act} /> : null}
+    </div>
+  );
 
   return (
-    <>
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Security</h1>
-          <p className="text-muted">
-            {data.attentionCount === 0 ? 'Everything is secure' : `${data.attentionCount} item${data.attentionCount === 1 ? '' : 's'} need attention`}
-          </p>
-        </div>
-        <Chip color={data.attentionCount === 0 ? 'success' : 'warning'} variant="soft">
-          {data.attentionCount === 0 ? 'All clear' : 'Attention'}
-        </Chip>
-      </header>
-
-      {error && (
-        <div role="alert" className="rounded-2xl bg-danger/10 text-danger px-4 py-3 text-sm font-medium">
-          {error}
-        </div>
-      )}
-
-      {alarm && (
-        <Card
-          title="Alarm"
-          aside={
-            <Chip color={triggered ? 'danger' : armed ? 'success' : 'default'} variant="soft">
-              {alarmLabel}
-            </Chip>
-          }
-        >
-          <p className="text-sm text-muted">{entityName(alarm)}</p>
-          <div className="flex flex-wrap gap-2">
-            {ALARM_MODES.map((m) => (
-              <Button
-                key={m.state}
-                variant={alarmState === m.state ? 'primary' : 'secondary'}
-                isPending={busy === m.state}
-                onPress={() => run(m.state, 'alarm_control_panel', m.service, alarm.entity_id)}
-              >
-                {m.label}
-              </Button>
-            ))}
-            <Button
-              variant="outline"
-              isDisabled={!armed && !triggered}
-              isPending={busy === 'disarm'}
-              onPress={() => run('disarm', 'alarm_control_panel', 'alarm_disarm', alarm.entity_id)}
-            >
-              Disarm
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Metric label="Doors" value={`${data.doorSensors.length - data.openDoors.length}/${data.doorSensors.length}`} hint="closed" />
-        <Metric label="Windows" value={`${data.windowSensors.length - data.openWindows.length}/${data.windowSensors.length}`} hint="closed" />
-        <Metric label="Locks" value={`${data.locks.length - data.unlockedLocks.length}/${data.locks.length}`} hint="locked" />
-        <Metric label="Motion" value={String(data.activeMotion.length)} hint="active now" />
+    <CameraEntities.Provider value={camerasById}>
+      <div ref={box.ref} className="min-w-0">
+        {isLoading ? <SecurityLoading width={width} /> : isEmpty ? <SecurityEmpty haUrl={haUrl} /> : offline ? <SecurityError lastSeen={lastSeen.current} onRetry={retry}>{page}</SecurityError> : page}
       </div>
-
-      <Card
-        title="Needs attention"
-        aside={<HugeiconsIcon icon={data.attentionCount === 0 ? CheckmarkCircle02Icon : Alert02Icon} size={20} className={data.attentionCount === 0 ? 'text-success' : 'text-warning'} />}
-      >
-        {data.attentionCount === 0 ? (
-          <p className="text-muted">Doors and windows are closed, locks are secured and no hazards are detected.</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-separator">
-            {data.activeHazards.map((e) => (
-              <li key={e.entity_id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <HugeiconsIcon icon={FireIcon} size={18} className="text-danger" />
-                <span className="flex-1 font-medium">{entityName(e)}</span>
-                <Chip color="danger" variant="soft">Detected</Chip>
-              </li>
-            ))}
-            {[...data.openDoors, ...data.openWindows].map((e) => (
-              <li key={e.entity_id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <HugeiconsIcon icon={DoorIcon} size={18} className="text-warning" />
-                <span className="flex-1 font-medium">{entityName(e)}</span>
-                <Chip color="warning" variant="soft">Open</Chip>
-              </li>
-            ))}
-            {data.unlockedLocks.map((e) => (
-              <li key={e.entity_id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <HugeiconsIcon icon={SquareUnlock02Icon} size={18} className="text-warning" />
-                <span className="flex-1 font-medium">{entityName(e)}</span>
-                <Button size="sm" variant="secondary" isPending={busy === e.entity_id} onPress={() => run(e.entity_id, 'lock', 'lock', e.entity_id)}>
-                  Lock
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      {data.locks.length > 0 && (
-        <Card title="Locks">
-          <ul className="flex flex-col divide-y divide-separator">
-            {data.locks.map((e) => {
-              const open = e.state === 'unlocked' || e.state === 'open';
-              return (
-                <li key={e.entity_id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <HugeiconsIcon icon={open ? SquareUnlock02Icon : SquareLock02Icon} size={18} className={open ? 'text-warning' : 'text-success'} />
-                  <span className="flex-1 font-medium">{entityName(e)}</span>
-                  <Button
-                    size="sm"
-                    variant={open ? 'primary' : 'secondary'}
-                    isPending={busy === `lock-${e.entity_id}`}
-                    onPress={() => run(`lock-${e.entity_id}`, 'lock', open ? 'lock' : 'unlock', e.entity_id)}
-                  >
-                    {open ? 'Lock' : 'Unlock'}
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      )}
-
-      {data.cameras.length > 0 && (
-        <Card title="Cameras" aside={<HugeiconsIcon icon={Camera01Icon} size={20} className="text-muted" />}>
-          <CameraFeedSection darkMode={false} cameraEntities={data.cameras} columns={2} />
-        </Card>
-      )}
-    </>
+    </CameraEntities.Provider>
   );
 }

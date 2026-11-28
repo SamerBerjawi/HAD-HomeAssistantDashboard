@@ -20,7 +20,8 @@ import {
   HANativeRepairIssue
 } from '../types';
 import { loadMockRegistries } from '../data/loadMockRegistries';
-import { getStoredAuthConfig, isTokenExpired } from './authStorage';
+import { getStoredAuthConfig } from './authStorage';
+import { freshTokenFor } from './haAuth';
 import { alertService } from './alertService';
 import { applyActiveUrl, refreshHaRoute, recordHaVersion, getConfiguredInternalUrl } from './haUrlResolver';
 
@@ -442,10 +443,9 @@ class HAWebSocketClient {
   private handleIncomingMessage(msg: HAIncomingMessage) {
     if (msg.type === 'auth_required') {
       this.callbacks?.onLogMessage('info', 'Received auth_required challenge. Sending bearer token...');
-      this.socket?.send(JSON.stringify({
-        type: 'auth',
-        access_token: this.currentToken
-      }));
+      // An expired stored OAuth token is refreshed first: HA would log it as a failed login (see freshTokenFor)
+      const socket = this.socket;
+      void freshTokenFor(this.currentToken).then((token) => { this.currentToken = token; if (socket && socket === this.socket) socket.send(JSON.stringify({ type: 'auth', access_token: token })); });
       return;
     }
 

@@ -1,10 +1,12 @@
 import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import { useState, useEffect } from 'react';
-import { getActiveHAToken } from './haAuth';
+import { getActiveHAToken, getFreshHAToken } from './haAuth';
 import { getStoredAuthConfig } from './authStorage';
 import { applyActiveUrl } from './haUrlResolver';
 
-// In-memory cache for resolved Blob URLs to prevent duplicate network requests
+// In-memory cache for resolved Blob URLs to prevent duplicate network requests. Keyed by image URL
+// only: the picture is the same whichever token fetched it, so a token refresh (every 30 minutes
+// with OAuth) doesn't re-download every photo and cover.
 const blobUrlCache = new Map<string, string>();
 const pendingPromises = new Map<string, Promise<string>>();
 
@@ -49,16 +51,17 @@ export function resolveHAImageUrl(url?: string | null, serverUrl?: string | null
 }
 
 /**
- * Returns true if the URL targets a Home Assistant `/api/` endpoint without an embedded `?token=`
- * query parameter. Such URLs must never be handed to `<img src>` unauthenticated, or HA logs a
- * "Login attempt failed" 401 notification.
+ * Home Assistant paths it serves without a login: uploaded pictures (a person's photo, set under
+ * Settings > People) and files in `config/www`. HA's own frontend shows these with a plain <img>,
+ * so handing one to <img src> sends no token and can't be logged as "Login attempt failed".
  */
-function isProtectedHaApiUrl(url: string): boolean {
+export function isPublicHaImagePath(url: string): boolean {
   try {
-    const parsed = new URL(url, 'http://placeholder.local');
-    return parsed.pathname.startsWith('/api/') && !parsed.searchParams.has('token');
+    const { pathname, search } = new URL(url, 'http://placeholder.local');
+    if (search.includes('token=')) return false;
+    return pathname.startsWith('/api/image/serve/') || pathname.startsWith('/local/');
   } catch {
-    return url.includes('/api/') && !url.includes('token=');
+    return false;
   }
 }
 
@@ -115,14 +118,7 @@ export async function loadHAImageBlob(
   const targetUrl = resolveHAImageUrl(url, serverUrl);
   if (!targetUrl) return '';
 
-  const activeToken = token || getActiveHAToken();
-  const haBase = getHAHttpBaseUrl(serverUrl);
-
-  // Without a token any request to HA is unauthenticated and logs a "Login attempt failed" alert
-  if (!activeToken) return '';
-
-  // Check cache
-  const cacheKey = `${targetUrl}_${activeToken || ''}`;
+  const cacheKey = targetUrl;
   if (blobUrlCache.has(cacheKey)) {
     return blobUrlCache.get(cacheKey)!;
   }
@@ -132,19 +128,34 @@ export async function loadHAImageBlob(
     return pendingPromises.get(cacheKey)!;
   }
 
-  const fallbackResult = async (): Promise<string> => {
-    if (activeToken) {
-      const proxied = await fetchViaImageProxy(url, activeToken, haBase);
-      if (proxied) {
-        blobUrlCache.set(cacheKey, proxied);
-        return proxied;
-      }
+  const haBase = getHAHttpBaseUrl(serverUrl);
+
+  const fallbackResult = async (activeToken: string): Promise<string> => {
+    const proxied = await fetchViaImageProxy(url, activeToken, haBase);
+    if (proxied) {
+      blobUrlCache.set(cacheKey, proxied);
+      return proxied;
     }
-    // Never hand a protected HA /api/ URL to <img src> without auth — HA logs a 401 notification.
-    return isProtectedHaApiUrl(targetUrl) ? '' : targetUrl;
+    // A picture HA serves without a login can still be shown directly: the fetch fails when HA
+    // doesn't allow this dashboard's origin (cors_allowed_origins) and the server can't proxy it.
+    if (isPublicHaImagePath(targetUrl)) return targetUrl;
+    // Never hand any other Home Assistant URL to <img src>: the browser sends it without the token,
+    // and even a `?token=` URL (camera and media proxies) carries a token that rotates every few
+    // minutes, so a stale one gets a 401 that HA logs as "Login attempt failed".
+    return '';
   };
 
   const fetchPromise = (async () => {
+    // A stored OAuth token is refreshed first if it has expired (e.g. a tablet waking from sleep).
+    // A token passed in (the store's copy) is only used when it isn't that same expired token.
+    const fresh = await getFreshHAToken();
+    const storedRaw = getActiveHAToken();
+    const activeToken = fresh || (token && token !== storedRaw ? token : null);
+    // Without a usable token any request to HA is unauthenticated and logs a "Login attempt failed" alert
+    if (!activeToken) {
+      pendingPromises.delete(cacheKey);
+      return isPublicHaImagePath(targetUrl) ? targetUrl : '';
+    }
     try {
       const headers: Record<string, string> = {};
       if (activeToken) {
@@ -157,12 +168,12 @@ export async function loadHAImageBlob(
       }, 10000);
 
       if (!response.ok) {
-        return await fallbackResult();
+        return await fallbackResult(activeToken);
       }
 
       const contentType = response.headers.get('content-type') || '';
       if (contentType && !contentType.startsWith('image/')) {
-        return await fallbackResult();
+        return await fallbackResult(activeToken);
       }
 
       const blob = await response.blob();
@@ -170,7 +181,7 @@ export async function loadHAImageBlob(
       blobUrlCache.set(cacheKey, objectUrl);
       return objectUrl;
     } catch {
-      return await fallbackResult();
+      return await fallbackResult(activeToken);
     } finally {
       pendingPromises.delete(cacheKey);
     }
@@ -202,10 +213,7 @@ export function useHAImage(
     if (!rawUrl) return '';
     if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) return rawUrl;
     if (isExternalUrl(rawUrl)) return rawUrl;
-    const targetUrl = resolveHAImageUrl(rawUrl, serverUrl);
-    const activeToken = getActiveHAToken();
-    const cacheKey = `${targetUrl}_${activeToken || ''}`;
-    return blobUrlCache.get(cacheKey) || '';
+    return blobUrlCache.get(resolveHAImageUrl(rawUrl, serverUrl)) || '';
   });
   const [isLoading, setIsLoading] = useState<boolean>(() => !imageUrl && Boolean(rawUrl));
 

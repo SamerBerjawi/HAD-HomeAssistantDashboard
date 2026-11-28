@@ -25,6 +25,26 @@ export function hasAnyKey(obj: Record<string, unknown>): boolean {
   return false;
 }
 
+/** Extracts the room areaId from `/rooms/:areaId`, preserving exact case and decoding URI segments. */
+export function getRoomIdFromLocation(pathname: string): string | null {
+  const trimmed = pathname.replace(/^\/+|\/+$/g, '');
+  if (!trimmed) return null;
+  const segments = trimmed.split('/');
+  if (segments.length === 2 && segments[0].toLowerCase() === 'rooms' && segments[1]) {
+    try {
+      return decodeURIComponent(segments[1]);
+    } catch {
+      return segments[1];
+    }
+  }
+  return null;
+}
+
+/** Builds a clean `/rooms` or `/rooms/:areaId` URL path. */
+export function buildRoomPath(areaId: string | null): string {
+  return areaId ? `/rooms/${encodeURIComponent(areaId)}` : '/rooms';
+}
+
 /** Tab from a URL's `?tab=` query (preferred) or its first path segment; falls back to 'overview'. */
 export function getTabFromLocation(search: string, pathname: string): TabKey {
   const searchParams = new URLSearchParams(search);
@@ -35,6 +55,9 @@ export function getTabFromLocation(search: string, pathname: string): TabKey {
   const rawPath = pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
   if (VALID_TABS.includes(rawPath as TabKey)) {
     return rawPath as TabKey;
+  }
+  if (getRoomIdFromLocation(pathname) !== null) {
+    return 'rooms';
   }
   return 'overview';
 }

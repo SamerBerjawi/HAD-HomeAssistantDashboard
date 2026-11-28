@@ -8,31 +8,30 @@
 import { ResolvedEntity } from '../types';
 
 export function isDoorSensor(e: { attributes?: Record<string, any>; entity_id: string }): boolean {
-  const dc = e.attributes?.device_class;
-  return (
-    dc === 'door' ||
-    dc === 'garage_door' ||
-    e.entity_id.includes('door') ||
-    e.entity_id.includes('garage') ||
-    e.entity_id.includes('gate')
-  );
+  const dc = (e.attributes?.device_class || '').toLowerCase();
+  if (dc === 'door' || dc === 'garage_door') return true;
+  // Never misclassify sensors that declare a different explicit device_class (e.g. motion, occupancy, presence, window, moisture, smoke).
+  if (dc && dc !== 'opening') return false;
+  const id = e.entity_id.toLowerCase();
+  if (id.includes('motion') || id.includes('occupancy') || id.includes('presence')) return false;
+  return id.includes('door') || id.includes('garage') || id.includes('gate');
 }
 
 export function isWindowSensor(e: { attributes?: Record<string, any>; entity_id: string }): boolean {
-  const dc = e.attributes?.device_class;
-  return dc === 'window' || e.entity_id.includes('window');
+  const dc = (e.attributes?.device_class || '').toLowerCase();
+  if (dc === 'window') return true;
+  if (dc && dc !== 'opening') return false;
+  const id = e.entity_id.toLowerCase();
+  if (id.includes('motion') || id.includes('occupancy') || id.includes('presence')) return false;
+  return id.includes('window');
 }
 
 export function isMotionSensor(e: { attributes?: Record<string, any>; entity_id: string }): boolean {
-  const dc = e.attributes?.device_class;
-  return (
-    dc === 'motion' ||
-    dc === 'occupancy' ||
-    dc === 'presence' ||
-    e.entity_id.includes('motion') ||
-    e.entity_id.includes('occupancy') ||
-    e.entity_id.includes('presence')
-  );
+  const dc = (e.attributes?.device_class || '').toLowerCase();
+  if (dc === 'motion' || dc === 'occupancy' || dc === 'presence') return true;
+  if (dc && dc !== 'moving') return false;
+  const id = e.entity_id.toLowerCase();
+  return id.includes('motion') || id.includes('occupancy') || id.includes('presence');
 }
 
 export function isRainOrWeatherSensor(e: { attributes?: Record<string, any>; entity_id: string; name?: string }): boolean {
@@ -93,8 +92,9 @@ export function isLeakSensor(e: { attributes?: Record<string, any>; entity_id: s
     dc === 'water' ||
     id.includes('leak') ||
     name.includes('leak') ||
-    id.includes('flood') ||
-    name.includes('flood') ||
+    // "flood" as a word: a camera floodlight is not a leak sensor
+    /(^|[^a-z])flood(ing)?([^a-z]|$)/.test(id) ||
+    /(^|[^a-z])flood(ing)?([^a-z]|$)/.test(name) ||
     id.includes('water_leak') ||
     id.includes('water_sensor') ||
     id.includes('overflow')
@@ -222,12 +222,14 @@ export function classifyBinarySensors(binarySensors: ResolvedEntity[]): Classifi
   const otherContactSensors: ResolvedEntity[] = [];
 
   for (const sensor of binarySensors) {
-    if (isDoorSensor(sensor)) {
+    if (isMotionSensor(sensor)) {
+      motionSensors.push(sensor);
+    } else if (isDoorSensor(sensor)) {
       doorSensors.push(sensor);
     } else if (isWindowSensor(sensor)) {
       windowSensors.push(sensor);
-    } else if (isMotionSensor(sensor)) {
-      motionSensors.push(sensor);
+    } else if (isLeakSensor(sensor)) {
+      leakSensors.push(sensor);
     } else if (isSmokeSensor(sensor)) {
       smokeSensors.push(sensor);
     } else if (isOtherContactSensor(sensor)) {

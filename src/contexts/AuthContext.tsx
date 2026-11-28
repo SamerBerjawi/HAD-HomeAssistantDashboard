@@ -395,6 +395,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsAuthModalOpen(false);
           setIsLoading(false);
           setIsInitializing(false);
+
+          fetchHAUserProfile()
+            .then((user) => {
+              if (isMounted) {
+                setAuthState((prev) => ({ ...prev, user }));
+              }
+            })
+            .catch(() => {});
           return;
         } else if (storedConfig.authMethod === 'demo') {
           haWebSocketService.setDemoMode(true);
@@ -516,6 +524,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setIsAuthModalOpen(false);
       setIsLoading(false);
+
+      fetchHAUserProfile()
+        .then((user) => {
+          setAuthState((prev) => ({ ...prev, user }));
+        })
+        .catch(() => {});
       return { success: true };
     } catch (err) {
       const errMsg = `Failed to connect to Home Assistant: ${errorMessageField(err) || 'Network error / Host unreachable'}`;

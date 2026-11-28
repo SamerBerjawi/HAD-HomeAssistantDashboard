@@ -270,11 +270,11 @@ export function resolveHAGraph(
     const assignedFloorId = assignedArea?.floor_id || null;
     const assignedFloor = assignedFloorId ? floorMap.get(assignedFloorId) || null : null;
 
-    // Determine friendly name
+    // Determine friendly name (prefer user-customized entity name, then HA live friendly_name which reflects device renames, before raw original_name)
     const friendlyName =
       regEntry?.name ||
-      regEntry?.original_name ||
       liveState.attributes.friendly_name ||
+      regEntry?.original_name ||
       entityId;
 
     // Parse attributes

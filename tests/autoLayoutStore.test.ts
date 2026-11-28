@@ -85,6 +85,30 @@ describe('callHAService', () => {
 });
 
 describe('graph recompute', () => {
+  it('a batch of state events is one store write, with the graph already rebuilt', async () => {
+    const { store, svc } = await loadStore();
+    store.getState().recomputeGraph();
+    const light = Object.keys(store.getState().resolvedEntities).find((id) => id.startsWith('light.'))!;
+    const before = store.getState().resolvedEntities[light].state;
+    const next = before === 'on' ? 'off' : 'on';
+    let writes = 0;
+    const unsubscribe = store.subscribe(() => writes++);
+    svc.callbacks.onStatesBatchUpdated([{ ...store.getState().states[light], state: next }]);
+    unsubscribe();
+    expect(writes).toBe(1);
+    expect(store.getState().states[light].state).toBe(next);
+    expect(store.getState().resolvedEntities[light].state).toBe(next);
+  });
+
+  it('keeps the zones when a state event does not change them', async () => {
+    const { store, svc } = await loadStore();
+    store.getState().recomputeGraph();
+    const zones = store.getState().resolvedZones;
+    const sensor = Object.keys(store.getState().states).find((id) => id.startsWith('sensor.'))!;
+    svc.callbacks.onStatesBatchUpdated([{ ...store.getState().states[sensor], state: '12.3' }]);
+    expect(store.getState().resolvedZones).toBe(zones);
+  });
+
   it('starts empty and loads demo data lazily', async () => {
     vi.resetModules();
     const { useAutoLayoutStore } = await import('../src/store/useAutoLayoutStore');

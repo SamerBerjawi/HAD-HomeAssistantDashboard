@@ -22,6 +22,8 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { deriveAuthStatus } from '../../services/authStatus';
 import { useUserConfig } from '../../contexts/ConfigContext';
+import { useClassicLayoutScope } from '../../hooks/useClassicLayoutScope';
+import { ClassicLayoutScopeBar } from '../common/ClassicLayoutScopeBar';
 import { useHealthData } from '../../hooks/useHealthData';
 import { cn } from '../../lib/utils';
 import { glass } from '../../lib/glass';
@@ -61,6 +63,7 @@ export default function UserProfileSection({
   // Flags only (ignore transient loading) so the badge doesn't flicker during token refresh
   const sessionStatus = deriveAuthStatus(authState, false, false);
   const { driverName, isSyncingRemote } = useUserConfig();
+  const layoutScope = useClassicLayoutScope();
   const { devices, selectedDeviceId, setSelectedDeviceId, timeRange, setTimeRange } = useHealthData();
 
   const [newPinInput, setNewPinInput] = useState('');
@@ -358,6 +361,16 @@ export default function UserProfileSection({
             No Companion App devices detected. Install Home Assistant on iOS to bind biometrics.
           </div>
         )}
+
+        <div className="p-3 rounded-2xl bg-white/50 dark:bg-black/20 border border-slate-200/70 dark:border-white/10 space-y-2">
+          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+            Multi-User Layout Sharing
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Share the admin-configured Overview and Rooms layout with all Home Assistant users, or let each user customize independently.
+          </p>
+          <ClassicLayoutScopeBar layoutScope={layoutScope} />
+        </div>
 
         {/* Timeline Segmented Pill */}
         <div className={cn(glass.field, 'grid grid-cols-4 p-1 rounded-2xl shadow-xs gap-1 mt-2')}>

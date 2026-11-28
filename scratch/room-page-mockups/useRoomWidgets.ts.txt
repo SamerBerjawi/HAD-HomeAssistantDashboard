@@ -1,0 +1,194 @@
+/**
+ * The Overview's widgets fed only one room's entities (mockup D, docs/pro-ui/ROOM_PAGE.md). Styles
+ * (owner, 2026-11-21): Lighting **B** (glow), Door locks, Doors & windows and Car **A**, every other
+ * widget **C · Innovative** (Thermostat dial with its mode menu, Record media, Palette scenes,
+ * Speed steps fans with their mode menu, Power share switches, Wall of screens cameras, Last hour
+ * motion, Sentinels safety). Every model builder is pure and takes entity lists, so filtering the
+ * input to the area gives room-sized widgets with their real actions; a Lovelace card with an
+ * `area` option would do the same.
+ *
+ * Inside a room the room's name is left out: entity names drop it ("Living Room Ceiling Lamp" →
+ * "Ceiling Lamp", like Apple Home), and where a widget labels things by room (light pills, fan and
+ * motion rows, the dial's title, a player's line) it shows the device instead.
+ *
+ * Each widget sits in the row of its kind on the page (`row`) and can be resized; the sizes are
+ * saved per room in `preferences.proRoomWidgets[areaId][widgetId]`.
+ */
+import { createElement, useRef, type ComponentType, type ReactElement } from 'react';
+import { useUserConfig } from '@/contexts/ConfigContext';
+import { getConfiguredRtspCameras } from '@/lib/cameraSources';
+import { haWebSocketService } from '@/services/haWebSocket';
+import { useAutoLayoutStore, type AutoLayoutStoreState } from '@/store/useAutoLayoutStore';
+import type { ResolvedEntity } from '@/types';
+import { createCarModelSelector } from '../../lib/carModelSelector';
+import type { WidgetSize } from '../../lib/overviewLayout';
+import { buildFansOverviewModel, buildVacuumsOverviewModel } from '../../lib/overviewAppliances';
+import { discoverVacuumDevices } from '@/services/vacuumDiscovery';
+import { buildControlDomainModel, type ProControlDomainModel } from '../../lib/overviewControls';
+import type { ProCarModel } from '../../lib/overviewCar';
+import { buildLocksModel, buildProLockItem } from '../../lib/overviewLocks';
+import { buildMediaOverviewModel } from '../../lib/overviewMedia';
+import { buildScenesModel } from '../../lib/overviewScenes';
+import { buildOverviewCamerasModel } from '../../lib/overviewSecurity';
+import { buildThermostatModel } from '../../lib/overviewThermostat';
+import { DOMAIN_NAME, shortName, type RoomGroupId } from '../../lib/roomPage';
+import CamerasConceptC from '../../widgets/cameras/concepts/CamerasConceptC';
+import CarConceptA from '../../widgets/car/concepts/CarConceptA';
+import FansConceptC from '../../widgets/fans/concepts/FansConceptC';
+import LightsConceptB from '../../widgets/lights/concepts/LightsConceptB';
+import LocksConceptA from '../../widgets/locks/concepts/LocksConceptA';
+import MediaConceptC from '../../widgets/media/concepts/MediaConceptC';
+import MotionConceptC from '../../widgets/motion/concepts/MotionConceptC';
+import OpeningsConceptA from '../../widgets/openings/concepts/OpeningsConceptA';
+import SafetyConceptC from '../../widgets/safety/concepts/SafetyConceptC';
+import ScenesConceptC from '../../widgets/scenes/concepts/ScenesConceptC';
+import { buildSensorDomainModels, buildSensorGroupModel, SENSOR_GROUP_DOMAINS, type SensorGroupModel } from '../../widgets/sensors/sensorGroup';
+import { useDerivedModel } from '../../widgets/shared/entities';
+import type { DesignedWidgetProps } from '../../widgets/shared/WidgetSurface';
+import SwitchesConceptC from '../../widgets/switches/concepts/SwitchesConceptC';
+import ThermostatConceptC from '../../widgets/thermostat/concepts/ThermostatConceptC';
+import VacuumsConceptC from '../../widgets/vacuums/concepts/VacuumsConceptC';
+
+type CameraSources = Parameters<typeof getConfiguredRtspCameras>[0];
+
+/** Rows on the page: a device kind, or a widget with no tiles of its own. */
+export type RoomRowId = RoomGroupId | 'safety' | 'car';
+
+export interface RoomWidget {
+  id: string;
+  title: string;
+  row: RoomRowId;
+  /** Saved size, else the default for this room. */
+  size: WidgetSize;
+  model: unknown;
+  /** The widget's design with its room model, at a size. */
+  render: (size: WidgetSize) => ReactElement;
+}
+
+export type RoomWidgetSizes = Record<string, Partial<Record<string, WidgetSize>>>;
+export const ROOM_WIDGETS_PREF_KEY = 'proRoomWidgets';
+const SIZES = new Set<WidgetSize>(['s', 'w', 't', 'l']);
+
+export function readRoomWidgetSizes(preferences: unknown, areaId: string): Partial<Record<string, WidgetSize>> {
+  const all = (preferences as Record<string, unknown> | undefined)?.[ROOM_WIDGETS_PREF_KEY] as RoomWidgetSizes | undefined;
+  const mine = all?.[areaId] ?? {};
+  return Object.fromEntries(Object.entries(mine).filter(([, v]) => v && SIZES.has(v)));
+}
+
+const visible = (e: ResolvedEntity) => !e.hidden && !e.disabled_by && !e.isDiagnostic;
+
+/** The entity with the room's name taken out of its name (and friendly name). */
+export function withoutRoom(e: ResolvedEntity, room: string): ResolvedEntity {
+  const full = e.name || String(e.attributes?.friendly_name ?? e.entity_id);
+  const name = shortName(full, room, DOMAIN_NAME[e.domain]);
+  return name === full ? e : { ...e, name, attributes: { ...e.attributes, friendly_name: name } };
+}
+
+/** Where a widget groups by room, group by device instead (the room is the page). */
+const byDevice = <T extends { name: string; roomName: string }>(items: T[]): T[] => items.map((i) => ({ ...i, roomName: i.name }));
+const controls = (m: ProControlDomainModel): ProControlDomainModel => ({ ...m, items: byDevice(m.items) });
+const sensors = (m: SensorGroupModel): SensorGroupModel => {
+  const active = m.items.filter((i) => i.isActive).map((i) => i.name);
+  return { ...m, items: byDevice(m.items), detailText: active.length ? active.join(', ') : m.detailText };
+};
+
+/**
+ * Widgets for one room, in page order: **one widget per entity** (each fed only that entity), so
+ * three lights are three Lighting widgets. Scenes stay one Palette (a scene is a button, not a
+ * device). Kinds with no widget (blinds, readings) are drawn as tiles by the page.
+ */
+export function buildRoomWidgets(
+  s: AutoLayoutStoreState,
+  areaId: string,
+  isDemo: boolean,
+  cameraSources: CameraSources,
+  sizes: Partial<Record<string, WidgetSize>>
+): RoomWidget[] {
+  const area = s.resolvedAreas.find((a) => a.area_id === areaId);
+  if (!area) return [];
+  const all = (area.entities ?? []).filter(visible).map((e) => withoutRoom(e, area.name));
+  const of = (domain: string) => all.filter((e) => e.domain === domain);
+  const binary = of('binary_sensor');
+  const roomCameraIds = new Set(of('camera').map((c) => c.entity_id));
+  const cameras = getConfiguredRtspCameras(cameraSources, of('camera')).filter((c) => roomCameraIds.has(c.entity_id));
+
+  const out: RoomWidget[] = [];
+  const add = <M>(id: string, title: string, row: RoomRowId, size: WidgetSize, Body: ComponentType<DesignedWidgetProps<M>>, model: M) =>
+    out.push({ id, title, row, size: sizes[id] ?? size, model, render: (at) => createElement(Body, { model, size: at }) });
+  const name = (e: ResolvedEntity) => e.name || String(e.attributes?.friendly_name ?? e.entity_id);
+  const sensorWidgets = (kind: 'openings' | 'motion' | 'safety', title: string, size: WidgetSize, Body: ComponentType<DesignedWidgetProps<SensorGroupModel>>) => {
+    const group = buildSensorGroupModel(kind, buildSensorDomainModels(SENSOR_GROUP_DOMAINS[kind], binary));
+    for (const item of group.items) {
+      const one = buildSensorGroupModel(kind, buildSensorDomainModels(SENSOR_GROUP_DOMAINS[kind], binary.filter((b) => b.entity_id === item.entityId)));
+      add(`${kind}:${item.entityId}`, item.name || title, kind, size, Body, sensors(one));
+    }
+  };
+
+  for (const c of cameras) add(`cameras:${c.entity_id}`, name(c), 'cameras', 'w', CamerasConceptC, buildOverviewCamerasModel({ cameras: [c], binarySensors: binary }));
+  for (const e of of('light')) add(`lights:${e.entity_id}`, name(e), 'lights', 's', LightsConceptB, controls(buildControlDomainModel('lights', [e])));
+  for (const e of of('climate')) {
+    const t = buildThermostatModel([e], null);
+    const items = t.items.map((i) => ({ ...i, roomName: i.shortName || i.name }));
+    add(`thermostat:${e.entity_id}`, name(e), 'climate', 't', ThermostatConceptC, { ...t, items, primary: items[0] ?? null });
+  }
+  for (const e of of('media_player')) {
+    const m = buildMediaOverviewModel({ mediaEntities: [e], selectedEntityId: null, devices: s.devices, allEntities: all, isDemo });
+    const scoped = { ...m, players: m.players.map((p) => ({ ...p, roomName: '' })), activePlayer: m.activePlayer ? { ...m.activePlayer, roomName: '' } : null };
+    add(`media:${e.entity_id}`, name(e), 'media', 'w', MediaConceptC, scoped);
+  }
+  const scenes = of('scene');
+  if (scenes.length) add('scenes', 'Scenes', 'scenes', 'w', ScenesConceptC, buildScenesModel(scenes));
+  for (const e of of('fan')) {
+    const m = buildFansOverviewModel([e], all);
+    add(`fans:${e.entity_id}`, name(e), 'fans', 's', FansConceptC, { ...m, items: byDevice(m.items) });
+  }
+  for (const e of [...of('switch'), ...of('input_boolean')]) add(`switches:${e.entity_id}`, name(e), 'switches', 's', SwitchesConceptC, controls(buildControlDomainModel('switches', [e])));
+  sensorWidgets('openings', 'Door or window', 's', OpeningsConceptA);
+  for (const e of of('lock')) add(`locks:${e.entity_id}`, name(e), 'locks', 's', LocksConceptA, buildLocksModel([buildProLockItem(e)]));
+  sensorWidgets('motion', 'Motion', 'w', MotionConceptC);
+  sensorWidgets('safety', 'Safety', 's', SafetyConceptC);
+  const vacuums = of('vacuum');
+  if (vacuums.length) {
+    const { vacuums: found } = discoverVacuumDevices(vacuums, s.resolvedEntities ?? {}, s.states ?? {}, s.entityRegistry, s.devices);
+    for (const v of found) {
+      const m = buildVacuumsOverviewModel([v], vacuums);
+      const id = m.items?.[0]?.entityId ?? String(found.indexOf(v));
+      add(`vacuums:${id}`, m.items?.[0]?.name ?? 'Vacuum', 'vacuums', 'w', VacuumsConceptC, m);
+    }
+  }
+  return out;
+}
+
+/** The car, when its lock or climate entity is in this room (a garage, a driveway). */
+function useRoomCar(areaId: string): ProCarModel | null {
+  const { config } = useUserConfig();
+  const car = config.mobility?.car;
+  const select = useRef<ReturnType<typeof createCarModelSelector> | null>(null);
+  if (!select.current) select.current = createCarModelSelector();
+  const run = select.current;
+  const settings = { isDemo: haWebSocketService.isDemo(), targetSocDefault: car?.targetSocDefault, brandLogoUrl: car?.brandLogoUrl, vehicleImageUrl: car?.vehicleImageUrl };
+  return useAutoLayoutStore((s) => {
+    const m = run(s, settings);
+    if (!m.hasCar) return null;
+    const area = s.resolvedAreas.find((a) => a.area_id === areaId);
+    const ids = [m.controls.lockId, m.controls.climateId].filter(Boolean);
+    return area?.entities?.some((e) => ids.includes(e.entity_id)) ? m : null;
+  });
+}
+
+/** Re-renders only when a room widget's model or size changes. */
+export function useRoomWidgets(areaId: string): RoomWidget[] {
+  const isDemo = haWebSocketService.isDemo();
+  const { config } = useUserConfig();
+  const sources = config.cameras?.sources;
+  const sizes = readRoomWidgetSizes(config.preferences, areaId);
+  const sizesKey = JSON.stringify(sizes);
+  const list = useDerivedModel(
+    (s) => buildRoomWidgets(s, areaId, isDemo, sources, sizes),
+    (l) => sizesKey + JSON.stringify(l.map((w) => [w.id, w.size, w.model]))
+  );
+  const car = useRoomCar(areaId);
+  if (!car) return list;
+  const size = sizes.car ?? 'w';
+  return [...list, { id: 'car', title: 'Car', row: 'car', size, model: car, render: (at) => createElement(CarConceptA, { model: car, size: at }) }];
+}

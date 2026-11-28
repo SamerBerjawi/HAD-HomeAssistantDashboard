@@ -11,6 +11,7 @@ import { OverviewTileVisibilityMode } from '../../types/userConfig';
 import OverviewSortableTile from './OverviewSortableTile';
 import PersonAvatar from '../ui/PersonAvatar';
 import AdaptiveSectionTabs from '../common/AdaptiveSectionTabs';
+import { ClassicLayoutScopeBar } from '../common/ClassicLayoutScopeBar';
 import CameraStreamModal from '../views/security/CameraStreamModal';
 import OverviewTileContent from './tiles/OverviewTileContent';
 import { useOverviewHeaderState } from './useOverviewHeaderState';
@@ -447,6 +448,9 @@ export default function OverviewHeader({ darkMode = true }: OverviewHeaderProps)
               <CheckCircle size={14} weight="bold" />
               <span>Done</span>
             </button>
+          </div>
+          <div className="w-full border-t border-sky-500/20 pt-2">
+            <ClassicLayoutScopeBar layoutScope={s.layoutScope} compact />
           </div>
         </div>
       ) : null}

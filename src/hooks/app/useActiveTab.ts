@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { ConfigContextType } from '@/types/userConfig';
 import { useAutoLayoutStore } from '@/store/useAutoLayoutStore';
 import { PAGE_THEMES } from '@/config/pageThemes';
-import { VALID_TABS, getTabFromUrl, type TabKey } from '@/services/appShell';
+import { VALID_TABS, buildRoomPath, getRoomIdFromLocation, getTabFromUrl, type TabKey } from '@/services/appShell';
 
 // Active tab with URL path synchronisation, document title and hidden-page fallback, moved verbatim from App.tsx.
 export function useActiveTab(config: ConfigContextType['config']) {
@@ -29,6 +29,8 @@ export function useActiveTab(config: ConfigContextType['config']) {
     const handlePopState = () => {
       const currentTab = getTabFromUrl();
       if (currentTab === 'rooms') {
+        useAutoLayoutStore.getState().setSelectedAreaId(getRoomIdFromLocation(window.location.pathname));
+      } else {
         useAutoLayoutStore.getState().setSelectedAreaId(null);
       }
       if (currentTab === 'settings') {
@@ -41,10 +43,18 @@ export function useActiveTab(config: ConfigContextType['config']) {
 
     // Ensure root '/' or malformed path cleanly normalizes in the address bar while preserving query params (e.g. ?code=...&state=...)
     const initialTab = getTabFromUrl();
-    const expectedPath = `/${initialTab}`;
+    const initialRoomId = initialTab === 'rooms' ? getRoomIdFromLocation(window.location.pathname) : null;
+    if (initialRoomId) {
+      useAutoLayoutStore.getState().setSelectedAreaId(initialRoomId);
+    }
+    const expectedPath = initialTab === 'rooms' && initialRoomId ? buildRoomPath(initialRoomId) : `/${initialTab}`;
     if (window.location.pathname !== expectedPath) {
       const search = window.location.search || '';
-      window.history.replaceState({ tab: initialTab }, '', `${expectedPath}${search}`);
+      window.history.replaceState(
+        { tab: initialTab, ...(initialRoomId ? { areaId: initialRoomId } : {}) },
+        '',
+        `${expectedPath}${search}`
+      );
     }
 
     return () => {

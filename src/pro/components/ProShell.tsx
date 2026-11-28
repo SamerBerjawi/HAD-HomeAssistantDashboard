@@ -1,23 +1,9 @@
-import type { ReactNode } from 'react';
-import { Button } from '@heroui/react';
-import { HugeiconsIcon } from '@hugeicons/react';
-import {
-  Home01Icon,
-  BulbIcon,
-  FlashIcon,
-  Shield01Icon,
-  Moon02Icon,
-  Sun03Icon,
-  Notification01Icon
-} from '@hugeicons/core-free-icons';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-
-export const PRO_NAV = [
-  { id: 'overview', label: 'Overview', icon: Home01Icon },
-  { id: 'rooms', label: 'Rooms', icon: BulbIcon },
-  { id: 'energy', label: 'Energy', icon: FlashIcon },
-  { id: 'security', label: 'Security', icon: Shield01Icon }
-] as const;
+import ProSidebar from './ProSidebar';
+import ProMobileNav from './ProMobileNav';
+import { ProCompactHeader, ProPageHeader } from './ProPageHeader';
+import { PageHeaderContext, ShellNotificationsContext, type PageHeaderMeta } from './pageHeaderContext';
 
 interface ProShellProps {
   page: string;
@@ -28,68 +14,50 @@ interface ProShellProps {
   children: ReactNode;
 }
 
-/** Sidebar on desktop, tab bar on phones. The page accent comes from data-page (pro.css). */
-export default function ProShell({
-  page,
-  darkMode,
-  onNavigate,
-  onToggleTheme,
-  onOpenNotifications,
-  children
-}: ProShellProps) {
-  const active = PRO_NAV.some((n) => n.id === page) ? page : 'overview';
-  return (
-    <div className={cn('pro absolute inset-0 flex', darkMode && 'dark')} data-page={active}>
-      <aside className="hidden md:flex w-64 shrink-0 flex-col gap-1 p-4" aria-label="Main">
-        <div className="flex items-center gap-3 px-3 py-3 mb-2">
-          <span className="pro-accent size-9 rounded-xl grid place-items-center">
-            <HugeiconsIcon icon={Home01Icon} size={20} />
-          </span>
-          <span className="font-bold text-lg tracking-tight">HOMZ</span>
-        </div>
-        {PRO_NAV.map((item) => (
-          <Button
-            key={item.id}
-            variant={item.id === active ? 'primary' : 'ghost'}
-            className="justify-start"
-            onPress={() => onNavigate(item.id)}
-            aria-current={item.id === active ? 'page' : undefined}
-          >
-            <HugeiconsIcon icon={item.icon} size={18} />
-            {item.label}
-          </Button>
-        ))}
-        <div className="mt-auto flex gap-1">
-          <Button isIconOnly variant="ghost" aria-label="Notifications" onPress={onOpenNotifications}>
-            <HugeiconsIcon icon={Notification01Icon} size={18} />
-          </Button>
-          <Button isIconOnly variant="ghost" aria-label={darkMode ? 'Light mode' : 'Dark mode'} onPress={onToggleTheme}>
-            <HugeiconsIcon icon={darkMode ? Sun03Icon : Moon02Icon} size={18} />
-          </Button>
-        </div>
-      </aside>
+/**
+ * Sidebar (ProSidebar) from md up, glass tab bar (ProMobileNav) on phones, and the shared page
+ * header (7.4) above every page. The page accent comes from data-page (pro.css).
+ */
+export default function ProShell({ page, darkMode, onNavigate, onToggleTheme, onOpenNotifications, children }: ProShellProps) {
+  const mainRef = useRef<HTMLElement>(null);
+  const [meta, setMetaState] = useState<PageHeaderMeta>({});
+  const [compact, setCompact] = useState(false);
+  const setMeta = useCallback((m: PageHeaderMeta) => setMetaState(m), []);
+  const onCompactChange = useCallback((c: boolean) => setCompact(c), []);
 
-      <main className="flex-1 min-w-0 overflow-y-auto px-4 md:px-8 pt-6 pb-28 md:pb-10">
-        <div className="mx-auto w-full max-w-5xl flex flex-col gap-6">{children}</div>
+  return (
+    <div className={cn('pro absolute inset-0 flex', darkMode && 'dark')} data-page={page}>
+      <ProSidebar page={page} darkMode={darkMode} onNavigate={onNavigate} onToggleTheme={onToggleTheme} />
+
+      <main ref={mainRef} className="flex-1 min-w-0 overflow-y-auto px-4 md:px-8 pb-28 md:pb-10">
+        {!meta.hideHeader ? (
+          <ProCompactHeader page={page} meta={meta} visible={compact} onOpenNotifications={onOpenNotifications} />
+        ) : null}
+        {/* Top padding lives here, not on <main>: padding on the scroller would offset the sticky bar. */}
+        <div
+          className={cn(
+            'mx-auto w-full max-w-5xl flex flex-col',
+            meta.hideHeader
+              ? 'gap-3 pt-[max(12px,env(safe-area-inset-top))] md:pt-[max(20px,env(safe-area-inset-top))]'
+              : 'gap-6 pt-[max(24px,env(safe-area-inset-top))]'
+          )}
+        >
+          {!meta.hideHeader ? (
+            <ProPageHeader
+              page={page}
+              meta={meta}
+              onOpenNotifications={onOpenNotifications}
+              scrollRoot={mainRef}
+              onCompactChange={onCompactChange}
+            />
+          ) : null}
+          <ShellNotificationsContext.Provider value={onOpenNotifications}>
+            <PageHeaderContext.Provider value={setMeta}>{children}</PageHeaderContext.Provider>
+          </ShellNotificationsContext.Provider>
+        </div>
       </main>
 
-      <nav
-        className="md:hidden fixed inset-x-0 bottom-0 z-20 flex justify-around px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] bg-surface shadow-[0_-1px_0_rgba(0,0,0,0.06)]"
-        aria-label="Main"
-      >
-        {PRO_NAV.map((item) => (
-          <Button
-            key={item.id}
-            variant={item.id === active ? 'primary' : 'ghost'}
-            className="flex-col h-auto min-w-16 gap-0.5 px-3 py-1.5 text-xs"
-            onPress={() => onNavigate(item.id)}
-            aria-current={item.id === active ? 'page' : undefined}
-          >
-            <HugeiconsIcon icon={item.icon} size={22} />
-            {item.label}
-          </Button>
-        ))}
-      </nav>
+      <ProMobileNav page={page} darkMode={darkMode} onNavigate={onNavigate} onToggleTheme={onToggleTheme} />
     </div>
   );
 }
