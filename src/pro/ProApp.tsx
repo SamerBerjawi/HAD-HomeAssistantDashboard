@@ -17,6 +17,7 @@ import ProRooms from './pages/ProRooms';
 import ProMobility from './pages/ProMobility';
 import ProMedia from './pages/ProMedia';
 import ProEnergy from './pages/ProEnergy';
+import ProVacuums from './pages/ProVacuums';
 import ProToaster from './components/toasts/ProToaster';
 
 // Design Studio Hub + per-page studios (dev builds only, never bundled in production).
@@ -29,6 +30,7 @@ const SecurityStudio = import.meta.env.DEV ? lazy(() => import('./pages/security
 const MobilityStudio = import.meta.env.DEV ? lazy(() => import('./pages/mobility/studio/MobilityStudio')) : null;
 const VehicleTilesStudio = import.meta.env.DEV ? lazy(() => import('./pages/mobility/tiles/studio/VehicleTilesStudio')) : null;
 const MediaStudio = import.meta.env.DEV ? lazy(() => import('./pages/media/studio/MediaStudio')) : null;
+const VacuumTilesStudio = import.meta.env.DEV ? lazy(() => import('./pages/vacuums/studio/VacuumTilesStudio')) : null;
 
 const ProSignIn = lazy(() => import('./components/ProSignIn'));
 const ProSettings = lazy(() => import('./pages/ProSettings'));
@@ -101,6 +103,13 @@ export default function ProApp() {
         return (
           <Suspense fallback={null}>
             <VehicleTilesStudio />
+          </Suspense>
+        );
+      }
+      if (studioId === 'vacuums' && VacuumTilesStudio) {
+        return (
+          <Suspense fallback={null}>
+            <VacuumTilesStudio />
           </Suspense>
         );
       }
@@ -181,6 +190,8 @@ export default function ProApp() {
           <ProMedia />
         ) : activeTab === 'energy' ? (
           <ProEnergy />
+        ) : activeTab === 'vacuums' ? (
+          <ProVacuums />
         ) : activeTab === 'settings' ? (
           <Suspense fallback={null}>
             <ProSettings />

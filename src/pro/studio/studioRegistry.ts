@@ -4,9 +4,9 @@
  * StudioHub and StudioNavBar render directly from this list.
  */
 import type { IconSvgElement } from '@hugeicons/react';
-import { FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon, Car01Icon, MusicNote01Icon } from '@hugeicons/core-free-icons';
+import { FlashIcon, GridViewIcon, Home01Icon, PaintBoardIcon, Shield01Icon, Car01Icon, MusicNote01Icon, RoboticIcon } from '@hugeicons/core-free-icons';
 
-export type StudioId = 'widgets' | 'areas' | 'rooms' | 'security' | 'energy' | 'mobility' | 'vehicles' | 'media';
+export type StudioId = 'widgets' | 'areas' | 'rooms' | 'security' | 'energy' | 'mobility' | 'vehicles' | 'media' | 'vacuums';
 
 export interface StudioEntry {
   id: StudioId;
@@ -15,7 +15,7 @@ export interface StudioEntry {
   subtitle: string;
   query: string;
   icon: IconSvgElement;
-  pageAccent: 'overview' | 'rooms' | 'energy' | 'security' | 'media' | 'mobility';
+  pageAccent: 'overview' | 'rooms' | 'energy' | 'security' | 'media' | 'mobility' | 'vacuums';
   status: 'Shipped' | 'In review' | 'Redesigning';
   statusTone: 'success' | 'accent' | 'warning';
   highlights: string[];
@@ -117,6 +117,18 @@ export const STUDIOS: readonly StudioEntry[] = [
     status: 'Redesigning',
     statusTone: 'warning',
     highlights: ['Restarted 2026-11-27', 'Round 1: page direction']
+  },
+  {
+    id: 'vacuums',
+    title: 'Vacuum Tiles Studio',
+    shortTitle: 'Vacuums',
+    subtitle: 'The Vacuums page in the Room page’s layout: robots and sticks of any make, each part a tile, three concepts each.',
+    query: 'vacuums',
+    icon: RoboticIcon,
+    pageAccent: 'vacuums',
+    status: 'In review',
+    statusTone: 'accent',
+    highlights: ['Started 2026-11-28', 'Batch 1: Robot · Batch 2: Stick']
   }
 ];
 

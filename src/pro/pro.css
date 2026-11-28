@@ -1212,3 +1212,7 @@
 .pro .pro-media-scrub .slider__thumb { width: 14px; height: 14px; background-color: var(--foreground); box-shadow: 0 1px 4px rgba(0,0,0,.3); opacity: 0; transition: opacity .15s; }
 .pro .pro-media-scrub:hover .slider__thumb, .pro .pro-media-scrub .slider__thumb[data-dragging], .pro .pro-media-scrub .slider__thumb[data-focus-visible] { opacity: 1; }
 .pro .pro-media-scrub .slider__thumb::after { display: none; }
+/* Vacuum tiles (docs/pro-ui/VACUUM_TILES.md): a pulse running along the stick's power line. */
+@keyframes had-dash { to { stroke-dashoffset: -100; } }
+/* Vacuums page accent (agent's call, 2026-11-28): the Room page's vacuum teal. */
+.pro[data-page='vacuums'] { --pro-h: 200; --pro-c: 0.12; }
